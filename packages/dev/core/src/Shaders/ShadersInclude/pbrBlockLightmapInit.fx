@@ -1,5 +1,5 @@
 #ifdef LIGHTMAP
-    vec4 lightmapColor = texture2D(lightmapSampler, vLightmapUV + uvOffset);
+    vec4 lightmapColor = texture2D(lightmapSampler, vLightmapUV);
 
     #ifdef RGBDLIGHTMAP
         lightmapColor.rgb = fromRGBD(lightmapColor);

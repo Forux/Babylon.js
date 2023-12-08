@@ -27,3 +27,4 @@ export * from "./MSFT_lod";
 export * from "./MSFT_minecraftMesh";
 export * from "./MSFT_sRGBFactors";
 export * from "./ExtrasAsMetadata";
+export * from "./VRNET_materials_main";

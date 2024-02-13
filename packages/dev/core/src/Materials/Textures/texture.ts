@@ -326,7 +326,9 @@ export class Texture extends BaseTexture {
     public _buffer: Nullable<string | ArrayBuffer | ArrayBufferView | HTMLImageElement | Blob | ImageBitmap> = null;
     private _deleteBuffer: boolean = false;
     protected _format: Nullable<number> = null;
-    private _delayedOnLoad: Nullable<() => void> = null;
+    //> VRNET
+    private _delayedOnLoad: Nullable<(magicTexture?: InternalTexture) => void> = null;
+    //< VRNET
     private _delayedOnError: Nullable<() => void> = null;
     private _mimeType?: string;
     private _loaderOptions?: any;
@@ -452,7 +454,13 @@ export class Texture extends BaseTexture {
 
         engine.onBeforeTextureInitObservable.notifyObservers(this);
 
-        const load = () => {
+        //> VRNET
+        // after loading we need to hook actual texture here
+        const load = (magicTexture?: InternalTexture) => {
+            if (magicTexture) {
+                this._texture = magicTexture;
+            }
+        //< VRNET
             if (this._texture) {
                 if (this._texture._invertVScale) {
                     this.vScale *= -1;
@@ -626,7 +634,9 @@ export class Texture extends BaseTexture {
         } else {
             if (this._delayedOnLoad) {
                 if (this._texture.isReady) {
-                    TimingTools.SetImmediate(this._delayedOnLoad);
+                    //> VRNET
+                    TimingTools.SetImmediate(() => { if (this._delayedOnLoad ) this._delayedOnLoad(); });
+                    //< VRNET
                 } else {
                     this._texture.onLoadedObservable.add(this._delayedOnLoad);
                 }

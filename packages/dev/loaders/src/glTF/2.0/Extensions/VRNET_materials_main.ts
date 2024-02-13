@@ -16,6 +16,7 @@ import type { IMaterialExtension, ITextureInfo as ITextureInfoBase } from "babyl
 interface ITextureInfo extends ITextureInfoBase {
     /** false or undefined if the texture holds color data (true if data are roughness, normal, ...) */
     nonColorData?: boolean;
+    isRGBD?: boolean;
 }
 
 /**
@@ -114,6 +115,7 @@ export class VRNET_materials_main implements IGLTFLoaderExtension {
             promises.push(
                 this._loader.loadTextureInfoAsync(`${context}/lightmapTexture`, properties.lightmapTexture, (texture) => {
                     texture.name = `${babylonMaterial.name} (Lightmap)`;
+                    texture.isRGBD = properties.lightmapTexture.isRGBD ? true : false;
                     babylonMaterial.lightmapTexture = texture;
                 })
             );

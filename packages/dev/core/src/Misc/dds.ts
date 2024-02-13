@@ -68,10 +68,10 @@ const DXGI_FORMAT_B8G8R8X8_UNORM = 88;
 
 //> VRNET
 // from https://github.com/g-truc/gli/blob/master/gli/dx.hpp
-const DXGI_FORMAT_BC7_UNORM      = 98;
-const DXGI_FORMAT_BC7_UNORM_SRGB     = 99;
 const DXGI_FORMAT_BC6H_UF16      = 95;
 const DXGI_FORMAT_BC6H_SF16      = 96;
+const DXGI_FORMAT_BC7_UNORM      = 98;
+const DXGI_FORMAT_BC7_UNORM_SRGB     = 99;
 const DXGI_FORMAT_ASTC_4X4_TYPELESS    = 133;
 const DXGI_FORMAT_ASTC_4X4_UNORM     = 134;
 const DXGI_FORMAT_ASTC_4X4_UNORM_SRGB    = 135;
@@ -353,7 +353,7 @@ export class DDSTools {
             isCube: (header[off_caps2] & DDSCAPS2_CUBEMAP) === DDSCAPS2_CUBEMAP,
             isCompressed: fourCC === FOURCC_DXT1 || fourCC === FOURCC_DXT3 || fourCC === FOURCC_DXT5
             //> VRNET
-                || (fourCC === FOURCC_DX10 && (dxgiFormat >= DXGI_FORMAT_BC7_UNORM && dxgiFormat <= DXGI_FORMAT_ASTC_12X12_UNORM_SRGB)),
+                || (fourCC === FOURCC_DX10 && (dxgiFormat >= DXGI_FORMAT_BC6H_UF16 && dxgiFormat <= DXGI_FORMAT_ASTC_12X12_UNORM_SRGB)),
             //< VRNET
             dxgiFormat: dxgiFormat,
             textureType: textureType,
@@ -618,6 +618,8 @@ export class DDSTools {
             return;
         }
 
+        let wBlockSize = 4;
+        let hBlockSize = 4;
         let bpp = header[off_RGBbpp];
         dataOffset = header[off_size] + 4;
 
@@ -747,6 +749,8 @@ const DXGI_FORMAT_ASTC_12X12_UNORM_SRGB   = 187;
 */
                         case DXGI_FORMAT_ASTC_6X6_TYPELESS:
                         case DXGI_FORMAT_ASTC_6X6_UNORM:
+                            wBlockSize = 6;
+                            hBlockSize = 6;
                             supported = true;
                             blockBytes = 16;
                             internalCompressedFormat = Constants.TEXTUREFORMAT_COMPRESSED_RGBA_ASTC_6x6_KHR;
@@ -932,7 +936,8 @@ const DXGI_FORMAT_ASTC_12X12_UNORM_SRGB   = 187;
 
                         engine._uploadDataToTextureDirectly(texture, byteArray, face, i);
                     } else {
-                        dataLength = (((Math.max(4, width) / 4) * Math.max(4, height)) / 4) * blockBytes;
+                        dataLength = Math.ceil(width / wBlockSize) * Math.ceil(height / hBlockSize) * blockBytes;
+                        //dataLength = (((Math.max(4, width) / 4) * Math.max(4, height)) / 4) * blockBytes;
                         byteArray = new Uint8Array(data.buffer, data.byteOffset + dataOffset, dataLength);
 
                         texture.type = Constants.TEXTURETYPE_UNSIGNED_INT;

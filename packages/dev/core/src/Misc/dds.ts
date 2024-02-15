@@ -755,12 +755,108 @@ const DXGI_FORMAT_ASTC_12X12_UNORM_SRGB   = 187;
                             supported = true;
                             blockBytes = 16;
                             internalCompressedFormat = Constants.TEXTUREFORMAT_COMPRESSED_RGBA_ASTC_6x6_KHR;
-                        break;
+                            break;
                         case DXGI_FORMAT_ASTC_4X4_TYPELESS:
                         case DXGI_FORMAT_ASTC_4X4_UNORM:
                             supported = true;
                             blockBytes = 16;
                             internalCompressedFormat = Constants.TEXTUREFORMAT_COMPRESSED_RGBA_ASTC_4x4_KHR;
+                            break;
+                        case DXGI_FORMAT_ASTC_5X4_TYPELESS:
+                        case DXGI_FORMAT_ASTC_5X4_UNORM:
+                            wBlockSize = 5;
+                            hBlockSize = 4;
+                            supported = true;
+                            blockBytes = 16;
+                            internalCompressedFormat = Constants.TEXTUREFORMAT_COMPRESSED_RGBA_ASTC_5x4_KHR;
+                            break;
+                        case DXGI_FORMAT_ASTC_5X5_TYPELESS:
+                        case DXGI_FORMAT_ASTC_5X5_UNORM:
+                            wBlockSize = 5;
+                            hBlockSize = 5;
+                            supported = true;
+                            blockBytes = 16;
+                            internalCompressedFormat = Constants.TEXTUREFORMAT_COMPRESSED_RGBA_ASTC_5x5_KHR;
+                            break;
+                        case DXGI_FORMAT_ASTC_6X5_TYPELESS:
+                        case DXGI_FORMAT_ASTC_6X5_UNORM:
+                            wBlockSize = 6;
+                            hBlockSize = 5;
+                            supported = true;
+                            blockBytes = 16;
+                            internalCompressedFormat = Constants.TEXTUREFORMAT_COMPRESSED_RGBA_ASTC_6x5_KHR;
+                            break;
+                        case DXGI_FORMAT_ASTC_8X5_TYPELESS:
+                        case DXGI_FORMAT_ASTC_8X5_UNORM:
+                            wBlockSize = 8;
+                            hBlockSize = 5;
+                            supported = true;
+                            blockBytes = 16;
+                            internalCompressedFormat = Constants.TEXTUREFORMAT_COMPRESSED_RGBA_ASTC_8x5_KHR;
+                            break;
+                        case DXGI_FORMAT_ASTC_8X6_TYPELESS:
+                        case DXGI_FORMAT_ASTC_8X6_UNORM:
+                            wBlockSize = 8;
+                            hBlockSize = 6;
+                            supported = true;
+                            blockBytes = 16;
+                            internalCompressedFormat = Constants.TEXTUREFORMAT_COMPRESSED_RGBA_ASTC_8x6_KHR;
+                            break;
+                        case DXGI_FORMAT_ASTC_8X8_TYPELESS:
+                        case DXGI_FORMAT_ASTC_8X8_UNORM:
+                            wBlockSize = 8;
+                            hBlockSize = 8;
+                            supported = true;
+                            blockBytes = 16;
+                            internalCompressedFormat = Constants.TEXTUREFORMAT_COMPRESSED_RGBA_ASTC_8x8_KHR;
+                            break;
+                        case DXGI_FORMAT_ASTC_10X5_TYPELESS:
+                        case DXGI_FORMAT_ASTC_10X5_UNORM:
+                            wBlockSize = 10;
+                            hBlockSize = 5;
+                            supported = true;
+                            blockBytes = 16;
+                            internalCompressedFormat = Constants.TEXTUREFORMAT_COMPRESSED_RGBA_ASTC_10x5_KHR;
+                            break;
+                        case DXGI_FORMAT_ASTC_10X6_TYPELESS:
+                        case DXGI_FORMAT_ASTC_10X6_UNORM:
+                            wBlockSize = 10;
+                            hBlockSize = 6;
+                            supported = true;
+                            blockBytes = 16;
+                            internalCompressedFormat = Constants.TEXTUREFORMAT_COMPRESSED_RGBA_ASTC_10x6_KHR;
+                            break;
+                        case DXGI_FORMAT_ASTC_10X8_TYPELESS:
+                        case DXGI_FORMAT_ASTC_10X8_UNORM:
+                            wBlockSize = 10;
+                            hBlockSize = 8;
+                            supported = true;
+                            blockBytes = 16;
+                            internalCompressedFormat = Constants.TEXTUREFORMAT_COMPRESSED_RGBA_ASTC_10x8_KHR;
+                            break;
+                        case DXGI_FORMAT_ASTC_10X10_TYPELESS:
+                        case DXGI_FORMAT_ASTC_10X10_UNORM:
+                            wBlockSize = 10;
+                            hBlockSize = 10;
+                            supported = true;
+                            blockBytes = 16;
+                            internalCompressedFormat = Constants.TEXTUREFORMAT_COMPRESSED_RGBA_ASTC_10x10_KHR;
+                            break;
+                        case DXGI_FORMAT_ASTC_12X10_TYPELESS:
+                        case DXGI_FORMAT_ASTC_12X10_UNORM:
+                            wBlockSize = 12;
+                            hBlockSize = 10;
+                            supported = true;
+                            blockBytes = 16;
+                            internalCompressedFormat = Constants.TEXTUREFORMAT_COMPRESSED_RGBA_ASTC_12x10_KHR;
+                            break;
+                        case DXGI_FORMAT_ASTC_12X12_TYPELESS:
+                        case DXGI_FORMAT_ASTC_12X12_UNORM:
+                            wBlockSize = 12;
+                            hBlockSize = 12;
+                            supported = true;
+                            blockBytes = 16;
+                            internalCompressedFormat = Constants.TEXTUREFORMAT_COMPRESSED_RGBA_ASTC_12x12_KHR;
                             break;
                         case DXGI_FORMAT_BC7_UNORM:
                             supported = true;

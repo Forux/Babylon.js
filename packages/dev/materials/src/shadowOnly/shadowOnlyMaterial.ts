@@ -37,6 +37,7 @@ class ShadowOnlyMaterialDefines extends MaterialDefines {
     public INSTANCES = false;
     public IMAGEPROCESSINGPOSTPROCESS = false;
     public SKIPFINALCOLORCLAMP = false;
+    public LOGARITHMICDEPTH = false;
 
     constructor() {
         super();
@@ -85,8 +86,10 @@ export class ShadowOnlyMaterial extends PushMaterial {
 
     // Methods
     public isReadyForSubMesh(mesh: AbstractMesh, subMesh: SubMesh, useInstances?: boolean): boolean {
+        const drawWrapper = subMesh._drawWrapper;
+
         if (this.isFrozen) {
-            if (subMesh.effect && subMesh.effect._wasPreviouslyReady && subMesh.effect._wasPreviouslyUsingInstances === useInstances) {
+            if (drawWrapper.effect && drawWrapper._wasPreviouslyReady && drawWrapper._wasPreviouslyUsingInstances === useInstances) {
                 return true;
             }
         }
@@ -125,7 +128,7 @@ export class ShadowOnlyMaterial extends PushMaterial {
 
         MaterialHelper.PrepareDefinesForFrameBoundValues(scene, engine, this, defines, useInstances ? true : false);
 
-        MaterialHelper.PrepareDefinesForMisc(mesh, scene, false, this.pointsCloud, this.fogEnabled, this._shouldTurnAlphaTestOn(mesh), defines);
+        MaterialHelper.PrepareDefinesForMisc(mesh, scene, this._useLogarithmicDepth, this.pointsCloud, this.fogEnabled, this._shouldTurnAlphaTestOn(mesh), defines);
 
         defines._needNormals = MaterialHelper.PrepareDefinesForLights(scene, mesh, defines, false, 1);
 
@@ -174,7 +177,20 @@ export class ShadowOnlyMaterial extends PushMaterial {
 
             const shaderName = "shadowOnly";
             const join = defines.toString();
-            const uniforms = ["world", "view", "viewProjection", "vEyePosition", "vLightsType", "vFogInfos", "vFogColor", "pointSize", "alpha", "shadowColor", "mBones"];
+            const uniforms = [
+                "world",
+                "view",
+                "viewProjection",
+                "vEyePosition",
+                "vLightsType",
+                "vFogInfos",
+                "vFogColor",
+                "pointSize",
+                "alpha",
+                "shadowColor",
+                "mBones",
+                "logarithmicDepthConstant",
+            ];
             const samplers: string[] = [];
 
             const uniformBuffers: string[] = [];
@@ -213,8 +229,8 @@ export class ShadowOnlyMaterial extends PushMaterial {
         }
 
         defines._renderId = scene.getRenderId();
-        subMesh.effect._wasPreviouslyReady = true;
-        subMesh.effect._wasPreviouslyUsingInstances = !!useInstances;
+        drawWrapper._wasPreviouslyReady = true;
+        drawWrapper._wasPreviouslyUsingInstances = !!useInstances;
 
         return true;
     }
@@ -240,7 +256,7 @@ export class ShadowOnlyMaterial extends PushMaterial {
         // Bones
         MaterialHelper.BindBonesParameters(mesh, this._activeEffect);
 
-        if (this._mustRebind(scene, effect)) {
+        if (this._mustRebind(scene, effect, subMesh)) {
             // Clip plane
             bindClipPlane(effect, this, scene);
 
@@ -251,6 +267,11 @@ export class ShadowOnlyMaterial extends PushMaterial {
 
             this._activeEffect.setFloat("alpha", this.alpha);
             this._activeEffect.setColor3("shadowColor", this.shadowColor);
+
+            // Log. depth
+            if (this._useLogarithmicDepth) {
+                MaterialHelper.BindLogDepth(defines, effect, scene);
+            }
 
             scene.bindEyePosition(effect);
         }
@@ -279,7 +300,7 @@ export class ShadowOnlyMaterial extends PushMaterial {
         // Fog
         MaterialHelper.BindFogParameters(scene, mesh, this._activeEffect);
 
-        this._afterBind(mesh, this._activeEffect);
+        this._afterBind(mesh, this._activeEffect, subMesh);
     }
 
     public clone(name: string): ShadowOnlyMaterial {

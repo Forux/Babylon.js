@@ -44,6 +44,7 @@ class GradientMaterialDefines extends MaterialDefines {
     public INSTANCESCOLOR = false;
     public IMAGEPROCESSINGPOSTPROCESS = false;
     public SKIPFINALCOLORCLAMP = false;
+    public LOGARITHMICDEPTH = false;
 
     constructor() {
         super();
@@ -104,8 +105,10 @@ export class GradientMaterial extends PushMaterial {
 
     // Methods
     public isReadyForSubMesh(mesh: AbstractMesh, subMesh: SubMesh, useInstances?: boolean): boolean {
+        const drawWrapper = subMesh._drawWrapper;
+
         if (this.isFrozen) {
-            if (subMesh.effect && subMesh.effect._wasPreviouslyReady && subMesh.effect._wasPreviouslyUsingInstances === useInstances) {
+            if (drawWrapper.effect && drawWrapper._wasPreviouslyReady && drawWrapper._wasPreviouslyUsingInstances === useInstances) {
                 return true;
             }
         }
@@ -125,7 +128,7 @@ export class GradientMaterial extends PushMaterial {
 
         MaterialHelper.PrepareDefinesForFrameBoundValues(scene, engine, this, defines, useInstances ? true : false);
 
-        MaterialHelper.PrepareDefinesForMisc(mesh, scene, false, this.pointsCloud, this.fogEnabled, this._shouldTurnAlphaTestOn(mesh), defines);
+        MaterialHelper.PrepareDefinesForMisc(mesh, scene, this._useLogarithmicDepth, this.pointsCloud, this.fogEnabled, this._shouldTurnAlphaTestOn(mesh), defines);
 
         defines._needNormals = MaterialHelper.PrepareDefinesForLights(scene, mesh, defines, false, this._maxSimultaneousLights, this._disableLighting);
 
@@ -190,6 +193,7 @@ export class GradientMaterial extends PushMaterial {
                 "vFogColor",
                 "pointSize",
                 "mBones",
+                "logarithmicDepthConstant",
                 "topColor",
                 "bottomColor",
                 "offset",
@@ -233,8 +237,8 @@ export class GradientMaterial extends PushMaterial {
         }
 
         defines._renderId = scene.getRenderId();
-        subMesh.effect._wasPreviouslyReady = true;
-        subMesh.effect._wasPreviouslyUsingInstances = !!useInstances;
+        drawWrapper._wasPreviouslyReady = true;
+        drawWrapper._wasPreviouslyUsingInstances = !!useInstances;
 
         return true;
     }
@@ -261,13 +265,18 @@ export class GradientMaterial extends PushMaterial {
         // Bones
         MaterialHelper.BindBonesParameters(mesh, effect);
 
-        if (this._mustRebind(scene, effect)) {
+        if (this._mustRebind(scene, effect, subMesh)) {
             // Clip plane
             bindClipPlane(effect, this, scene);
 
             // Point size
             if (this.pointsCloud) {
                 this._activeEffect.setFloat("pointSize", this.pointSize);
+            }
+
+            // Log. depth
+            if (this._useLogarithmicDepth) {
+                MaterialHelper.BindLogDepth(defines, effect, scene);
             }
 
             scene.bindEyePosition(effect);
@@ -291,7 +300,7 @@ export class GradientMaterial extends PushMaterial {
         this._activeEffect.setFloat("scale", this.scale);
         this._activeEffect.setFloat("smoothness", this.smoothness);
 
-        this._afterBind(mesh, this._activeEffect);
+        this._afterBind(mesh, this._activeEffect, subMesh);
     }
 
     public getAnimatables(): IAnimatable[] {

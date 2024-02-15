@@ -48,6 +48,7 @@ class CellMaterialDefines extends MaterialDefines {
     public DEPTHPREPASS = false;
     public IMAGEPROCESSINGPOSTPROCESS = false;
     public SKIPFINALCOLORCLAMP = false;
+    public LOGARITHMICDEPTH = false;
 
     constructor() {
         super();
@@ -97,8 +98,10 @@ export class CellMaterial extends PushMaterial {
 
     // Methods
     public isReadyForSubMesh(mesh: AbstractMesh, subMesh: SubMesh, useInstances?: boolean): boolean {
+        const drawWrapper = subMesh._drawWrapper;
+
         if (this.isFrozen) {
-            if (subMesh.effect && subMesh.effect._wasPreviouslyReady && subMesh.effect._wasPreviouslyUsingInstances === useInstances) {
+            if (drawWrapper.effect && drawWrapper._wasPreviouslyReady && drawWrapper._wasPreviouslyUsingInstances === useInstances) {
                 return true;
             }
         }
@@ -135,7 +138,7 @@ export class CellMaterial extends PushMaterial {
         defines.CELLBASIC = !this.computeHighLevel;
 
         // Misc.
-        MaterialHelper.PrepareDefinesForMisc(mesh, scene, false, this.pointsCloud, this.fogEnabled, this._shouldTurnAlphaTestOn(mesh), defines);
+        MaterialHelper.PrepareDefinesForMisc(mesh, scene, this._useLogarithmicDepth, this.pointsCloud, this.fogEnabled, this._shouldTurnAlphaTestOn(mesh), defines);
 
         // Lights
         defines._needNormals = MaterialHelper.PrepareDefinesForLights(scene, mesh, defines, false, this._maxSimultaneousLights, this._disableLighting);
@@ -202,6 +205,7 @@ export class CellMaterial extends PushMaterial {
                 "vDiffuseInfos",
                 "mBones",
                 "diffuseMatrix",
+                "logarithmicDepthConstant",
             ];
             const samplers = ["diffuseSampler"];
             const uniformBuffers: string[] = [];
@@ -239,8 +243,8 @@ export class CellMaterial extends PushMaterial {
         }
 
         defines._renderId = scene.getRenderId();
-        subMesh.effect._wasPreviouslyReady = true;
-        subMesh.effect._wasPreviouslyUsingInstances = !!useInstances;
+        drawWrapper._wasPreviouslyReady = true;
+        drawWrapper._wasPreviouslyUsingInstances = !!useInstances;
 
         return true;
     }
@@ -266,7 +270,7 @@ export class CellMaterial extends PushMaterial {
         // Bones
         MaterialHelper.BindBonesParameters(mesh, this._activeEffect);
 
-        if (this._mustRebind(scene, effect)) {
+        if (this._mustRebind(scene, effect, subMesh)) {
             // Textures
             if (this._diffuseTexture && MaterialFlags.DiffuseTextureEnabled) {
                 this._activeEffect.setTexture("diffuseSampler", this._diffuseTexture);
@@ -281,6 +285,11 @@ export class CellMaterial extends PushMaterial {
             // Point size
             if (this.pointsCloud) {
                 this._activeEffect.setFloat("pointSize", this.pointSize);
+            }
+
+            // Log. depth
+            if (this._useLogarithmicDepth) {
+                MaterialHelper.BindLogDepth(defines, effect, scene);
             }
 
             scene.bindEyePosition(effect);
@@ -301,7 +310,7 @@ export class CellMaterial extends PushMaterial {
         // Fog
         MaterialHelper.BindFogParameters(scene, mesh, this._activeEffect);
 
-        this._afterBind(mesh, this._activeEffect);
+        this._afterBind(mesh, this._activeEffect, subMesh);
     }
 
     public getAnimatables(): IAnimatable[] {

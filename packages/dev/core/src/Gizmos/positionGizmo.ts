@@ -3,6 +3,7 @@ import type { Observer } from "../Misc/observable";
 import { Observable } from "../Misc/observable";
 import type { Nullable } from "../types";
 import { Vector3 } from "../Maths/math.vector";
+import type { Quaternion } from "../Maths/math.vector";
 import { Color3 } from "../Maths/math.color";
 import type { AbstractMesh } from "../Meshes/abstractMesh";
 import type { Node } from "../node";
@@ -33,6 +34,8 @@ export interface IPositionGizmo extends IGizmo {
     yPlaneGizmo: IPlaneDragGizmo;
     /** Internal gizmo used for interactions on the xy plane */
     zPlaneGizmo: IPlaneDragGizmo;
+    /** True when the mouse pointer is dragging a gizmo mesh */
+    readonly isDragging: boolean;
     /** Fires an event when any of it's sub gizmos are dragged */
     onDragStartObservable: Observable<unknown>;
     /** Fires an event when any of it's sub gizmos are being dragged */
@@ -52,6 +55,10 @@ export interface IPositionGizmo extends IGizmo {
      * @param cache Gizmo axis definition used for reactive gizmo UI
      */
     addToAxisCache(mesh: Mesh, cache: GizmoAxisCache): void;
+    /**
+     * Force release the drag action by code
+     */
+    releaseDrag(): void;
 }
 
 /**
@@ -140,11 +147,18 @@ export class PositionGizmo extends Gizmo implements IPositionGizmo {
      * True when the mouse pointer is hovering a gizmo mesh
      */
     public get isHovered() {
-        let hovered = false;
-        [this.xGizmo, this.yGizmo, this.zGizmo, this.xPlaneGizmo, this.yPlaneGizmo, this.zPlaneGizmo].forEach((gizmo) => {
-            hovered = hovered || gizmo.isHovered;
-        });
-        return hovered;
+        return this.xGizmo.isHovered || this.yGizmo.isHovered || this.zGizmo.isHovered || this.xPlaneGizmo.isHovered || this.yPlaneGizmo.isHovered || this.zPlaneGizmo.isHovered;
+    }
+
+    public get isDragging() {
+        return (
+            this.xGizmo.dragBehavior.dragging ||
+            this.yGizmo.dragBehavior.dragging ||
+            this.zGizmo.dragBehavior.dragging ||
+            this.xPlaneGizmo.dragBehavior.dragging ||
+            this.yPlaneGizmo.dragBehavior.dragging ||
+            this.zPlaneGizmo.dragBehavior.dragging
+        );
     }
 
     /**
@@ -206,6 +220,23 @@ export class PositionGizmo extends Gizmo implements IPositionGizmo {
     }
     public get planarGizmoEnabled(): boolean {
         return this._planarGizmoEnabled;
+    }
+
+    /**
+     * posture that the gizmo will be display
+     * When set null, default value will be used (Quaternion(0, 0, 0, 1))
+     */
+    public get customRotationQuaternion(): Nullable<Quaternion> {
+        return this._customRotationQuaternion;
+    }
+
+    public set customRotationQuaternion(customRotationQuaternion: Nullable<Quaternion>) {
+        this._customRotationQuaternion = customRotationQuaternion;
+        [this.xGizmo, this.yGizmo, this.zGizmo, this.xPlaneGizmo, this.yPlaneGizmo, this.zPlaneGizmo].forEach((gizmo) => {
+            if (gizmo) {
+                gizmo.customRotationQuaternion = customRotationQuaternion;
+            }
+        });
     }
 
     /**
@@ -304,6 +335,17 @@ export class PositionGizmo extends Gizmo implements IPositionGizmo {
      */
     public addToAxisCache(mesh: Mesh, cache: GizmoAxisCache) {
         this._gizmoAxisCache.set(mesh, cache);
+    }
+    /**
+     * Force release the drag action by code
+     */
+    public releaseDrag() {
+        this.xGizmo.dragBehavior.releaseDrag();
+        this.yGizmo.dragBehavior.releaseDrag();
+        this.zGizmo.dragBehavior.releaseDrag();
+        this.xPlaneGizmo.dragBehavior.releaseDrag();
+        this.yPlaneGizmo.dragBehavior.releaseDrag();
+        this.zPlaneGizmo.dragBehavior.releaseDrag();
     }
 
     /**

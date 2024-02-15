@@ -31,6 +31,7 @@ class GridMaterialDefines extends MaterialDefines {
     public THIN_INSTANCES = false;
     public IMAGEPROCESSINGPOSTPROCESS = false;
     public SKIPFINALCOLORCLAMP = false;
+    public LOGARITHMICDEPTH = false;
 
     constructor() {
         super();
@@ -105,6 +106,9 @@ export class GridMaterial extends PushMaterial {
 
     @serializeAsTexture("opacityTexture")
     private _opacityTexture: BaseTexture;
+    /**
+     * Texture to define opacity of the grid
+     */
     @expandToProperty("_markAllSubMeshesAsTexturesDirty")
     public opacityTexture: BaseTexture;
 
@@ -120,7 +124,7 @@ export class GridMaterial extends PushMaterial {
     }
 
     /**
-     * Returns whether or not the grid requires alpha blending.
+     * @returns whether or not the grid requires alpha blending.
      */
     public needAlphaBlending(): boolean {
         return this.opacity < 1.0 || (this._opacityTexture && this._opacityTexture.isReady());
@@ -131,8 +135,10 @@ export class GridMaterial extends PushMaterial {
     }
 
     public isReadyForSubMesh(mesh: AbstractMesh, subMesh: SubMesh, useInstances?: boolean): boolean {
+        const drawWrapper = subMesh._drawWrapper;
+
         if (this.isFrozen) {
-            if (subMesh.effect && subMesh.effect._wasPreviouslyReady && subMesh.effect._wasPreviouslyUsingInstances === useInstances) {
+            if (drawWrapper.effect && drawWrapper._wasPreviouslyReady && drawWrapper._wasPreviouslyUsingInstances === useInstances) {
                 return true;
             }
         }
@@ -183,7 +189,7 @@ export class GridMaterial extends PushMaterial {
             }
         }
 
-        MaterialHelper.PrepareDefinesForMisc(mesh, scene, false, false, this.fogEnabled, false, defines);
+        MaterialHelper.PrepareDefinesForMisc(mesh, scene, this._useLogarithmicDepth, false, this.fogEnabled, false, defines);
 
         // Values that need to be evaluated on every frame
         MaterialHelper.PrepareDefinesForFrameBoundValues(scene, scene.getEngine(), this, defines, !!useInstances);
@@ -229,6 +235,7 @@ export class GridMaterial extends PushMaterial {
                             "opacityMatrix",
                             "vOpacityInfos",
                             "visibility",
+                            "logarithmicDepthConstant",
                         ],
                         ["opacitySampler"],
                         join,
@@ -246,8 +253,8 @@ export class GridMaterial extends PushMaterial {
         }
 
         defines._renderId = scene.getRenderId();
-        subMesh.effect._wasPreviouslyReady = true;
-        subMesh.effect._wasPreviouslyUsingInstances = !!useInstances;
+        drawWrapper._wasPreviouslyReady = true;
+        drawWrapper._wasPreviouslyUsingInstances = !!useInstances;
 
         return true;
     }
@@ -276,7 +283,7 @@ export class GridMaterial extends PushMaterial {
         this._activeEffect.setMatrix("projection", scene.getProjectionMatrix());
 
         // Uniforms
-        if (this._mustRebind(scene, effect)) {
+        if (this._mustRebind(scene, effect, subMesh)) {
             this._activeEffect.setColor3("mainColor", this.mainColor);
             this._activeEffect.setColor3("lineColor", this.lineColor);
 
@@ -293,11 +300,16 @@ export class GridMaterial extends PushMaterial {
                 this._activeEffect.setFloat2("vOpacityInfos", this._opacityTexture.coordinatesIndex, this._opacityTexture.level);
                 this._activeEffect.setMatrix("opacityMatrix", this._opacityTexture.getTextureMatrix());
             }
+
+            // Log. depth
+            if (this._useLogarithmicDepth) {
+                MaterialHelper.BindLogDepth(defines, effect, scene);
+            }
         }
         // Fog
         MaterialHelper.BindFogParameters(scene, mesh, this._activeEffect);
 
-        this._afterBind(mesh, this._activeEffect);
+        this._afterBind(mesh, this._activeEffect, subMesh);
     }
 
     /**

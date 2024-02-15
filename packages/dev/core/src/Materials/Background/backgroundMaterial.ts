@@ -709,8 +709,10 @@ export class BackgroundMaterial extends PushMaterial {
      * @returns true if all the dependencies are ready (Textures, Effects...)
      */
     public isReadyForSubMesh(mesh: AbstractMesh, subMesh: SubMesh, useInstances: boolean = false): boolean {
-        if (subMesh.effect && this.isFrozen) {
-            if (subMesh.effect._wasPreviouslyReady && subMesh.effect._wasPreviouslyUsingInstances === useInstances) {
+        const drawWrapper = subMesh._drawWrapper;
+
+        if (drawWrapper.effect && this.isFrozen) {
+            if (drawWrapper._wasPreviouslyReady && drawWrapper._wasPreviouslyUsingInstances === useInstances) {
                 return true;
             }
         }
@@ -876,7 +878,7 @@ export class BackgroundMaterial extends PushMaterial {
         }
 
         // Misc.
-        MaterialHelper.PrepareDefinesForMisc(mesh, scene, false, this.pointsCloud, this.fogEnabled, this._shouldTurnAlphaTestOn(mesh), defines);
+        MaterialHelper.PrepareDefinesForMisc(mesh, scene, this._useLogarithmicDepth, this.pointsCloud, this.fogEnabled, this._shouldTurnAlphaTestOn(mesh), defines);
 
         // Values that need to be evaluated on every frame
         MaterialHelper.PrepareDefinesForFrameBoundValues(scene, engine, this, defines, useInstances, null, subMesh.getRenderingMesh().hasThinInstances);
@@ -958,6 +960,7 @@ export class BackgroundMaterial extends PushMaterial {
                 "diffuseMatrix",
 
                 "projectedGroundInfos",
+                "logarithmicDepthConstant",
             ];
 
             addClipPlaneUniforms(uniforms);
@@ -1003,8 +1006,8 @@ export class BackgroundMaterial extends PushMaterial {
         }
 
         defines._renderId = scene.getRenderId();
-        subMesh.effect._wasPreviouslyReady = true;
-        subMesh.effect._wasPreviouslyUsingInstances = useInstances;
+        drawWrapper._wasPreviouslyReady = true;
+        drawWrapper._wasPreviouslyUsingInstances = useInstances;
 
         this._checkScenePerformancePriority();
 
@@ -1098,9 +1101,9 @@ export class BackgroundMaterial extends PushMaterial {
     }
 
     /**
-     * Bind the material for a dedicated submeh (every used meshes will be considered opaque).
+     * Bind the material for a dedicated submesh (every used meshes will be considered opaque).
      * @param world The world matrix to bind.
-     * @param mesh
+     * @param mesh the mesh to bind for.
      * @param subMesh The submesh to bind for.
      */
     public bindForSubMesh(world: Matrix, mesh: Mesh, subMesh: SubMesh): void {
@@ -1123,14 +1126,14 @@ export class BackgroundMaterial extends PushMaterial {
         // Bones
         MaterialHelper.BindBonesParameters(mesh, this._activeEffect);
 
-        const mustRebind = this._mustRebind(scene, effect, mesh.visibility);
+        const mustRebind = this._mustRebind(scene, effect, subMesh, mesh.visibility);
         if (mustRebind) {
             this._uniformBuffer.bindToEffect(effect, "Material");
 
             this.bindViewProjection(effect);
 
             const reflectionTexture = this._reflectionTexture;
-            if (!this._uniformBuffer.useUbo || !this.isFrozen || !this._uniformBuffer.isSync) {
+            if (!this._uniformBuffer.useUbo || !this.isFrozen || !this._uniformBuffer.isSync || subMesh._drawWrapper._forceRebindOnNextCall) {
                 // Texture uniforms
                 if (scene.texturesEnabled) {
                     if (this._diffuseTexture && MaterialFlags.DiffuseTextureEnabled) {
@@ -1225,13 +1228,18 @@ export class BackgroundMaterial extends PushMaterial {
             // Fog
             MaterialHelper.BindFogParameters(scene, mesh, this._activeEffect, true);
 
+            // Log. depth
+            if (this._useLogarithmicDepth) {
+                MaterialHelper.BindLogDepth(defines, effect, scene);
+            }
+
             // image processing
             if (this._imageProcessingConfiguration) {
                 this._imageProcessingConfiguration.bind(this._activeEffect);
             }
         }
 
-        this._afterBind(mesh, this._activeEffect);
+        this._afterBind(mesh, this._activeEffect, subMesh);
 
         this._uniformBuffer.update();
     }

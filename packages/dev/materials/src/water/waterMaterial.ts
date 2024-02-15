@@ -224,8 +224,6 @@ export class WaterMaterial extends PushMaterial {
     private _lastTime: number = 0;
     private _lastDeltaTime: number = 0;
 
-    private _useLogarithmicDepth: boolean;
-
     private _waitingRenderList: Nullable<string[]>;
 
     private _imageProcessingConfiguration: Nullable<ImageProcessingConfiguration>;
@@ -268,16 +266,6 @@ export class WaterMaterial extends PushMaterial {
                 this._markAllSubMeshesAsImageProcessingDirty();
             });
         }
-    }
-
-    @serialize()
-    public get useLogarithmicDepth(): boolean {
-        return this._useLogarithmicDepth;
-    }
-
-    public set useLogarithmicDepth(value: boolean) {
-        this._useLogarithmicDepth = value && this.getScene().getEngine().getCaps().fragmentDepthSupported;
-        this._markAllSubMeshesAsMiscDirty();
     }
 
     // Get / Set
@@ -349,8 +337,10 @@ export class WaterMaterial extends PushMaterial {
     }
 
     public isReadyForSubMesh(mesh: AbstractMesh, subMesh: SubMesh, useInstances?: boolean): boolean {
+        const drawWrapper = subMesh._drawWrapper;
+
         if (this.isFrozen) {
-            if (subMesh.effect && subMesh.effect._wasPreviouslyReady && subMesh.effect._wasPreviouslyUsingInstances === useInstances) {
+            if (drawWrapper.effect && drawWrapper._wasPreviouslyReady && drawWrapper._wasPreviouslyUsingInstances === useInstances) {
                 return true;
             }
         }
@@ -552,8 +542,8 @@ export class WaterMaterial extends PushMaterial {
         }
 
         defines._renderId = scene.getRenderId();
-        subMesh.effect._wasPreviouslyReady = true;
-        subMesh.effect._wasPreviouslyUsingInstances = !!useInstances;
+        drawWrapper._wasPreviouslyReady = true;
+        drawWrapper._wasPreviouslyUsingInstances = !!useInstances;
 
         return true;
     }
@@ -579,7 +569,7 @@ export class WaterMaterial extends PushMaterial {
         // Bones
         MaterialHelper.BindBonesParameters(mesh, this._activeEffect);
 
-        if (this._mustRebind(scene, effect)) {
+        if (this._mustRebind(scene, effect, subMesh)) {
             // Textures
             if (this.bumpTexture && MaterialFlags.BumpTextureEnabled) {
                 this._activeEffect.setTexture("normalSampler", this.bumpTexture);
@@ -593,6 +583,11 @@ export class WaterMaterial extends PushMaterial {
             // Point size
             if (this.pointsCloud) {
                 this._activeEffect.setFloat("pointSize", this.pointSize);
+            }
+
+            // Log. depth
+            if (this._useLogarithmicDepth) {
+                MaterialHelper.BindLogDepth(defines, effect, scene);
             }
 
             scene.bindEyePosition(effect);
@@ -653,7 +648,7 @@ export class WaterMaterial extends PushMaterial {
             this._imageProcessingConfiguration.bind(this._activeEffect);
         }
 
-        this._afterBind(mesh, this._activeEffect);
+        this._afterBind(mesh, this._activeEffect, subMesh);
     }
 
     private _createRenderTargets(scene: Scene, renderTargetSize: Vector2): void {

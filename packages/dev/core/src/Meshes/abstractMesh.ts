@@ -977,6 +977,8 @@ export class AbstractMesh extends TransformNode implements IDisposable, ICullabl
         for (const subMesh of this.subMeshes) {
             subMesh._rebuild();
         }
+
+        this.resetDrawCache();
     }
 
     /** @internal */
@@ -1488,6 +1490,7 @@ export class AbstractMesh extends TransformNode implements IDisposable, ICullabl
      * @param applyMorph
      * @param data
      * @param kind the kind of data you want. Can be Normal or Position
+     * @returns a FloatArray of the vertex data
      */
     private _getData(applySkeleton: boolean = false, applyMorph: boolean = false, data?: Nullable<FloatArray>, kind: string = VertexBuffer.PositionKind): Nullable<FloatArray> {
         data = data ?? this.getVerticesData(kind)!.slice();
@@ -1496,16 +1499,32 @@ export class AbstractMesh extends TransformNode implements IDisposable, ICullabl
             let faceIndexCount = 0;
             let positionIndex = 0;
             for (let vertexCount = 0; vertexCount < data.length; vertexCount++) {
+                let value = data[vertexCount];
                 for (let targetCount = 0; targetCount < this.morphTargetManager.numTargets; targetCount++) {
                     const targetMorph = this.morphTargetManager.getTarget(targetCount);
                     const influence = targetMorph.influence;
-                    if (influence > 0.0) {
-                        const morphTargetPositions = targetMorph.getPositions();
-                        if (morphTargetPositions) {
-                            data[vertexCount] += (morphTargetPositions[vertexCount] - data[vertexCount]) * influence;
+                    if (influence !== 0.0) {
+                        let morphTargetData: Nullable<FloatArray> = null;
+                        switch (kind) {
+                            case VertexBuffer.PositionKind:
+                                morphTargetData = targetMorph.getPositions();
+                                break;
+                            case VertexBuffer.NormalKind:
+                                morphTargetData = targetMorph.getNormals();
+                                break;
+                            case VertexBuffer.TangentKind:
+                                morphTargetData = targetMorph.getTangents();
+                                break;
+                            case VertexBuffer.UVKind:
+                                morphTargetData = targetMorph.getUVs();
+                                break;
+                        }
+                        if (morphTargetData) {
+                            value += (morphTargetData[vertexCount] - data[vertexCount]) * influence;
                         }
                     }
                 }
+                data[vertexCount] = value;
 
                 faceIndexCount++;
                 if (kind === VertexBuffer.PositionKind) {
@@ -2621,6 +2640,7 @@ export class AbstractMesh extends TransformNode implements IDisposable, ICullabl
         return false;
     }
 
+    // eslint-disable-next-line jsdoc/require-returns-check
     /**
      * Disables the mesh edge rendering mode
      * @returns the currentAbstractMesh
@@ -2629,6 +2649,7 @@ export class AbstractMesh extends TransformNode implements IDisposable, ICullabl
         throw _WarnImport("EdgesRenderer");
     }
 
+    // eslint-disable-next-line jsdoc/require-returns-check
     /**
      * Enables the edge rendering mode on the mesh.
      * This mode makes the mesh edges visible

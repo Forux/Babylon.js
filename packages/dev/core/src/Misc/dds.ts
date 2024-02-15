@@ -790,7 +790,7 @@ const DXGI_FORMAT_ASTC_12X12_UNORM_SRGB   = 187;
                 }
                 // eslint-disable-next-line no-fallthrough
                 default:
-                    console.error("Unsupported FourCC code:", Int32ToFourCC(fourCC));
+                    Logger.Error(["Unsupported FourCC code:", Int32ToFourCC(fourCC)]);
                     return;
             }
         }

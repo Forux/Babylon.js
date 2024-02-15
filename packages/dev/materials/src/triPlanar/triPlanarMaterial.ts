@@ -53,6 +53,7 @@ class TriPlanarMaterialDefines extends MaterialDefines {
     public IMAGEPROCESSINGPOSTPROCESS = false;
     public SKIPFINALCOLORCLAMP = false;
     public NONUNIFORMSCALING = false;
+    public LOGARITHMICDEPTH = false;
 
     constructor() {
         super();
@@ -134,8 +135,10 @@ export class TriPlanarMaterial extends PushMaterial {
 
     // Methods
     public isReadyForSubMesh(mesh: AbstractMesh, subMesh: SubMesh, useInstances?: boolean): boolean {
+        const drawWrapper = subMesh._drawWrapper;
+
         if (this.isFrozen) {
-            if (subMesh.effect && subMesh.effect._wasPreviouslyReady && subMesh.effect._wasPreviouslyUsingInstances === useInstances) {
+            if (drawWrapper.effect && drawWrapper._wasPreviouslyReady && drawWrapper._wasPreviouslyUsingInstances === useInstances) {
                 return true;
             }
         }
@@ -188,7 +191,7 @@ export class TriPlanarMaterial extends PushMaterial {
         }
 
         // Misc.
-        MaterialHelper.PrepareDefinesForMisc(mesh, scene, false, this.pointsCloud, this.fogEnabled, this._shouldTurnAlphaTestOn(mesh), defines);
+        MaterialHelper.PrepareDefinesForMisc(mesh, scene, this._useLogarithmicDepth, this.pointsCloud, this.fogEnabled, this._shouldTurnAlphaTestOn(mesh), defines);
 
         // Lights
         defines._needNormals = MaterialHelper.PrepareDefinesForLights(scene, mesh, defines, false, this._maxSimultaneousLights, this._disableLighting);
@@ -249,7 +252,7 @@ export class TriPlanarMaterial extends PushMaterial {
                 "mBones",
                 "tileSize",
             ];
-            const samplers = ["diffuseSamplerX", "diffuseSamplerY", "diffuseSamplerZ", "normalSamplerX", "normalSamplerY", "normalSamplerZ"];
+            const samplers = ["diffuseSamplerX", "diffuseSamplerY", "diffuseSamplerZ", "normalSamplerX", "normalSamplerY", "normalSamplerZ", "logarithmicDepthConstant"];
 
             const uniformBuffers: string[] = [];
 
@@ -288,8 +291,8 @@ export class TriPlanarMaterial extends PushMaterial {
         }
 
         defines._renderId = scene.getRenderId();
-        subMesh.effect._wasPreviouslyReady = true;
-        subMesh.effect._wasPreviouslyUsingInstances = !!useInstances;
+        drawWrapper._wasPreviouslyReady = true;
+        drawWrapper._wasPreviouslyUsingInstances = !!useInstances;
 
         return true;
     }
@@ -317,7 +320,7 @@ export class TriPlanarMaterial extends PushMaterial {
 
         this._activeEffect.setFloat("tileSize", this.tileSize);
 
-        if (scene.getCachedMaterial() !== this) {
+        if (this._mustRebind(scene, effect, subMesh)) {
             // Textures
             if (this.diffuseTextureX) {
                 this._activeEffect.setTexture("diffuseSamplerX", this.diffuseTextureX);
@@ -345,6 +348,11 @@ export class TriPlanarMaterial extends PushMaterial {
                 this._activeEffect.setFloat("pointSize", this.pointSize);
             }
 
+            // Log. depth
+            if (this._useLogarithmicDepth) {
+                MaterialHelper.BindLogDepth(defines, effect, scene);
+            }
+
             scene.bindEyePosition(effect);
         }
 
@@ -366,7 +374,7 @@ export class TriPlanarMaterial extends PushMaterial {
         // Fog
         MaterialHelper.BindFogParameters(scene, mesh, this._activeEffect);
 
-        this._afterBind(mesh, this._activeEffect);
+        this._afterBind(mesh, this._activeEffect, subMesh);
     }
 
     public getAnimatables(): IAnimatable[] {

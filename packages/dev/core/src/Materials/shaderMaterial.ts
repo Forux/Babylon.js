@@ -1,6 +1,6 @@
 import { SerializationHelper } from "../Misc/decorators";
 import type { Nullable } from "../types";
-import type { Scene } from "../scene";
+import { Scene } from "../scene";
 import { Matrix, Vector3, Vector2, Vector4, Quaternion } from "../Maths/math.vector";
 import type { AbstractMesh } from "../Meshes/abstractMesh";
 import type { Mesh } from "../Meshes/mesh";
@@ -656,15 +656,9 @@ export class ShaderMaterial extends PushMaterial {
         const storeEffectOnSubMeshes = subMesh && this._storeEffectOnSubMeshes;
 
         if (this.isFrozen) {
-            if (storeEffectOnSubMeshes) {
-                if (subMesh.effect && subMesh.effect._wasPreviouslyReady) {
-                    return true;
-                }
-            } else {
-                const effect = this._drawWrapper.effect;
-                if (effect && effect._wasPreviouslyReady && effect._wasPreviouslyUsingInstances === useInstances) {
-                    return true;
-                }
+            const drawWrapper = storeEffectOnSubMeshes ? subMesh._drawWrapper : this._drawWrapper;
+            if (drawWrapper.effect && drawWrapper._wasPreviouslyReady && drawWrapper._wasPreviouslyUsingInstances === useInstances) {
+                return true;
             }
         }
 
@@ -685,8 +679,8 @@ export class ShaderMaterial extends PushMaterial {
         if (engine.getCaps().multiview && scene.activeCamera && scene.activeCamera.outputRenderTarget && scene.activeCamera.outputRenderTarget.getViewCount() > 1) {
             this._multiview = true;
             defines.push("#define MULTIVIEW");
-            if (this._options.uniforms.indexOf("viewProjection") !== -1 && this._options.uniforms.indexOf("viewProjectionR") === -1) {
-                this._options.uniforms.push("viewProjectionR");
+            if (uniforms.indexOf("viewProjection") !== -1 && uniforms.indexOf("viewProjectionR") === -1) {
+                uniforms.push("viewProjectionR");
             }
         }
 
@@ -735,8 +729,8 @@ export class ShaderMaterial extends PushMaterial {
             if (skeleton.isUsingTextureForMatrices) {
                 defines.push("#define BONETEXTURE");
 
-                if (this._options.uniforms.indexOf("boneTextureWidth") === -1) {
-                    this._options.uniforms.push("boneTextureWidth");
+                if (uniforms.indexOf("boneTextureWidth") === -1) {
+                    uniforms.push("boneTextureWidth");
                 }
 
                 if (this._options.samplers.indexOf("boneSampler") === -1) {
@@ -745,8 +739,8 @@ export class ShaderMaterial extends PushMaterial {
             } else {
                 defines.push("#define BonesPerMesh " + (skeleton.bones.length + 1));
 
-                if (this._options.uniforms.indexOf("mBones") === -1) {
-                    this._options.uniforms.push("mBones");
+                if (uniforms.indexOf("mBones") === -1) {
+                    uniforms.push("mBones");
                 }
             }
         } else {
@@ -760,7 +754,7 @@ export class ShaderMaterial extends PushMaterial {
             const uv = manager.supportsUVs && defines.indexOf("#define UV1") !== -1;
             const tangent = manager.supportsTangents && defines.indexOf("#define TANGENT") !== -1;
             const normal = manager.supportsNormals && defines.indexOf("#define NORMAL") !== -1;
-            numInfluencers = manager.numInfluencers;
+            numInfluencers = manager.numMaxInfluencers || manager.numInfluencers;
             if (uv) {
                 defines.push("#define MORPHTARGETS_UV");
             }
@@ -776,8 +770,8 @@ export class ShaderMaterial extends PushMaterial {
             if (manager.isUsingTextureForTargets) {
                 defines.push("#define MORPHTARGETS_TEXTURE");
 
-                if (this._options.uniforms.indexOf("morphTargetTextureIndices") === -1) {
-                    this._options.uniforms.push("morphTargetTextureIndices");
+                if (uniforms.indexOf("morphTargetTextureIndices") === -1) {
+                    uniforms.push("morphTargetTextureIndices");
                 }
 
                 if (this._options.samplers.indexOf("morphTargets") === -1) {
@@ -803,6 +797,7 @@ export class ShaderMaterial extends PushMaterial {
             if (numInfluencers > 0) {
                 uniforms = uniforms.slice();
                 uniforms.push("morphTargetInfluences");
+                uniforms.push("morphTargetCount");
                 uniforms.push("morphTargetTextureInfo");
                 uniforms.push("morphTargetTextureIndices");
             }
@@ -816,14 +811,14 @@ export class ShaderMaterial extends PushMaterial {
 
             if (bvaManager && bvaManager.isEnabled) {
                 defines.push("#define BAKED_VERTEX_ANIMATION_TEXTURE");
-                if (this._options.uniforms.indexOf("bakedVertexAnimationSettings") === -1) {
-                    this._options.uniforms.push("bakedVertexAnimationSettings");
+                if (uniforms.indexOf("bakedVertexAnimationSettings") === -1) {
+                    uniforms.push("bakedVertexAnimationSettings");
                 }
-                if (this._options.uniforms.indexOf("bakedVertexAnimationTextureSizeInverted") === -1) {
-                    this._options.uniforms.push("bakedVertexAnimationTextureSizeInverted");
+                if (uniforms.indexOf("bakedVertexAnimationTextureSizeInverted") === -1) {
+                    uniforms.push("bakedVertexAnimationTextureSizeInverted");
                 }
-                if (this._options.uniforms.indexOf("bakedVertexAnimationTime") === -1) {
-                    this._options.uniforms.push("bakedVertexAnimationTime");
+                if (uniforms.indexOf("bakedVertexAnimationTime") === -1) {
+                    uniforms.push("bakedVertexAnimationTime");
                 }
 
                 if (this._options.samplers.indexOf("bakedVertexAnimationTexture") === -1) {
@@ -853,6 +848,28 @@ export class ShaderMaterial extends PushMaterial {
             prepareStringDefinesForClipPlanes(this, scene, defines);
         }
 
+        // Fog
+        if (scene.fogEnabled && mesh?.applyFog && scene.fogMode !== Scene.FOGMODE_NONE) {
+            defines.push("#define FOG");
+            if (uniforms.indexOf("view") === -1) {
+                uniforms.push("view");
+            }
+            if (uniforms.indexOf("vFogInfos") === -1) {
+                uniforms.push("vFogInfos");
+            }
+            if (uniforms.indexOf("vFogColor") === -1) {
+                uniforms.push("vFogColor");
+            }
+        }
+
+        // Misc
+        if (this._useLogarithmicDepth) {
+            defines.push("#define LOGARITHMICDEPTH");
+            if (uniforms.indexOf("logarithmicDepthConstant") === -1) {
+                uniforms.push("logarithmicDepthConstant");
+            }
+        }
+
         if (this.customShaderNameResolve) {
             uniforms = uniforms.slice();
             uniformBuffers = uniformBuffers.slice();
@@ -860,7 +877,7 @@ export class ShaderMaterial extends PushMaterial {
             shaderName = this.customShaderNameResolve(shaderName, uniforms, uniformBuffers, samplers, defines, attribs);
         }
 
-        const drawWrapper = storeEffectOnSubMeshes ? subMesh._getDrawWrapper() : this._drawWrapper;
+        const drawWrapper = storeEffectOnSubMeshes ? subMesh._getDrawWrapper(undefined, true) : this._drawWrapper;
         const previousEffect = drawWrapper?.effect ?? null;
         const previousDefines = drawWrapper?.defines ?? null;
         const join = defines.join("\n");
@@ -897,7 +914,7 @@ export class ShaderMaterial extends PushMaterial {
             }
         }
 
-        effect!._wasPreviouslyUsingInstances = !!useInstances;
+        drawWrapper!._wasPreviouslyUsingInstances = !!useInstances;
 
         if (!effect?.isReady() ?? true) {
             return false;
@@ -907,7 +924,7 @@ export class ShaderMaterial extends PushMaterial {
             scene.resetCachedMaterial();
         }
 
-        effect._wasPreviouslyReady = true;
+        drawWrapper!._wasPreviouslyReady = true;
 
         return true;
     }
@@ -939,6 +956,10 @@ export class ShaderMaterial extends PushMaterial {
             world.multiplyToRef(scene.getTransformMatrix(), this._cachedWorldViewProjectionMatrix);
             effect.setMatrix("worldViewProjection", this._cachedWorldViewProjectionMatrix);
         }
+
+        if (this._options.uniforms.indexOf("view") !== -1) {
+            effect.setMatrix("view", scene.getViewMatrix());
+        }
     }
 
     /**
@@ -967,6 +988,8 @@ export class ShaderMaterial extends PushMaterial {
             return;
         }
 
+        const scene = this.getScene();
+
         this._activeEffect = effect;
 
         this.bindOnlyWorldMatrix(world, effectOverride);
@@ -975,7 +998,7 @@ export class ShaderMaterial extends PushMaterial {
 
         let useSceneUBO = false;
 
-        if (effect && uniformBuffers && uniformBuffers.length > 0 && this.getScene().getEngine().supportsUniformBuffers) {
+        if (effect && uniformBuffers && uniformBuffers.length > 0 && scene.getEngine().supportsUniformBuffers) {
             for (let i = 0; i < uniformBuffers.length; ++i) {
                 const bufferName = uniformBuffers[i];
                 switch (bufferName) {
@@ -986,41 +1009,51 @@ export class ShaderMaterial extends PushMaterial {
                         }
                         break;
                     case "Scene":
-                        MaterialHelper.BindSceneUniformBuffer(effect, this.getScene().getSceneUniformBuffer());
-                        this.getScene().finalizeSceneUbo();
+                        MaterialHelper.BindSceneUniformBuffer(effect, scene.getSceneUniformBuffer());
+                        scene.finalizeSceneUbo();
                         useSceneUBO = true;
                         break;
                 }
             }
         }
 
-        const mustRebind = mesh && storeEffectOnSubMeshes ? this._mustRebind(this.getScene(), effect, mesh.visibility) : this.getScene().getCachedMaterial() !== this;
+        const mustRebind = mesh && storeEffectOnSubMeshes ? this._mustRebind(scene, effect, subMesh, mesh.visibility) : scene.getCachedMaterial() !== this;
 
         if (effect && mustRebind) {
             if (!useSceneUBO && this._options.uniforms.indexOf("view") !== -1) {
-                effect.setMatrix("view", this.getScene().getViewMatrix());
+                effect.setMatrix("view", scene.getViewMatrix());
             }
 
             if (!useSceneUBO && this._options.uniforms.indexOf("projection") !== -1) {
-                effect.setMatrix("projection", this.getScene().getProjectionMatrix());
+                effect.setMatrix("projection", scene.getProjectionMatrix());
             }
 
             if (!useSceneUBO && this._options.uniforms.indexOf("viewProjection") !== -1) {
-                effect.setMatrix("viewProjection", this.getScene().getTransformMatrix());
+                effect.setMatrix("viewProjection", scene.getTransformMatrix());
                 if (this._multiview) {
-                    effect.setMatrix("viewProjectionR", this.getScene()._transformMatrixR);
+                    effect.setMatrix("viewProjectionR", scene._transformMatrixR);
                 }
             }
 
-            if (this.getScene().activeCamera && this._options.uniforms.indexOf("cameraPosition") !== -1) {
-                effect.setVector3("cameraPosition", this.getScene().activeCamera!.globalPosition);
+            if (scene.activeCamera && this._options.uniforms.indexOf("cameraPosition") !== -1) {
+                effect.setVector3("cameraPosition", scene.activeCamera!.globalPosition);
             }
 
             // Bones
             MaterialHelper.BindBonesParameters(mesh, effect);
 
             // Clip plane
-            bindClipPlane(effect, this, this.getScene());
+            bindClipPlane(effect, this, scene);
+
+            // Misc
+            if (this._useLogarithmicDepth) {
+                MaterialHelper.BindLogDepth(storeEffectOnSubMeshes ? subMesh.materialDefines : effect.defines, effect, scene);
+            }
+
+            // Fog
+            if (mesh) {
+                MaterialHelper.BindFogParameters(scene, mesh, effect);
+            }
 
             let name: string;
             // Texture
@@ -1168,11 +1201,12 @@ export class ShaderMaterial extends PushMaterial {
             const bvaManager = (<Mesh>mesh).bakedVertexAnimationManager;
 
             if (bvaManager && bvaManager.isEnabled) {
-                mesh.bakedVertexAnimationManager?.bind(effect, !!effect._wasPreviouslyUsingInstances);
+                const drawWrapper = storeEffectOnSubMeshes ? subMesh._drawWrapper : this._drawWrapper;
+                mesh.bakedVertexAnimationManager?.bind(effect, !!drawWrapper._wasPreviouslyUsingInstances);
             }
         }
 
-        this._afterBind(mesh, effect);
+        this._afterBind(mesh, effect, subMesh);
     }
 
     /**
@@ -1465,9 +1499,9 @@ export class ShaderMaterial extends PushMaterial {
         }
 
         // Floats
-        serializationObject.FloatArrays = {};
+        serializationObject.floatsArrays = {};
         for (name in this._floatsArrays) {
-            serializationObject.FloatArrays[name] = this._floatsArrays[name];
+            serializationObject.floatsArrays[name] = this._floatsArrays[name];
         }
 
         // Color3

@@ -326,6 +326,9 @@ export class Control implements IAnimatable {
 
     protected _accessibilityTag: Nullable<IAccessibilityTag> = null;
 
+    /**
+     * Observable that fires whenever the accessibility event of the control has changed
+     */
     public onAccessibilityTagChangedObservable = new Observable<Nullable<IAccessibilityTag>>();
 
     /**
@@ -450,6 +453,12 @@ export class Control implements IAnimatable {
         this._isHighlighted = value;
         this._markAsDirty();
     }
+
+    /**
+     * Indicates if the control should be serialized. Defaults to true.
+     */
+    @serialize()
+    public isSerializable: boolean = true;
 
     /**
      * Gets or sets a string defining the color to use for highlighting this control
@@ -2425,13 +2434,36 @@ export class Control implements IAnimatable {
     }
 
     /**
+     * A control has a dimension fully defined if that dimension doesn't depend on the parent's dimension.
+     * As an example, a control that has dimensions in pixels is fully defined, while in percentage is not fully defined.
+     * @param dim the dimension to check (width or height)
+     * @returns if the dimension is fully defined
+     */
+    public isDimensionFullyDefined(dim: "width" | "height"): boolean {
+        return this.getDimension(dim).isPixel;
+    }
+
+    /**
+     * Gets the dimension of the control along a specified axis
+     * @param dim the dimension to retrieve (width or height)
+     * @returns the dimension value along the specified axis
+     */
+    public getDimension(dim: "width" | "height"): ValueAndUnit {
+        if (dim === "width") {
+            return this._width;
+        } else {
+            return this._height;
+        }
+    }
+
+    /**
      * Clones a control and its descendants
      * @param host the texture where the control will be instantiated. Can be empty, in which case the control will be created on the same texture
      * @returns the cloned control
      */
     public clone(host?: AdvancedDynamicTexture): Control {
         const serialization: any = {};
-        this.serialize(serialization);
+        this.serialize(serialization, true);
 
         const controlType = Tools.Instantiate("BABYLON.GUI." + serialization.className);
         const cloned = new controlType();
@@ -2459,8 +2491,12 @@ export class Control implements IAnimatable {
     /**
      * Serializes the current control
      * @param serializationObject defined the JSON serialized object
+     * @param force if the control should be serialized even if the isSerializable flag is set to false (default false)
      */
-    public serialize(serializationObject: any) {
+    public serialize(serializationObject: any, force: boolean = false) {
+        if (!this.isSerializable && !force) {
+            return;
+        }
         SerializationHelper.Serialize(this, serializationObject);
         serializationObject.name = this.name;
         serializationObject.className = this.getClassName();

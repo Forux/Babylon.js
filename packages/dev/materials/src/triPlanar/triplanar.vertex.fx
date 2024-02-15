@@ -50,6 +50,7 @@ varying vec4 vColor;
 
 #include<clipPlaneVertexDeclaration>
 
+#include<logDepthDeclaration>
 #include<fogVertexDeclaration>
 #include<__decl__lightFragment>[0..maxSimultaneousLights]
 
@@ -100,7 +101,7 @@ void main(void)
 	vec3 worldBinormal = normalize(xbin * normalizedNormal.x + ybin * normalizedNormal.y + zbin * normalizedNormal.z);
    	vec3 worldTangent = normalize(xtan * normalizedNormal.x + ytan * normalizedNormal.y + ztan * normalizedNormal.z);
 	   
-	mat3 normalWorld = mat3(world);
+	mat3 normalWorld = mat3(finalWorld);
 
 	#ifdef NONUNIFORMSCALING
 		normalWorld = transposeMat3(inverseMat3(normalWorld));
@@ -117,6 +118,8 @@ void main(void)
 
 	// Clip plane
 	#include<clipPlaneVertex>
+
+	#include<logDepthVertex>
 
 	// Fog
 	#include<fogVertex>

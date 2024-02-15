@@ -3,6 +3,7 @@ import type { Observer } from "../Misc/observable";
 import { Observable } from "../Misc/observable";
 import type { Nullable } from "../types";
 import { Vector3 } from "../Maths/math.vector";
+import type { Quaternion } from "../Maths/math.vector";
 import { Color3 } from "../Maths/math.color";
 import type { AbstractMesh } from "../Meshes/abstractMesh";
 import { CreatePolyhedron } from "../Meshes/Builders/polyhedronBuilder";
@@ -21,6 +22,8 @@ import type { GizmoManager } from "./gizmoManager";
  * Interface for scale gizmo
  */
 export interface IScaleGizmo extends IGizmo {
+    /** True when the mouse pointer is dragging a gizmo mesh */
+    readonly isDragging: boolean;
     /** Internal gizmo used for interactions on the x axis */
     xGizmo: IAxisScaleGizmo;
     /** Internal gizmo used for interactions on the y axis */
@@ -37,6 +40,8 @@ export interface IScaleGizmo extends IGizmo {
     onDragEndObservable: Observable<unknown>;
     /** Drag distance in babylon units that the gizmo will snap to when dragged */
     snapDistance: number;
+    /** Incremental snap scaling. When true, with a snapDistance of 0.1, scaling will be 1.1,1.2,1.3 instead of, when false: 1.1,1.21,1.33,... */
+    incrementalSnap: boolean;
     /** Sensitivity factor for dragging */
     sensitivity: number;
     /**
@@ -45,6 +50,10 @@ export interface IScaleGizmo extends IGizmo {
      * @param cache Gizmo axis definition used for reactive gizmo UI
      */
     addToAxisCache(mesh: Mesh, cache: GizmoAxisCache): void;
+    /**
+     * Force release the drag action by code
+     */
+    releaseDrag(): void;
 
     /** Default material used to render when gizmo is not disabled or hovered */
     coloredMaterial: StandardMaterial;
@@ -79,6 +88,7 @@ export class ScaleGizmo extends Gizmo implements IScaleGizmo {
     protected _meshAttached: Nullable<AbstractMesh> = null;
     protected _nodeAttached: Nullable<Node> = null;
     protected _snapDistance: number;
+    protected _incrementalSnap: boolean = false;
     protected _uniformScalingMesh: Mesh;
     protected _octahedron: Mesh;
     protected _sensitivity: number = 1;
@@ -155,11 +165,14 @@ export class ScaleGizmo extends Gizmo implements IScaleGizmo {
      * True when the mouse pointer is hovering a gizmo mesh
      */
     public get isHovered() {
-        let hovered = false;
-        [this.xGizmo, this.yGizmo, this.zGizmo].forEach((gizmo) => {
-            hovered = hovered || gizmo.isHovered;
-        });
-        return hovered;
+        return this.xGizmo.isHovered || this.yGizmo.isHovered || this.zGizmo.isHovered;
+    }
+
+    /**
+     * True when the mouse pointer is dragging a gizmo mesh
+     */
+    public get isDragging() {
+        return this.xGizmo.dragBehavior.dragging || this.yGizmo.dragBehavior.dragging || this.zGizmo.dragBehavior.dragging || this.uniformScaleGizmo.dragBehavior.dragging;
     }
 
     /**
@@ -199,7 +212,10 @@ export class ScaleGizmo extends Gizmo implements IScaleGizmo {
         }
     }
 
-    /** Create Geometry for Gizmo */
+    /**
+     * @internal
+     * Create Geometry for Gizmo
+     */
     protected _createUniformScaleMesh(): AxisScaleGizmo {
         this._coloredMaterial = new StandardMaterial("", this.gizmoLayer.utilityLayerScene);
         this._coloredMaterial.diffuseColor = Color3.Gray();
@@ -268,6 +284,23 @@ export class ScaleGizmo extends Gizmo implements IScaleGizmo {
     }
 
     /**
+     * posture that the gizmo will be display
+     * When set null, default value will be used (Quaternion(0, 0, 0, 1))
+     */
+    public get customRotationQuaternion(): Nullable<Quaternion> {
+        return this._customRotationQuaternion;
+    }
+
+    public set customRotationQuaternion(customRotationQuaternion: Nullable<Quaternion>) {
+        this._customRotationQuaternion = customRotationQuaternion;
+        [this.xGizmo, this.yGizmo, this.zGizmo, this.uniformScaleGizmo].forEach((gizmo) => {
+            if (gizmo) {
+                gizmo.customRotationQuaternion = customRotationQuaternion;
+            }
+        });
+    }
+
+    /**
      * Set the coordinate system to use. By default it's local.
      * But it's possible for a user to tweak so its local for translation and world for rotation.
      * In that case, setting the coordinate system will change `updateGizmoRotationToMatchAttachedMesh` and `updateGizmoPositionToMatchAttachedMesh`
@@ -296,6 +329,20 @@ export class ScaleGizmo extends Gizmo implements IScaleGizmo {
         return this._snapDistance;
     }
 
+    /**
+     * Incremental snap scaling (default is false). When true, with a snapDistance of 0.1, scaling will be 1.1,1.2,1.3 instead of, when false: 1.1,1.21,1.33,...
+     */
+    public set incrementalSnap(value: boolean) {
+        this._incrementalSnap = value;
+        [this.xGizmo, this.yGizmo, this.zGizmo, this.uniformScaleGizmo].forEach((gizmo) => {
+            if (gizmo) {
+                gizmo.incrementalSnap = value;
+            }
+        });
+    }
+    public get incrementalSnap() {
+        return this._incrementalSnap;
+    }
     /**
      * Ratio for the scale of the gizmo (Default: 1)
      */
@@ -333,6 +380,16 @@ export class ScaleGizmo extends Gizmo implements IScaleGizmo {
      */
     public addToAxisCache(mesh: Mesh, cache: GizmoAxisCache) {
         this._gizmoAxisCache.set(mesh, cache);
+    }
+
+    /**
+     * Force release the drag action by code
+     */
+    public releaseDrag() {
+        this.xGizmo.dragBehavior.releaseDrag();
+        this.yGizmo.dragBehavior.releaseDrag();
+        this.zGizmo.dragBehavior.releaseDrag();
+        this.uniformScaleGizmo.dragBehavior.releaseDrag();
     }
 
     /**

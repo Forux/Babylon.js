@@ -588,7 +588,8 @@ export class DDSTools {
         if (info.sphericalPolynomial) {
             sphericalPolynomialFaces = [] as ArrayBufferView[];
         }
-        const ext = !!engine.getCaps().s3tc;
+        // ensure support for all formats
+        const ext = !!engine.getCaps().s3tc || !!engine.getCaps().astc || !!engine.getCaps().bptc;
 
         // TODO WEBGPU Once generateMipMaps is split into generateMipMaps + hasMipMaps in InternalTexture this line can be removed
         texture.generateMipMaps = loadMipmaps;

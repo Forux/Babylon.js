@@ -9,6 +9,7 @@ import type { IMaterial } from "../glTFLoaderInterfaces";
 import type { IGLTFLoaderExtension } from "../glTFLoaderExtension";
 import { GLTFLoader } from "../glTFLoader";
 import type { IMaterialExtension, ITextureInfo as ITextureInfoBase } from "babylonjs-gltf2interface";
+import { BaseTexture } from "core/Materials/Textures/baseTexture";
 
 /**
  * adding needed property
@@ -113,10 +114,12 @@ export class VRNET_materials_main implements IGLTFLoaderExtension {
         if (properties.lightmapTexture) {
             properties.lightmapTexture.nonColorData = true;
             promises.push(
-                this._loader.loadTextureInfoAsync(`${context}/lightmapTexture`, properties.lightmapTexture, (texture) => {
-                    texture.name = `${babylonMaterial.name} (Lightmap)`;
-                    texture.isRGBD = properties.lightmapTexture.isRGBD ? true : false;
-                    babylonMaterial.lightmapTexture = texture;
+                this._loader.loadTextureInfoAsync(`${context}/lightmapTexture`, properties.lightmapTexture, (texture:BaseTexture) => {
+                    BaseTexture.WhenAllReady([texture], () => {
+                        texture.name = `${babylonMaterial.name} (Lightmap)`;
+                        texture.isRGBD = properties.lightmapTexture.isRGBD ? true : false;
+                        babylonMaterial.lightmapTexture = texture;
+                    });
                 })
             );
             babylonMaterial.ambientColor = Color3.White();

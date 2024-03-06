@@ -115,11 +115,14 @@ export class VRNET_materials_main implements IGLTFLoaderExtension {
             properties.lightmapTexture.nonColorData = true;
             promises.push(
                 this._loader.loadTextureInfoAsync(`${context}/lightmapTexture`, properties.lightmapTexture, (texture:BaseTexture) => {
-                    BaseTexture.WhenAllReady([texture], () => {
+                    const callBack = () => {
+                        // this will be called once for all materials, once per real texture
                         texture.name = `${babylonMaterial.name} (Lightmap)`;
                         texture.isRGBD = properties.lightmapTexture.isRGBD ? true : false;
-                        babylonMaterial.lightmapTexture = texture;
-                    });
+                        return true;
+                    };
+                    babylonMaterial.lightmapTexture = texture;
+                    BaseTexture.WhenAllReady([texture], callBack);
                 })
             );
             babylonMaterial.ambientColor = Color3.White();

@@ -31,7 +31,7 @@ import { MultiMaterial } from "../Materials/multiMaterial";
 import { SceneLoaderFlags } from "../Loading/sceneLoaderFlags";
 import type { Skeleton } from "../Bones/skeleton";
 import { Constants } from "../Engines/constants";
-import { SerializationHelper } from "../Misc/decorators";
+import { SerializationHelper } from "../Misc/decorators.serialization";
 import { Logger } from "../Misc/logger";
 import { GetClass, RegisterClass } from "../Misc/typeStore";
 import { _WarnImport } from "../Misc/devTools";
@@ -671,7 +671,7 @@ export class Mesh extends AbstractMesh implements IGetSetVerticesData {
             this.parent = source.parent;
 
             // Pivot
-            this.setPivotMatrix(source.getPivotMatrix());
+            this.setPivotMatrix(source.getPivotMatrix(), this._postMultiplyPivotMatrix);
 
             this.id = name + "." + source.id;
 

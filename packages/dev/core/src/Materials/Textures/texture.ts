@@ -636,20 +636,28 @@ export class Texture extends BaseTexture {
             if (this._deleteBuffer) {
                 this._buffer = null;
             }
+
+            this._delayedOnLoad = null;
+            this._delayedOnError = null;
         } else {
+            //> VRNET
+            const delayedLoadWrapper = () => {
+                if (this._delayedOnLoad) {
+                    this._delayedOnLoad();
+                }
+
+                this._delayedOnLoad = null;
+                this._delayedOnError = null;
+            };
             if (this._delayedOnLoad) {
                 if (this._texture.isReady) {
-                    //> VRNET
-                    TimingTools.SetImmediate(() => { if (this._delayedOnLoad ) this._delayedOnLoad(); });
-                    //< VRNET
+                    TimingTools.SetImmediate(delayedLoadWrapper);
                 } else {
-                    this._texture.onLoadedObservable.add(this._delayedOnLoad);
+                    this._texture.onLoadedObservable.add(delayedLoadWrapper);
                 }
             }
+            //< VRNET
         }
-
-        this._delayedOnLoad = null;
-        this._delayedOnError = null;
     }
 
     private _prepareRowForTextureGeneration(x: number, y: number, z: number, t: Vector3): void {

@@ -25,10 +25,11 @@ interface ITextureInfo extends ITextureInfoBase {
  */
 
 /** @internal */
-interface IRelfectionPorobeInfo {
+interface IRelfectionProbeInfo {
     reflectionMapTexture: string;
     prefiltered: boolean;
     boundingBoxSize: number[];
+    boundingBoxOffset: number[];
     boundingBoxPosition: number[];
     level: number;
 }
@@ -41,7 +42,7 @@ interface VRNETMaterialsBase extends IMaterialExtension {
     glossinessFactor: number;
     specularGlossinessTexture: ITextureInfo;
     lightmapTexture: ITextureInfo;
-    reflectionProbeInfo: IRelfectionPorobeInfo;
+    reflectionProbeInfo: IRelfectionProbeInfo;
     useLightmapAsShadowmap: boolean;
 }
 
@@ -157,6 +158,9 @@ export class VRNET_materials_main implements IGLTFLoaderExtension {
                     }
                     if (probI.boundingBoxPosition) {
                         cubeT.texture.boundingBoxPosition = Vector3.FromArray(probI.boundingBoxPosition);
+                    }
+                    if (probI.boundingBoxOffset) {
+                        cubeT.texture.boundingBoxOffset = Vector3.FromArray(probI.boundingBoxOffset);
                     }
                     VRNET_materials_main._ReflectionCache[properties.reflectionProbeInfo.reflectionMapTexture] = cubeT;
                 }

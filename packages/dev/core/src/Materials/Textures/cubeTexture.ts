@@ -41,6 +41,14 @@ export class CubeTexture extends BaseTexture {
      */
     @serializeAsVector3()
     public boundingBoxPosition = Vector3.Zero();
+    
+    /**
+     * Gets or sets the offset of the bounding box associated with the cube texture.
+     * When zero, repeats original Babylon.js functionality, otherwise is used for reflection probes from Unity.
+     * @see https://doc.babylonjs.com/features/featuresDeepDive/materials/using/reflectionTexture#using-local-cubemap-mode
+     */
+    @serializeAsVector3()
+    public boundingBoxOffset = Vector3.Zero();
 
     private _boundingBoxSize: Vector3;
 
@@ -469,6 +477,9 @@ export class CubeTexture extends BaseTexture {
         // Local Cubemaps
         if (parsedTexture.boundingBoxPosition) {
             texture.boundingBoxPosition = Vector3.FromArray(parsedTexture.boundingBoxPosition);
+        }
+        if (parsedTexture.boundingBoxOffset) {
+            texture.boundingBoxOffset = Vector3.FromArray(parsedTexture.boundingBoxOffset);
         }
         if (parsedTexture.boundingBoxSize) {
             texture.boundingBoxSize = Vector3.FromArray(parsedTexture.boundingBoxSize);

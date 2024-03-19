@@ -1370,6 +1370,7 @@ export class StandardMaterial extends PushMaterial {
                 "refractionRightColor",
                 "vReflectionPosition",
                 "vReflectionSize",
+                "vReflectionOffset",
                 "vRefractionPosition",
                 "vRefractionSize",
                 "logarithmicDepthConstant",
@@ -1523,6 +1524,7 @@ export class StandardMaterial extends PushMaterial {
         ubo.addUniform("vOpacityInfos", 2);
         ubo.addUniform("vReflectionInfos", 2);
         ubo.addUniform("vReflectionPosition", 3);
+        ubo.addUniform("vReflectionOffset", 3);
         ubo.addUniform("vReflectionSize", 3);
         ubo.addUniform("vEmissiveInfos", 2);
         ubo.addUniform("vLightmapInfos", 2);
@@ -1662,6 +1664,7 @@ export class StandardMaterial extends PushMaterial {
                             const cubeTexture = <CubeTexture>this._reflectionTexture;
 
                             ubo.updateVector3("vReflectionPosition", cubeTexture.boundingBoxPosition);
+                            ubo.updateVector3("vReflectionOffset", cubeTexture.boundingBoxOffset);
                             ubo.updateVector3("vReflectionSize", cubeTexture.boundingBoxSize);
                         }
                     }

@@ -1395,6 +1395,7 @@ export abstract class PBRBaseMaterial extends PushMaterial {
             "vOpacityInfos",
             "vReflectionInfos",
             "vReflectionPosition",
+            "vReflectionOffset",
             "vReflectionSize",
             "vEmissiveInfos",
             "vReflectivityInfos",
@@ -1938,6 +1939,7 @@ export abstract class PBRBaseMaterial extends PushMaterial {
         ubo.addUniform("vReflectionInfos", 2);
         ubo.addUniform("vReflectionFilteringInfo", 2);
         ubo.addUniform("vReflectionPosition", 3);
+        ubo.addUniform("vReflectionOffset", 3);
         ubo.addUniform("vReflectionSize", 3);
         ubo.addUniform("vBumpInfos", 3);
         ubo.addUniform("albedoMatrix", 16);
@@ -2077,6 +2079,7 @@ export abstract class PBRBaseMaterial extends PushMaterial {
                             const cubeTexture = <CubeTexture>reflectionTexture;
 
                             ubo.updateVector3("vReflectionPosition", cubeTexture.boundingBoxPosition);
+                            ubo.updateVector3("vReflectionOffset", cubeTexture.boundingBoxOffset);
                             ubo.updateVector3("vReflectionSize", cubeTexture.boundingBoxSize);
                         }
 

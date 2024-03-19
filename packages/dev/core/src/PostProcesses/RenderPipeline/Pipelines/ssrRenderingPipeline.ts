@@ -950,6 +950,7 @@ export class SSRRenderingPipeline extends PostProcessRenderPipeline {
                 "maxDistance",
                 "selfCollisionNumSkip",
                 "vReflectionPosition",
+                "vReflectionOffset",
                 "vReflectionSize",
                 "backSizeFactor",
                 "reflectivityThreshold",
@@ -1038,6 +1039,7 @@ export class SSRRenderingPipeline extends PostProcessRenderPipeline {
 
                 if (this._environmentTexture.boundingBoxSize) {
                     effect.setVector3("vReflectionPosition", this._environmentTexture.boundingBoxPosition);
+                    effect.setVector3("vReflectionOffset", this._environmentTexture.boundingBoxOffset);
                     effect.setVector3("vReflectionSize", this._environmentTexture.boundingBoxSize);
                 }
             }

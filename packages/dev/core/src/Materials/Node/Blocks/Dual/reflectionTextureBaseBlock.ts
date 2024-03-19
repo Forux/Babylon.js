@@ -57,6 +57,8 @@ export abstract class ReflectionTextureBaseBlock extends NodeMaterialBlock {
     /** @internal */
     public _reflectionPositionName: string;
     /** @internal */
+    public _reflectionOffsetName: string;
+    /** @internal */
     public _reflectionSizeName: string;
 
     protected _positionUVWName: string;
@@ -259,6 +261,7 @@ export abstract class ReflectionTextureBaseBlock extends NodeMaterialBlock {
         if ((<any>texture).boundingBoxSize) {
             const cubeTexture = <CubeTexture>texture;
             effect.setVector3(this._reflectionPositionName, cubeTexture.boundingBoxPosition);
+            effect.setVector3(this._reflectionOffsetName, cubeTexture.boundingBoxOffset);
             effect.setVector3(this._reflectionSizeName, cubeTexture.boundingBoxSize);
         }
     }
@@ -364,7 +367,10 @@ export abstract class ReflectionTextureBaseBlock extends NodeMaterialBlock {
         this._reflectionPositionName = state._getFreeVariableName("vReflectionPosition");
         state._emitUniformFromString(this._reflectionPositionName, "vec3");
 
-        this._reflectionSizeName = state._getFreeVariableName("vReflectionPosition");
+        this._reflectionOffsetName = state._getFreeVariableName("vReflectionOffset");
+        state._emitUniformFromString(this._reflectionOffsetName, "vec3");
+
+        this._reflectionSizeName = state._getFreeVariableName("vReflectionSize");
         state._emitUniformFromString(this._reflectionSizeName, "vec3");
     }
 
@@ -411,7 +417,7 @@ export abstract class ReflectionTextureBaseBlock extends NodeMaterialBlock {
 
             #ifdef ${this._defineCubicName}
                 #ifdef ${this._defineLocalCubicName}
-                    vec3 ${this._reflectionVectorName} = computeCubicLocalCoords(${worldPos}, ${worldNormalVarName}, ${vEyePosition}.xyz, ${reflectionMatrix}, ${this._reflectionSizeName}, ${this._reflectionPositionName});
+                    vec3 ${this._reflectionVectorName} = computeCubicLocalCoords(${worldPos}, ${worldNormalVarName}, ${vEyePosition}.xyz, ${reflectionMatrix}, ${this._reflectionSizeName}, ${this._reflectionPositionName}, ${this._reflectionOffsetName});
                 #else
                 vec3 ${this._reflectionVectorName} = computeCubicCoords(${worldPos}, ${worldNormalVarName}, ${vEyePosition}.xyz, ${reflectionMatrix});
                 #endif

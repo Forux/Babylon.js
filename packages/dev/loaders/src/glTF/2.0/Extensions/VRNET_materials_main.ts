@@ -164,7 +164,9 @@ export class VRNET_materials_main implements IGLTFLoaderExtension {
                     }
                     VRNET_materials_main._ReflectionCache[properties.reflectionProbeInfo.reflectionMapTexture] = cubeT;
                 }
-
+                
+                babylonMaterial.ambientColor = Color3.White();
+                babylonMaterial.enableSpecularAntiAliasing = false;
                 babylonMaterial.reflectionTexture = cubeT.texture;
             }
         }

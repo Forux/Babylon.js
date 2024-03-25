@@ -66,9 +66,8 @@ preLightingInfo computeHemisphericPreLightingInfo(vec4 lightData, vec3 V, vec3 N
 
     // Geometry Data.
     // Half Lambert for Hemispherix lighting.
-    result.NdotL = dot(N, lightData.xyz) * 0.5 + 0.5;
-    result.NdotL = saturateEps(result.NdotL);
-    result.NdotLUnclamped = result.NdotL;
+    result.NdotLUnclamped = dot(N, lightData.xyz) * 0.5 + 0.5;
+    result.NdotL = saturateEps(result.NdotLUnclamped);
 
     #ifdef SPECULARTERM
         result.L = normalize(lightData.xyz);

@@ -199,6 +199,34 @@ export class CommonMaterialPropertyGridComponent extends React.Component<ICommon
                             this.props.globalState.onSelectionChangedObservable.notifyObservers(null);
                         }}
                     />
+                    <ButtonLineComponent
+                        label="Get Shader Code"
+                        onClick={() => {
+                            const effect = material.getEffect();
+                            const vertexSourceCode = effect?.vertexSourceCode;
+                            const fragmentShaderCode = effect?.fragmentSourceCode
+                            console.log(" ****************************** ");
+                            console.log(" ****************************** ");
+                            console.log(" ******* Vertex shader: ******* ");
+                            console.log(" ****************************** ");
+                            console.log(" ****************************** ");
+                            console.log(vertexSourceCode);
+                            console.log(" ****************************** ");
+                            console.log(" ****************************** ");
+                            console.log(" ******* Fragment shader: ******* ");
+                            console.log(" ****************************** ");
+                            console.log(" ****************************** ");
+                            console.log(fragmentShaderCode);
+                            const shaderWindow = window.open('', '_blank');
+                            if (shaderWindow) {
+                                shaderWindow.document.write('<h1>Vertex Shader Code:</h1><br>');
+                                shaderWindow.document.write(`<pre>${vertexSourceCode}</pre>`);
+                                shaderWindow.document.write('<br><br><h1>Fragment Shader Code:</h1><br>');
+                                shaderWindow.document.write(`<pre>${fragmentShaderCode}</pre>`);
+                                shaderWindow.document.close();
+                            }
+                        }}
+                    />
                 </LineContainerComponent>
                 <LineContainerComponent title="TRANSPARENCY" selection={this.props.globalState}>
                     <SliderLineComponent

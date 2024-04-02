@@ -3,8 +3,8 @@ import { PBRMaterial } from "core/Materials/PBR/pbrMaterial";
 import type { Material } from "core/Materials/material";
 import { CubeTexture } from "core/Materials/Textures/cubeTexture";
 import { Vector3 } from "core/Maths/math.vector";
-
 import { Color3 } from "core/Maths/math.color";
+import { SphericalPolynomial } from "core/Maths/sphericalPolynomial";
 import type { IMaterial } from "../glTFLoaderInterfaces";
 import type { IGLTFLoaderExtension } from "../glTFLoaderExtension";
 import { GLTFLoader } from "../glTFLoader";
@@ -77,7 +77,7 @@ export class VRNET_materials_main implements IGLTFLoaderExtension {
         [key: string]: {
             texture: CubeTexture;
             loader: GLTFLoader;
-        }
+        };
     } = {};
 
     /**
@@ -115,7 +115,7 @@ export class VRNET_materials_main implements IGLTFLoaderExtension {
         if (properties.lightmapTexture) {
             properties.lightmapTexture.nonColorData = true;
             promises.push(
-                this._loader.loadTextureInfoAsync(`${context}/lightmapTexture`, properties.lightmapTexture, (texture:BaseTexture) => {
+                this._loader.loadTextureInfoAsync(`${context}/lightmapTexture`, properties.lightmapTexture, (texture: BaseTexture) => {
                     const callBack = () => {
                         // this will be called once for all materials, once per real texture
                         texture.name = `${babylonMaterial.name} (Lightmap)`;
@@ -147,7 +147,7 @@ export class VRNET_materials_main implements IGLTFLoaderExtension {
                             null,
                             undefined,
                             probI.prefiltered
-                        )
+                        ),
                     };
                     cubeT.texture.name = probI.reflectionMapTexture;
                     if (probI.level) {
@@ -162,9 +162,10 @@ export class VRNET_materials_main implements IGLTFLoaderExtension {
                     if (probI.boundingBoxOffset) {
                         cubeT.texture.boundingBoxOffset = Vector3.FromArray(probI.boundingBoxOffset);
                     }
+                    cubeT.texture.sphericalPolynomial = new SphericalPolynomial();
                     VRNET_materials_main._ReflectionCache[properties.reflectionProbeInfo.reflectionMapTexture] = cubeT;
                 }
-                
+
                 babylonMaterial.ambientColor = Color3.White();
                 babylonMaterial.enableSpecularAntiAliasing = false;
                 babylonMaterial.reflectionTexture = cubeT.texture;

@@ -1806,6 +1806,7 @@ export class Engine extends ThinEngine {
         const buf = gl.createBuffer();
         gl.bindBuffer(gl.PIXEL_PACK_BUFFER, buf);
         gl.bufferData(gl.PIXEL_PACK_BUFFER, outputBuffer.byteLength, gl.STREAM_READ);
+        console.log(`_readPixelsAsync format: ${format}, type: ${type}`);
         gl.readPixels(x, y, w, h, format, type, 0);
         gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
 

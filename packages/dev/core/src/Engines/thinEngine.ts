@@ -6023,6 +6023,7 @@ export class ThinEngine {
         if (flushRenderer) {
             this.flushFramebuffer();
         }
+        console.log(`readPixels format: ${format}`);
         this._gl.readPixels(x, y, width, height, format, this._gl.UNSIGNED_BYTE, data);
         return Promise.resolve(data);
     }

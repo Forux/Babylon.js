@@ -170,6 +170,7 @@ ThinEngine.prototype._readTexturePixelsSync = function (
         this.flushFramebuffer();
     }
 
+    console.log(`_readTexturePixelsSync readType ${readType}`);
     gl.readPixels(x, y, width, height, gl.RGBA, readType, <DataView>buffer);
     gl.bindFramebuffer(gl.FRAMEBUFFER, this._currentFramebuffer);
 

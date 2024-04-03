@@ -14,7 +14,9 @@ import { Bone } from "core/Bones/bone";
 import { Skeleton } from "core/Bones/skeleton";
 import { Material } from "core/Materials/material";
 import { PBRMaterial } from "core/Materials/PBR/pbrMaterial";
-import type { BaseTexture } from "core/Materials/Textures/baseTexture";
+//> VRNET
+import { BaseTexture } from "core/Materials/Textures/baseTexture";
+//< VRNET
 import type { ITextureCreationOptions } from "core/Materials/Textures/texture";
 import { Texture } from "core/Materials/Textures/texture";
 import { TransformNode } from "core/Meshes/transformNode";
@@ -2065,7 +2067,11 @@ export class GLTFLoader implements IGLTFLoader {
             if (properties.baseColorTexture) {
                 promises.push(
                     this.loadTextureInfoAsync(`${context}/baseColorTexture`, properties.baseColorTexture, (texture) => {
-                        texture.name = `${babylonMaterial.name} (Base Color)`;
+                        //> VRNET
+                        BaseTexture.WhenAllReady([texture], () => {
+                            texture.name += `|Albedo|${babylonMaterial.name}`;
+                        });
+                        //< VRNET
                         babylonMaterial.albedoTexture = texture;
                     })
                 );
@@ -2075,7 +2081,11 @@ export class GLTFLoader implements IGLTFLoader {
                 properties.metallicRoughnessTexture.nonColorData = true;
                 promises.push(
                     this.loadTextureInfoAsync(`${context}/metallicRoughnessTexture`, properties.metallicRoughnessTexture, (texture) => {
-                        texture.name = `${babylonMaterial.name} (Metallic Roughness)`;
+                        //> VRNET
+                        BaseTexture.WhenAllReady([texture], () => {
+                            texture.name += `|Metalic|${babylonMaterial.name}`;
+                        });
+                        //< VRNET
                         babylonMaterial.metallicTexture = texture;
                     })
                 );
@@ -2228,7 +2238,12 @@ export class GLTFLoader implements IGLTFLoader {
             material.normalTexture.nonColorData = true;
             promises.push(
                 this.loadTextureInfoAsync(`${context}/normalTexture`, material.normalTexture, (texture) => {
-                    texture.name = `${babylonMaterial.name} (Normal)`;
+                    //> VRNET
+                    BaseTexture.WhenAllReady([texture], () => {
+                        texture.name += `|Bump|${babylonMaterial.name}`;
+                    });
+                    //< VRNET
+
                     babylonMaterial.bumpTexture = texture;
                 })
             );
@@ -2246,7 +2261,11 @@ export class GLTFLoader implements IGLTFLoader {
             material.occlusionTexture.nonColorData = true;
             promises.push(
                 this.loadTextureInfoAsync(`${context}/occlusionTexture`, material.occlusionTexture, (texture) => {
-                    texture.name = `${babylonMaterial.name} (Occlusion)`;
+                    //> VRNET
+                    BaseTexture.WhenAllReady([texture], () => {
+                        texture.name += `|Ambient|${babylonMaterial.name}`;
+                    });
+                    //< VRNET
                     babylonMaterial.ambientTexture = texture;
                 })
             );
@@ -2260,7 +2279,11 @@ export class GLTFLoader implements IGLTFLoader {
         if (material.emissiveTexture) {
             promises.push(
                 this.loadTextureInfoAsync(`${context}/emissiveTexture`, material.emissiveTexture, (texture) => {
-                    texture.name = `${babylonMaterial.name} (Emissive)`;
+                    //> VRNET
+                    BaseTexture.WhenAllReady([texture], () => {
+                        texture.name += `|Emissive|${babylonMaterial.name}`;
+                    });
+                    //< VRNET
                     babylonMaterial.emissiveTexture = texture;
                 })
             );
@@ -2409,6 +2432,11 @@ export class GLTFLoader implements IGLTFLoader {
                 const name = image.uri || `${this._fileName}#image${image.index}`;
                 const dataUrl = `data:${this._uniqueRootUrl}${name}`;
                 babylonTexture.updateURL(dataUrl, data);
+                //> VRNET
+                if (image.uri) {
+                    babylonTexture.name = image.uri.split("/").pop() || image.uri;
+                }
+                //< VRNET
             })
         );
 

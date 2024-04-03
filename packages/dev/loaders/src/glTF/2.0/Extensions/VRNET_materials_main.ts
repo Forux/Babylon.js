@@ -124,7 +124,7 @@ export class VRNET_materials_main implements IGLTFLoaderExtension {
                 this._loader.loadTextureInfoAsync(`${context}/lightmapTexture`, properties.lightmapTexture, (texture: BaseTexture) => {
                     const callBack = () => {
                         // this will be called once for all materials, once per real texture
-                        texture.name = `${babylonMaterial.name} (Lightmap)`;
+                        texture.name += `|Lightmap|${babylonMaterial.name}`;
                         texture.isRGBD = properties.lightmapTexture.isRGBD ? true : false;
                         return true;
                     };
@@ -155,7 +155,7 @@ export class VRNET_materials_main implements IGLTFLoaderExtension {
                             probI.prefiltered
                         ),
                     };
-                    cubeT.texture.name = probI.reflectionMapTexture;
+                    cubeT.texture.name = (probI.reflectionMapTexture.split("/").pop() || probI.reflectionMapTexture) + `|ReflectionMap|${babylonMaterial.name}`;
                     if (probI.level) {
                         cubeT.texture.level = probI.level;
                     }
@@ -204,7 +204,9 @@ export class VRNET_materials_main implements IGLTFLoaderExtension {
         if (properties.diffuseTexture) {
             promises.push(
                 this._loader.loadTextureInfoAsync(`${context}/diffuseTexture`, properties.diffuseTexture, (texture) => {
-                    texture.name = `${babylonMaterial.name} (Diffuse)`;
+                    BaseTexture.WhenAllReady([texture], () => {
+                        texture.name += `|Diffuse|${babylonMaterial.name}`;
+                    });
                     babylonMaterial.albedoTexture = texture;
                 })
             );
@@ -213,7 +215,9 @@ export class VRNET_materials_main implements IGLTFLoaderExtension {
         if (properties.specularGlossinessTexture) {
             promises.push(
                 this._loader.loadTextureInfoAsync(`${context}/specularGlossinessTexture`, properties.specularGlossinessTexture, (texture) => {
-                    texture.name = `${babylonMaterial.name} (Specular Glossiness)`;
+                    BaseTexture.WhenAllReady([texture], () => {
+                        texture.name += `|ReflectivityTexture|${babylonMaterial.name}`;
+                    });
                     babylonMaterial.reflectivityTexture = texture;
                     babylonMaterial.reflectivityTexture.hasAlpha = true;
                 })

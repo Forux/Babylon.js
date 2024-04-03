@@ -66,7 +66,7 @@ export class VRNET_materials_main implements IGLTFLoaderExtension {
     /**
      * Defines a number that determines the order the extensions are applied.
      */
-    public order = 100;
+    public order = 200;
 
     private _loader: GLTFLoader;
 
@@ -97,15 +97,17 @@ export class VRNET_materials_main implements IGLTFLoaderExtension {
      * @internal
      */
     public loadMaterialPropertiesAsync(context: string, material: IMaterial, babylonMaterial: Material): Nullable<Promise<void>> {
-        return GLTFLoader.LoadExtraAsync<VRNETMaterialsBase>(context, material, this.name, (extraContext, extra) => {
+        return GLTFLoader.LoadExtensionAsync<VRNETMaterialsBase>(context, material, this.name, (extensionContext, extension) => {
             const promises = new Array<Promise<any>>();
-            promises.push(this._loadLightmapPropertiesPropertiesAsync(extraContext, material, extra, babylonMaterial));
-            Promise.all(promises).then(() => {});
-            return null;
+            promises.push(this._loader.loadMaterialBasePropertiesAsync(context, material, babylonMaterial));
+            promises.push(this._loadSpecularGlossinessPropertiesAsync(extensionContext, extension, babylonMaterial));
+            promises.push(this._loadLightmapPropertiesPropertiesAsync(extensionContext, extension, babylonMaterial));
+            this._loader.loadMaterialAlphaProperties(context, material, babylonMaterial);
+            return Promise.all(promises).then(() => {});
         });
     }
 
-    private _loadLightmapPropertiesPropertiesAsync(context: string, material: IMaterial, properties: VRNETMaterialsBase, babylonMaterial: Material): Promise<void> {
+    private _loadLightmapPropertiesPropertiesAsync(context: string, properties: VRNETMaterialsBase, babylonMaterial: Material): Promise<void> {
         if (!(babylonMaterial instanceof PBRMaterial)) {
             throw new Error(`${context}: Material type not supported`);
         }
@@ -170,6 +172,50 @@ export class VRNET_materials_main implements IGLTFLoaderExtension {
                 babylonMaterial.enableSpecularAntiAliasing = false;
                 babylonMaterial.reflectionTexture = cubeT.texture;
             }
+        }
+
+        return Promise.all(promises).then(() => {});
+    }
+
+    private _loadSpecularGlossinessPropertiesAsync(context: string, properties: VRNETMaterialsBase, babylonMaterial: Material): Promise<void> {
+        if (!(babylonMaterial instanceof PBRMaterial)) {
+            throw new Error(`${context}: Material type not supported`);
+        }
+
+        const promises = new Array<Promise<any>>();
+
+        babylonMaterial.metallic = null;
+        babylonMaterial.roughness = null;
+
+        if (properties.diffuseFactor) {
+            babylonMaterial.albedoColor = Color3.FromArray(properties.diffuseFactor);
+            babylonMaterial.alpha = properties.diffuseFactor[3];
+        } else {
+            babylonMaterial.albedoColor = Color3.White();
+        }
+
+        babylonMaterial.reflectivityColor = properties.specularFactor ? Color3.FromArray(properties.specularFactor) : Color3.White();
+        babylonMaterial.microSurface = properties.glossinessFactor == undefined ? 1 : properties.glossinessFactor;
+
+        if (properties.diffuseTexture) {
+            promises.push(
+                this._loader.loadTextureInfoAsync(`${context}/diffuseTexture`, properties.diffuseTexture, (texture) => {
+                    texture.name = `${babylonMaterial.name} (Diffuse)`;
+                    babylonMaterial.albedoTexture = texture;
+                })
+            );
+        }
+
+        if (properties.specularGlossinessTexture) {
+            promises.push(
+                this._loader.loadTextureInfoAsync(`${context}/specularGlossinessTexture`, properties.specularGlossinessTexture, (texture) => {
+                    texture.name = `${babylonMaterial.name} (Specular Glossiness)`;
+                    babylonMaterial.reflectivityTexture = texture;
+                    babylonMaterial.reflectivityTexture.hasAlpha = true;
+                })
+            );
+
+            babylonMaterial.useMicroSurfaceFromReflectivityMapAlpha = true;
         }
 
         return Promise.all(promises).then(() => {});

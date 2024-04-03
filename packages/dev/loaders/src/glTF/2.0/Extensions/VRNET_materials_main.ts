@@ -100,7 +100,11 @@ export class VRNET_materials_main implements IGLTFLoaderExtension {
         return GLTFLoader.LoadExtensionAsync<VRNETMaterialsBase>(context, material, this.name, (extensionContext, extension) => {
             const promises = new Array<Promise<any>>();
             promises.push(this._loader.loadMaterialBasePropertiesAsync(context, material, babylonMaterial));
-            promises.push(this._loadSpecularGlossinessPropertiesAsync(extensionContext, extension, babylonMaterial));
+            if (material.pbrMetallicRoughness) {
+                promises.push(this._loader._loadMaterialMetallicRoughnessPropertiesAsync(`${context}/pbrMetallicRoughness`, material.pbrMetallicRoughness, babylonMaterial));
+            } else {
+                promises.push(this._loadSpecularGlossinessPropertiesAsync(extensionContext, extension, babylonMaterial));
+            }
             promises.push(this._loadLightmapPropertiesPropertiesAsync(extensionContext, extension, babylonMaterial));
             this._loader.loadMaterialAlphaProperties(context, material, babylonMaterial);
             return Promise.all(promises).then(() => {});

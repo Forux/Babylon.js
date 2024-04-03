@@ -2042,8 +2042,9 @@ export class GLTFLoader implements IGLTFLoader {
 
         return accessor._babylonVertexBuffer[kind];
     }
-
-    private _loadMaterialMetallicRoughnessPropertiesAsync(context: string, properties: IMaterialPbrMetallicRoughness, babylonMaterial: Material): Promise<void> {
+    //> VRNET
+    public _loadMaterialMetallicRoughnessPropertiesAsync(context: string, properties: IMaterialPbrMetallicRoughness, babylonMaterial: Material): Promise<void> {
+        //< VRNET
         if (!(babylonMaterial instanceof PBRMaterial)) {
             throw new Error(`${context}: Material type not supported`);
         }

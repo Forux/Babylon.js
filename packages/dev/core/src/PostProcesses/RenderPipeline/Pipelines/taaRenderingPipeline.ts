@@ -31,11 +31,17 @@ export class TAARenderingPipeline extends PostProcessRenderPipeline {
      * The pass PostProcess effect id in the pipeline
      */
     public TAAPassEffect: string = "TAAPassEffect";
+    //> VRNET
+    /**
+     * Number of samples already done via post process, for example after camera stop moving
+     */
+    private _doneSamples = 0;
+    //< VRNET
 
     @serialize("samples")
     private _samples = 8;
     /**
-     * Number of accumulated samples (default: 16)
+     * Number of accumulated samples (default: 8)
      */
     public set samples(samples: number) {
         if (this._samples === samples) {
@@ -49,7 +55,14 @@ export class TAARenderingPipeline extends PostProcessRenderPipeline {
     public get samples(): number {
         return this._samples;
     }
-
+    //> VRNET
+    /**
+     * Number of samples already done via post process, for example after camera stop moving
+     */
+    public get doneSamples(): number {
+        return this._doneSamples;
+    }
+    //< VRNET
     @serialize("msaaSamples")
     private _msaaSamples = 1;
     /**
@@ -96,7 +109,9 @@ export class TAARenderingPipeline extends PostProcessRenderPipeline {
         if (this._isEnabled === value) {
             return;
         }
-
+        //> VRNET
+        this._doneSamples = 0;
+        //< VRNET
         this._isEnabled = value;
 
         if (!value) {
@@ -351,6 +366,9 @@ export class TAARenderingPipeline extends PostProcessRenderPipeline {
             effect.setFloat("factor", (camera?.hasMoved && this.disableOnCameraMove) || this._firstUpdate ? 1 : this.factor);
 
             this._firstUpdate = false;
+            //> VRNET
+            this._doneSamples = camera?.hasMoved ? 0 : this._doneSamples + 1;
+            //< VRNET
         });
     }
 

@@ -27,6 +27,7 @@ interface ITextureInfo extends ITextureInfoBase {
 /** @internal */
 interface IRelfectionProbeInfo {
     reflectionMapTexture: string;
+    reflectionSphericalPolynomial: number[][];
     prefiltered: boolean;
     boundingBoxSize: number[];
     boundingBoxOffset: number[];
@@ -168,7 +169,9 @@ export class VRNET_materials_main implements IGLTFLoaderExtension {
                     if (probI.boundingBoxOffset) {
                         cubeT.texture.boundingBoxOffset = Vector3.FromArray(probI.boundingBoxOffset);
                     }
-                    cubeT.texture.sphericalPolynomial = new SphericalPolynomial();
+                    if (probI.reflectionSphericalPolynomial) {
+                        cubeT.texture.sphericalPolynomial = SphericalPolynomial.FromArray(probI.reflectionSphericalPolynomial);
+                    }
                     VRNET_materials_main._ReflectionCache[properties.reflectionProbeInfo.reflectionMapTexture] = cubeT;
                 }
 

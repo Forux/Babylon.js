@@ -13,10 +13,32 @@ import type { Nullable } from "../../../types";
 import { PassPostProcess } from "core/PostProcesses/passPostProcess";
 import type { RenderTargetWrapper } from "core/Engines/renderTargetWrapper";
 import { Halton2DSequence } from "core/Maths/halton2DSequence";
+//> VRNET
+import type { PrePassRenderer } from "../../../Rendering/prePassRenderer";
+import type { PrePassEffectConfiguration } from "../../../Rendering/prePassEffectConfiguration";
+//< VRNET
 
 import "../postProcessRenderPipelineManagerSceneComponent";
 
 import "../../../Shaders/taa.fragment";
+//> VRNET
+class TAAConfiguration implements PrePassEffectConfiguration {
+    /**
+     * Is taa enabled
+     */
+    public enabled = false;
+
+    /**
+     * Name of the configuration
+     */
+    public name = "Taa";
+
+    /**
+     * Textures that should be present in the MRT for this effect to work
+     */
+    public readonly texturesRequired: number[] = [Constants.PREPASS_VELOCITY_TEXTURE_TYPE];
+}
+//< VRNET
 
 /**
  * Simple implementation of Temporal Anti-Aliasing (TAA).
@@ -36,6 +58,51 @@ export class TAARenderingPipeline extends PostProcessRenderPipeline {
      * Number of samples already done via post process, for example after camera stop moving
      */
     private _doneSamples = 0;
+
+    private get _prePassRenderer(): Nullable<PrePassRenderer> {
+        return this._scene.prePassRenderer;
+    }
+
+    /**
+     * Number of samples already done via post process, for example after camera stop moving
+     */
+    public get doneSamples(): number {
+        return this._doneSamples;
+    }
+
+    /**
+     * Disable TAA jitter
+     * You generally want to keep this disabled
+     */
+    public disableJitter = false;
+
+    /**
+     * Enables int based history sampling, disables history smoothing
+     */
+    private _intBasedHistorySampling = false;
+
+    public set intBasedHistorySampling(value: boolean) {
+        this._intBasedHistorySampling = value;
+        this._updateEffectDefines();
+    }
+
+    public get intBasedHistorySampling(): boolean {
+        return this._intBasedHistorySampling;
+    }
+
+    /**
+     * Enables clipping chroma to make sure we use in TAA only close colors
+     */
+    private _clipToAABB = true;
+
+    public set clipToAABB(clip: boolean) {
+        this._clipToAABB = clip;
+        this._updateEffectDefines();
+    }
+
+    public get clipToAABB(): boolean {
+        return this._clipToAABB;
+    }
     //< VRNET
 
     @serialize("samples")
@@ -55,14 +122,6 @@ export class TAARenderingPipeline extends PostProcessRenderPipeline {
     public get samples(): number {
         return this._samples;
     }
-    //> VRNET
-    /**
-     * Number of samples already done via post process, for example after camera stop moving
-     */
-    public get doneSamples(): number {
-        return this._doneSamples;
-    }
-    //< VRNET
     @serialize("msaaSamples")
     private _msaaSamples = 1;
     /**
@@ -179,6 +238,13 @@ export class TAARenderingPipeline extends PostProcessRenderPipeline {
         this._textureType = textureType;
         this._hs = new Halton2DSequence(this.samples);
 
+        //> VRNET
+        const prePassRenderer = scene.enablePrePassRenderer();
+        if (prePassRenderer) {
+            prePassRenderer.markAsDirty();
+        }
+        //< VRNET
+
         if (this.isSupported) {
             this._createPingPongTextures(engine.getRenderWidth(), engine.getRenderHeight());
 
@@ -250,7 +316,9 @@ export class TAARenderingPipeline extends PostProcessRenderPipeline {
     }
 
     private _updateEffectDefines(): void {
-        const defines: string[] = [];
+        //> VRNET
+        const defines: string[] = [this._clipToAABB ? "#define CLIP_TO_AABB" : "", this._intBasedHistorySampling ? "#define INT_BASED_HISTORY_SAMPLING" : ""];
+        //< VRNET
 
         this._taaPostProcess?.updateEffect(defines.join("\n"));
     }
@@ -323,11 +391,16 @@ export class TAARenderingPipeline extends PostProcessRenderPipeline {
     private _createTAAPostProcess(): void {
         this._taaPostProcess = new PostProcess("TAA", "taa", {
             uniforms: ["factor"],
-            samplers: ["historySampler"],
+            //> VRNET
+            samplers: ["historySampler", "velocitySampler"],
+            //< VRNET
             size: 1.0,
             engine: this._scene.getEngine(),
             textureType: this._textureType,
         });
+        //> VRNET
+        this._taaPostProcess._prePassEffectConfiguration = new TAAConfiguration();
+        //< VRNET
 
         this._taaPostProcess.samples = this._msaaSamples;
 
@@ -341,7 +414,9 @@ export class TAARenderingPipeline extends PostProcessRenderPipeline {
                 this._createPingPongTextures(engine.getRenderWidth(), engine.getRenderHeight());
             }
 
-            if (camera && !camera.hasMoved) {
+            //> VRNET
+            if (!this.disableJitter && camera && !(camera.hasMoved && this.disableOnCameraMove)) {
+                //< VRNET
                 if (camera.mode === Camera.PERSPECTIVE_CAMERA) {
                     const projMat = camera.getProjectionMatrix();
                     projMat.setRowFromFloats(2, this._hs.x, this._hs.y, projMat.m[10], projMat.m[11]);
@@ -361,6 +436,13 @@ export class TAARenderingPipeline extends PostProcessRenderPipeline {
 
         this._taaPostProcess.onApplyObservable.add((effect: Effect) => {
             const camera = this._scene.activeCamera;
+            //> VRNET
+            const prePassRenderer = this._prePassRenderer;
+            if (prePassRenderer) {
+                const velocityIndex = prePassRenderer.getIndex(Constants.PREPASS_VELOCITY_TEXTURE_TYPE);
+                effect.setTexture("velocitySampler", prePassRenderer.getRenderTarget().textures[velocityIndex]);
+            }
+            //< VRNET
 
             effect._bindTexture("historySampler", this._pingpong ? this._ping.texture : this._pong.texture);
             effect.setFloat("factor", (camera?.hasMoved && this.disableOnCameraMove) || this._firstUpdate ? 1 : this.factor);

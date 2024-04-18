@@ -103,7 +103,7 @@ export class VRNET_nodes_main implements IGLTFLoaderExtension {
 
         // Set the exposure and tint color if available
         if (skyboxInfo.exposure !== undefined) {
-            material.microSurface = skyboxInfo.exposure;
+            material.reflectionTexture.level = skyboxInfo.exposure;
         }
         if (skyboxInfo.tintColor) {
             material.reflectionColor = Color3.FromArray(skyboxInfo.tintColor);

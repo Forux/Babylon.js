@@ -1,12 +1,14 @@
 import type { Nullable } from "core/types";
-import { PBRMaterial } from "core/Materials/PBR/pbrMaterial";
-import { CubeTexture } from "core/Materials/Textures/cubeTexture";
 import { Color3 } from "core/Maths/math.color";
 import { SphericalPolynomial } from "core/Maths/sphericalPolynomial";
+import { BackgroundMaterial } from "core/Materials/Background/backgroundMaterial";
+import { Texture } from "core/Materials/Textures/texture";
+import { CubeTexture } from "core/Materials/Textures/cubeTexture";
+import { CreateBox } from "core/Meshes/Builders/boxBuilder";
+import { TransformNode } from "core/Meshes/transformNode";
 import type { INode } from "../glTFLoaderInterfaces";
 import type { IGLTFLoaderExtension } from "../glTFLoaderExtension";
 import { GLTFLoader } from "../glTFLoader";
-import { CreateBox, TransformNode } from "core/Meshes";
 
 /**
  * @internal
@@ -73,7 +75,7 @@ export class VRNET_nodes_main implements IGLTFLoaderExtension {
                     const skyboxInfo = extension.skyboxes[0]; // Assuming only one skybox per node
 
                     if (skyboxInfo) {
-                        const skybox = this._createSkybox(skyboxInfo, babylonMesh);
+                        const skybox = this._createSkybox(skyboxInfo, true);
                         assign(skybox);
                     }
 
@@ -83,18 +85,25 @@ export class VRNET_nodes_main implements IGLTFLoaderExtension {
         });
     }
 
-    private _createSkybox(skyboxInfo: ISkyboxInfo, babylonMesh: TransformNode): TransformNode {
-        const skybox = new TransformNode("skybox", babylonMesh.getScene());
+    private _createSkybox(skyboxInfo: ISkyboxInfo, isEnvironmentTexture: boolean): TransformNode {
+        const skybox = new TransformNode("skybox", this._loader.babylonScene);
 
         // Create a cube texture from the skybox texture URL
-        const texture = CubeTexture.CreateFromPrefilteredData(skyboxInfo.texture, skybox.getScene());
+        const texture = CubeTexture.CreateFromPrefilteredData(this._loader["_rootUrl"] + skyboxInfo.texture, this._loader.babylonScene);
+        texture.coordinatesMode = Texture.SKYBOX_MODE;
+
+        if (isEnvironmentTexture) {
+            skybox.getScene().environmentTexture = texture;
+        }
 
         // Create a PBR material for the skybox
-        const material = new PBRMaterial("skyboxMaterial", skybox.getScene());
+        const material = new BackgroundMaterial("skyboxMaterial", skybox.getScene());
         material.backFaceCulling = false;
         material.reflectionTexture = texture;
-        material.microSurface = 1.0;
-        material.disableLighting = true;
+
+        material.useRGBColor = false;
+        material.primaryColor = skyboxInfo.tintColor ? Color3.FromArray(skyboxInfo.tintColor) : Color3.White();
+        material.enableNoise = true;
 
         // Set the spherical polynomial coefficients if available
         if (skyboxInfo.sphericalPolynomial) {
@@ -104,9 +113,6 @@ export class VRNET_nodes_main implements IGLTFLoaderExtension {
         // Set the exposure and tint color if available
         if (skyboxInfo.exposure !== undefined) {
             material.reflectionTexture.level = skyboxInfo.exposure;
-        }
-        if (skyboxInfo.tintColor) {
-            material.reflectionColor = Color3.FromArray(skyboxInfo.tintColor);
         }
 
         // Create a box mesh with a large size to imitate a skybox

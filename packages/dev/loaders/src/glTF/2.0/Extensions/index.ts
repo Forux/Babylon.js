@@ -30,3 +30,4 @@ export * from "./MSFT_sRGBFactors";
 export * from "./KHR_interactivity";
 export * from "./ExtrasAsMetadata";
 export * from "./VRNET_materials_main";
+export * from "./VRNET_nodes_main";

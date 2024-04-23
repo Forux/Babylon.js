@@ -79,7 +79,7 @@ export class VRNET_nodes_main implements IGLTFLoaderExtension {
                         assign(skybox);
                     }
 
-                    return babylonMesh;
+                    return null;
                 });
             });
         });
@@ -93,11 +93,11 @@ export class VRNET_nodes_main implements IGLTFLoaderExtension {
         texture.coordinatesMode = Texture.SKYBOX_MODE;
 
         if (isEnvironmentTexture) {
-            skybox.getScene().environmentTexture = texture;
+            this._loader.babylonScene.environmentTexture = texture;
         }
 
         // Create a PBR material for the skybox
-        const material = new BackgroundMaterial("skyboxMaterial", skybox.getScene());
+        const material = new BackgroundMaterial("skyboxMaterial", this._loader.babylonScene);
         material.backFaceCulling = false;
         material.reflectionTexture = texture;
 
@@ -117,7 +117,7 @@ export class VRNET_nodes_main implements IGLTFLoaderExtension {
 
         // Create a box mesh with a large size to imitate a skybox
         const skyboxSize = 1000;
-        const box = skybox.getScene().getMeshByName("skybox");
+        const box = this._loader.babylonScene.getMeshByName("skybox");
         if (!box) {
             const skyboxMesh = CreateBox("skybox", { size: skyboxSize }, skybox.getScene());
             skyboxMesh.material = material;

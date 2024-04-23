@@ -179,6 +179,8 @@ export class VRNET_materials_main implements IGLTFLoaderExtension {
                 babylonMaterial.enableSpecularAntiAliasing = false;
                 babylonMaterial.reflectionTexture = cubeT.texture;
             }
+        } else {
+            babylonMaterial.unlit = true;
         }
 
         return Promise.all(promises).then(() => {});

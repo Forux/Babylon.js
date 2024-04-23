@@ -175,12 +175,15 @@ export class VRNET_materials_main implements IGLTFLoaderExtension {
                     VRNET_materials_main._ReflectionCache[properties.reflectionProbeInfo.reflectionMapTexture] = cubeT;
                 }
 
-                babylonMaterial.ambientColor = Color3.White();
+                // babylonMaterial.ambientColor = Color3.White();
                 babylonMaterial.enableSpecularAntiAliasing = false;
                 babylonMaterial.reflectionTexture = cubeT.texture;
             }
         } else {
             babylonMaterial.unlit = true;
+            // purely experimentally selected multiplier to make the color of unlit material closer to the original
+            // pay attention that albedoColor here is in the linear space while gamma in inspector, so it's like multiplying by 0.75 in gamma
+            babylonMaterial.albedoColor = babylonMaterial.albedoColor.multiplyByFloats(0.5, 0.5, 0.5);
         }
 
         return Promise.all(promises).then(() => {});

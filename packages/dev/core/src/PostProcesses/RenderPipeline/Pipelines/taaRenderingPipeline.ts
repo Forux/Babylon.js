@@ -242,7 +242,7 @@ export class TAARenderingPipeline extends PostProcessRenderPipeline {
     /**
      * Returns true if TAA is supported by the running hardware
      */
-    public get isSupported(): boolean {
+    public override get isSupported(): boolean {
         const caps = this._scene.getEngine().getCaps();
 
         return caps.texelFetch;
@@ -288,7 +288,7 @@ export class TAARenderingPipeline extends PostProcessRenderPipeline {
      * Get the class name
      * @returns "TAARenderingPipeline"
      */
-    public getClassName(): string {
+    public override getClassName(): string {
         return "TAARenderingPipeline";
     }
 
@@ -314,7 +314,7 @@ export class TAARenderingPipeline extends PostProcessRenderPipeline {
     /**
      * Removes the internal pipeline assets and detaches the pipeline from the scene cameras
      */
-    public dispose(): void {
+    public override dispose(): void {
         this._disposePostProcesses();
 
         this._scene.postProcessRenderPipelineManager.detachCamerasFromRenderPipeline(this._name, this._cameras);

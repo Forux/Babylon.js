@@ -286,7 +286,7 @@ export class PBRMaterialDefines extends MaterialDefines implements IImageProcess
     /**
      * Resets the PBR Material defines.
      */
-    public reset(): void {
+    public override reset(): void {
         super.reset();
         this.ALPHATESTVALUE = "0.5";
         this.PBR = true;
@@ -711,7 +711,7 @@ export abstract class PBRBaseMaterial extends PushMaterial {
      * Enforces alpha test in opaque or blend mode in order to improve the performances of some situations.
      * @internal
      */
-    public _forceAlphaTest = false;
+    public override _forceAlphaTest = false;
 
     /**
      * A fresnel is applied to the alpha of the model to ensure grazing angles edges are not alpha tested.
@@ -768,7 +768,7 @@ export abstract class PBRBaseMaterial extends PushMaterial {
     /**
      * Can this material render to several textures at once
      */
-    public get canRenderToMRT() {
+    public override get canRenderToMRT() {
         return true;
     }
 
@@ -956,7 +956,7 @@ export abstract class PBRBaseMaterial extends PushMaterial {
     /**
      * Gets a boolean indicating that current material needs to register RTT
      */
-    public get hasRenderTargetTextures(): boolean {
+    public override get hasRenderTargetTextures(): boolean {
         if (MaterialFlags.ReflectionTextureEnabled && this._reflectionTexture && this._reflectionTexture.isRenderTarget) {
             return true;
         }
@@ -967,21 +967,21 @@ export abstract class PBRBaseMaterial extends PushMaterial {
     /**
      * Can this material render to prepass
      */
-    public get isPrePassCapable(): boolean {
+    public override get isPrePassCapable(): boolean {
         return !this.disableDepthWrite;
     }
 
     /**
      * @returns the name of the material class.
      */
-    public getClassName(): string {
+    public override getClassName(): string {
         return "PBRBaseMaterial";
     }
 
     /**
      * Returns true if alpha blending should be disabled.
      */
-    protected get _disableAlphaBlending(): boolean {
+    protected override get _disableAlphaBlending(): boolean {
         return (
             this._transparencyMode === PBRBaseMaterial.PBRMATERIAL_OPAQUE ||
             this._transparencyMode === PBRBaseMaterial.PBRMATERIAL_ALPHATEST ||
@@ -992,7 +992,7 @@ export abstract class PBRBaseMaterial extends PushMaterial {
     /**
      * @returns whether or not this material should be rendered in alpha blend mode.
      */
-    public needAlphaBlending(): boolean {
+    public override needAlphaBlending(): boolean {
         if (this._disableAlphaBlending) {
             return false;
         }
@@ -1003,7 +1003,7 @@ export abstract class PBRBaseMaterial extends PushMaterial {
     /**
      * @returns whether or not this material should be rendered in alpha test mode.
      */
-    public needAlphaTesting(): boolean {
+    public override needAlphaTesting(): boolean {
         if (this._forceAlphaTest) {
             return true;
         }
@@ -1032,7 +1032,7 @@ export abstract class PBRBaseMaterial extends PushMaterial {
     /**
      * @returns the texture used for the alpha test.
      */
-    public getAlphaTestTexture(): Nullable<BaseTexture> {
+    public override getAlphaTestTexture(): Nullable<BaseTexture> {
         return this._albedoTexture;
     }
 
@@ -1043,7 +1043,7 @@ export abstract class PBRBaseMaterial extends PushMaterial {
      * @param useInstances - Specifies that instances should be used.
      * @returns - boolean indicating that the submesh is ready or not.
      */
-    public isReadyForSubMesh(mesh: AbstractMesh, subMesh: SubMesh, useInstances?: boolean): boolean {
+    public override isReadyForSubMesh(mesh: AbstractMesh, subMesh: SubMesh, useInstances?: boolean): boolean {
         if (!this._uniformBufferLayoutBuilt) {
             this.buildUniformLayout();
         }
@@ -1740,12 +1740,7 @@ export abstract class PBRBaseMaterial extends PushMaterial {
                     }
 
                     if (this._metallicReflectanceTexture || this._reflectanceTexture) {
-                        const identicalTextures =
-                            this._metallicReflectanceTexture !== null &&
-                            this._metallicReflectanceTexture._texture === this._reflectanceTexture?._texture &&
-                            this._metallicReflectanceTexture.checkTransformsAreIdentical(this._reflectanceTexture);
-
-                        defines.METALLIC_REFLECTANCE_USE_ALPHA_ONLY = this._useOnlyMetallicFromMetallicReflectanceTexture && !identicalTextures;
+                        defines.METALLIC_REFLECTANCE_USE_ALPHA_ONLY = this._useOnlyMetallicFromMetallicReflectanceTexture;
                         if (this._metallicReflectanceTexture) {
                             PrepareDefinesForMergedUV(this._metallicReflectanceTexture, defines, "METALLIC_REFLECTANCE");
                             defines.METALLIC_REFLECTANCE_GAMMA = this._metallicReflectanceTexture.gammaSpace;
@@ -1754,7 +1749,6 @@ export abstract class PBRBaseMaterial extends PushMaterial {
                         }
                         if (
                             this._reflectanceTexture &&
-                            !identicalTextures &&
                             (!this._metallicReflectanceTexture || (this._metallicReflectanceTexture && this._useOnlyMetallicFromMetallicReflectanceTexture))
                         ) {
                             PrepareDefinesForMergedUV(this._reflectanceTexture, defines, "REFLECTANCE");
@@ -1891,7 +1885,7 @@ export abstract class PBRBaseMaterial extends PushMaterial {
      * @param onCompiled - Define a callback triggered when the compilation completes
      * @param options - Define the options used to create the compilation
      */
-    public forceCompilation(mesh: AbstractMesh, onCompiled?: (material: Material) => void, options?: Partial<IMaterialCompilationOptions>): void {
+    public override forceCompilation(mesh: AbstractMesh, onCompiled?: (material: Material) => void, options?: Partial<IMaterialCompilationOptions>): void {
         const localOptions = {
             clipPlane: false,
             useInstances: false,
@@ -1926,7 +1920,7 @@ export abstract class PBRBaseMaterial extends PushMaterial {
     /**
      * Initializes the uniform buffer layout for the shader.
      */
-    public buildUniformLayout(): void {
+    public override buildUniformLayout(): void {
         // Order is important !
         const ubo = this._uniformBuffer;
         ubo.addUniform("vAlbedoInfos", 2);
@@ -2000,7 +1994,7 @@ export abstract class PBRBaseMaterial extends PushMaterial {
      * @param mesh - The BJS mesh.
      * @param subMesh - A submesh of the BJS mesh.
      */
-    public bindForSubMesh(world: Matrix, mesh: Mesh, subMesh: SubMesh): void {
+    public override bindForSubMesh(world: Matrix, mesh: Mesh, subMesh: SubMesh): void {
         const scene = this.getScene();
 
         const defines = <PBRMaterialDefines>subMesh.materialDefines;
@@ -2360,7 +2354,7 @@ export abstract class PBRBaseMaterial extends PushMaterial {
      * If material have animatable metallic texture, then reflectivity texture will not be returned, even if it has animations.
      * @returns - Array of animatable textures.
      */
-    public getAnimatables(): IAnimatable[] {
+    public override getAnimatables(): IAnimatable[] {
         const results = super.getAnimatables();
 
         if (this._albedoTexture && this._albedoTexture.animations && this._albedoTexture.animations.length > 0) {
@@ -2428,7 +2422,7 @@ export abstract class PBRBaseMaterial extends PushMaterial {
      * Returns an array of the actively used textures.
      * @returns - Array of BaseTextures
      */
-    public getActiveTextures(): BaseTexture[] {
+    public override getActiveTextures(): BaseTexture[] {
         const activeTextures = super.getActiveTextures();
 
         if (this._albedoTexture) {
@@ -2487,7 +2481,7 @@ export abstract class PBRBaseMaterial extends PushMaterial {
      * @param texture - Base texture to use.
      * @returns - Boolean specifying if a texture is used in the material.
      */
-    public hasTexture(texture: BaseTexture): boolean {
+    public override hasTexture(texture: BaseTexture): boolean {
         if (super.hasTexture(texture)) {
             return true;
         }
@@ -2549,7 +2543,7 @@ export abstract class PBRBaseMaterial extends PushMaterial {
      * When scene have ability to enable subsurface prepass effect, it will enable.
      * @returns - If prepass is enabled or not.
      */
-    public setPrePassRenderer(): boolean {
+    public override setPrePassRenderer(): boolean {
         if (!this.subSurface?.isScatteringEnabled) {
             return false;
         }
@@ -2567,7 +2561,7 @@ export abstract class PBRBaseMaterial extends PushMaterial {
      * @param forceDisposeEffect - Forces the disposal of effects.
      * @param forceDisposeTextures - Forces the disposal of all textures.
      */
-    public dispose(forceDisposeEffect?: boolean, forceDisposeTextures?: boolean): void {
+    public override dispose(forceDisposeEffect?: boolean, forceDisposeTextures?: boolean): void {
         if (forceDisposeTextures) {
             if (this._environmentBRDFTexture && this.getScene().environmentBRDFTexture !== this._environmentBRDFTexture) {
                 this._environmentBRDFTexture.dispose();

@@ -20,6 +20,8 @@ import "../../ShadersWGSL/ShadersInclude/clipPlaneVertex";
 import "../../ShadersWGSL/ShadersInclude/clipPlaneVertexDeclaration";
 import "../../ShadersWGSL/ShadersInclude/instancesDeclaration";
 import "../../ShadersWGSL/ShadersInclude/instancesVertex";
+import "../../ShadersWGSL/ShadersInclude/helperFunctions";
+import "../../ShadersWGSL/ShadersInclude/fresnelFunction";
 import "../../ShadersWGSL/ShadersInclude/meshUboDeclaration";
 import "../../ShadersWGSL/ShadersInclude/morphTargetsVertex";
 import "../../ShadersWGSL/ShadersInclude/morphTargetsVertexDeclaration";
@@ -63,7 +65,7 @@ export class WebGPUShaderProcessorWGSL extends WebGPUShaderProcessor {
     protected _varyingNamesWGSL: string[];
     protected _stridedUniformArrays: string[];
 
-    public shaderLanguage = ShaderLanguage.WGSL;
+    public override shaderLanguage = ShaderLanguage.WGSL;
     public uniformRegexp = /uniform\s+(\w+)\s*:\s*(.+)\s*;/;
     public textureRegexp = /var\s+(\w+)\s*:\s*((array<\s*)?(texture_\w+)\s*(<\s*(.+)\s*>)?\s*(,\s*\w+\s*>\s*)?);/;
     public noPrecision = true;
@@ -110,6 +112,12 @@ export class WebGPUShaderProcessorWGSL extends WebGPUShaderProcessor {
         return alreadyInjected ? code : ubDeclaration + RemoveComments(code);
     }
 
+    public varyingCheck(varying: string, isFragment: boolean): boolean {
+        const regex = /(flat|linear|perspective)?\s*(center|centroid|sample)?\s*\bvarying\b/;
+
+        return regex.test(varying);
+    }
+
     public varyingProcessor(varying: string, isFragment: boolean, preProcessors: { [key: string]: string }) {
         const varyingRegex = /\s*(flat|linear|perspective)?\s*(center|centroid|sample)?\s*varying\s+(?:(?:highp)?|(?:lowp)?)\s*(\S+)\s*:\s*(.+)\s*;/gm;
         const match = varyingRegex.exec(varying);
@@ -118,6 +126,7 @@ export class WebGPUShaderProcessorWGSL extends WebGPUShaderProcessor {
             const interpolationSampling = match[2] ?? "center";
             const varyingType = match[4];
             const name = match[3];
+            const interpolation = interpolationType === "flat" ? `@interpolate(${interpolationType})` : `@interpolate(${interpolationType}, ${interpolationSampling})`;
             let location: number;
             if (isFragment) {
                 location = this._webgpuProcessingContext.availableVaryings[name];
@@ -127,7 +136,7 @@ export class WebGPUShaderProcessorWGSL extends WebGPUShaderProcessor {
             } else {
                 location = this._webgpuProcessingContext.getVaryingNextLocation(varyingType, this._getArraySize(name, varyingType, preProcessors)[2]);
                 this._webgpuProcessingContext.availableVaryings[name] = location;
-                this._varyingsWGSL.push(`  @location(${location}) @interpolate(${interpolationType}, ${interpolationSampling}) ${name} : ${varyingType},`);
+                this._varyingsWGSL.push(`  @location(${location}) ${interpolation} ${name} : ${varyingType},`);
                 this._varyingNamesWGSL.push(name);
             }
 
@@ -466,7 +475,10 @@ export class WebGPUShaderProcessorWGSL extends WebGPUShaderProcessor {
                     name = structName;
                     binding = knownUBO.binding;
                     if (binding.groupIndex === -1) {
-                        binding = this._webgpuProcessingContext.getNextFreeUBOBinding();
+                        binding = this._webgpuProcessingContext.availableBuffers[name]?.binding;
+                        if (!binding) {
+                            binding = this._webgpuProcessingContext.getNextFreeUBOBinding();
+                        }
                     }
                 } else {
                     binding = this._webgpuProcessingContext.getNextFreeUBOBinding();

@@ -21,6 +21,7 @@ import "../scss/renderingZone.scss";
 import { PBRBaseMaterial } from "core/Materials/PBR/pbrBaseMaterial";
 import { Texture } from "core/Materials/Textures/texture";
 import { PBRMaterial } from "core/Materials/PBR/pbrMaterial";
+import type { AbstractEngine } from "core/Engines/abstractEngine";
 
 function isTextureAsset(name: string): boolean {
     const queryStringIndex = name.indexOf("?");
@@ -41,7 +42,7 @@ interface IRenderingZoneProps {
 
 export class RenderingZone extends React.Component<IRenderingZoneProps> {
     private _currentPluginName?: string;
-    private _engine: Engine;
+    private _engine: AbstractEngine;
     private _scene: Scene;
     private _canvas: HTMLCanvasElement;
 
@@ -353,7 +354,7 @@ export class RenderingZone extends React.Component<IRenderingZoneProps> {
         }
     }
 
-    componentDidMount() {
+    override componentDidMount() {
         if (!Engine.isSupported()) {
             return;
         }
@@ -388,7 +389,7 @@ export class RenderingZone extends React.Component<IRenderingZoneProps> {
         this.initEngine();
     }
 
-    shouldComponentUpdate(nextProps: IRenderingZoneProps) {
+    override shouldComponentUpdate(nextProps: IRenderingZoneProps) {
         if (nextProps.expanded !== this.props.expanded) {
             setTimeout(() => this._engine.resize());
             return true;
@@ -396,7 +397,7 @@ export class RenderingZone extends React.Component<IRenderingZoneProps> {
         return false;
     }
 
-    public render() {
+    public override render() {
         return (
             <div id="canvasZone" className={this.props.expanded ? "expanded" : ""}>
                 <canvas id="renderCanvas" touch-action="none" onContextMenu={(evt) => evt.preventDefault()}></canvas>

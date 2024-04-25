@@ -120,7 +120,7 @@ const materialsTree = {
             },
             metallicRoughnessTexture: {
                 extensions: {
-                    KHR_texture_transform: getTextureTransformTree("metallicRoughnessTexture"),
+                    KHR_texture_transform: getTextureTransformTree("metallicTexture"),
                 },
             },
         },
@@ -148,7 +148,7 @@ const materialsTree = {
                 anisotropyRotation: [new MaterialAnimationPropertyInfo(Animation.ANIMATIONTYPE_FLOAT, "anisotropy.angle", getFloat, () => 1)],
                 anisotropyTexture: {
                     extensions: {
-                        KHR_texture_transform: getTextureTransformTree("emissiveTexture"),
+                        KHR_texture_transform: getTextureTransformTree("anisotropy.texture"),
                     },
                 },
             },
@@ -186,6 +186,16 @@ const materialsTree = {
                 iridescenceIor: [new MaterialAnimationPropertyInfo(Animation.ANIMATIONTYPE_FLOAT, "iridescence.indexOfRefraction", getFloat, () => 1)],
                 iridescenceThicknessMinimum: [new MaterialAnimationPropertyInfo(Animation.ANIMATIONTYPE_FLOAT, "iridescence.minimumThickness", getFloat, () => 1)],
                 iridescenceThicknessMaximum: [new MaterialAnimationPropertyInfo(Animation.ANIMATIONTYPE_FLOAT, "iridescence.maximumThickness", getFloat, () => 1)],
+                iridescenceTexture: {
+                    extensions: {
+                        KHR_texture_transform: getTextureTransformTree("iridescence.texture"),
+                    },
+                },
+                iridescenceThicknessTexture: {
+                    extensions: {
+                        KHR_texture_transform: getTextureTransformTree("iridescence.thicknessTexture"),
+                    },
+                },
             },
             KHR_materials_sheen: {
                 sheenColorFactor: [new MaterialAnimationPropertyInfo(Animation.ANIMATIONTYPE_COLOR3, "sheen.color", getColor3, () => 3)],
@@ -230,6 +240,20 @@ const materialsTree = {
                 thicknessTexture: {
                     extensions: {
                         KHR_texture_transform: getTextureTransformTree("subSurface.thicknessTexture"),
+                    },
+                },
+            },
+            KHR_materials_diffuse_transmission: {
+                diffuseTransmissionFactor: [new MaterialAnimationPropertyInfo(Animation.ANIMATIONTYPE_FLOAT, "subSurface.translucencyIntensity", getFloat, () => 1)],
+                diffuseTransmissionTexture: {
+                    extensions: {
+                        KHR_texture_transform: getTextureTransformTree("subSurface.translucencyIntensityTexture"),
+                    },
+                },
+                diffuseTransmissionColorFactor: [new MaterialAnimationPropertyInfo(Animation.ANIMATIONTYPE_COLOR3, "subSurface.translucencyColor", getColor3, () => 3)],
+                diffuseTransmissionColorTexture: {
+                    extensions: {
+                        KHR_texture_transform: getTextureTransformTree("subSurface.translucencyColorTexture"),
                     },
                 },
             },

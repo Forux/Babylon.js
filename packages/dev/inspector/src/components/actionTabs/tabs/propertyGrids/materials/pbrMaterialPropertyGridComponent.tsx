@@ -168,7 +168,7 @@ export class PBRMaterialPropertyGridComponent extends React.Component<IPBRMateri
         );
     }
 
-    render() {
+    override render() {
         const material = this.props.material;
 
         const debugMode = [
@@ -238,6 +238,7 @@ export class PBRMaterialPropertyGridComponent extends React.Component<IPBRMateri
             { label: "Luminance Over Alpha", value: 86 },
             { label: "Alpha", value: 87 },
             { label: "Albedo Alpha", value: 88 },
+            { label: "Ambient occlusion color", value: 89 },
         ];
 
         const realTimeFilteringQualityOptions = [
@@ -922,6 +923,15 @@ export class PBRMaterialPropertyGridComponent extends React.Component<IPBRMateri
                                 step={0.01}
                                 onPropertyChangedObservable={this.props.onPropertyChangedObservable}
                             />
+                            <TextureLinkLineComponent
+                                label="Intensity"
+                                texture={material.subSurface.translucencyIntensityTexture}
+                                onTextureCreated={(texture) => (material.subSurface.translucencyIntensityTexture = texture)}
+                                onTextureRemoved={() => (material.subSurface.translucencyIntensityTexture = null)}
+                                material={material}
+                                onSelectionChangedObservable={this.props.onSelectionChangedObservable}
+                                onDebugSelectionChangeObservable={this._onDebugSelectionChangeObservable}
+                            />
                             <Color3LineComponent
                                 lockObject={this.props.lockObject}
                                 label="Diffusion Distance"
@@ -935,6 +945,23 @@ export class PBRMaterialPropertyGridComponent extends React.Component<IPBRMateri
                                 target={material.subSurface}
                                 propertyName="useAlbedoToTintTranslucency"
                                 onPropertyChangedObservable={this.props.onPropertyChangedObservable}
+                            />
+                            <Color3LineComponent
+                                lockObject={this.props.lockObject}
+                                label="Translucency Tint"
+                                target={material.subSurface}
+                                propertyName="translucencyColor"
+                                onPropertyChangedObservable={this.props.onPropertyChangedObservable}
+                                isLinear={true}
+                            />
+                            <TextureLinkLineComponent
+                                label="Translucency Tint"
+                                texture={material.subSurface.translucencyColorTexture}
+                                onTextureCreated={(texture) => (material.subSurface.translucencyColorTexture = texture)}
+                                onTextureRemoved={() => (material.subSurface.translucencyColorTexture = null)}
+                                material={material}
+                                onSelectionChangedObservable={this.props.onSelectionChangedObservable}
+                                onDebugSelectionChangeObservable={this._onDebugSelectionChangeObservable}
                             />
                         </div>
                     )}

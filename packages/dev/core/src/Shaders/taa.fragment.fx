@@ -9,8 +9,20 @@ varying vec2 vUV;
 
 uniform sampler2D textureSampler;
 uniform sampler2D historySampler;
-uniform sampler2D velocitySampler;
+
+#ifdef OBJECT_BASED
+    uniform sampler2D velocitySampler;
+#else
+    uniform sampler2D depthSampler;
+    uniform mat4 inverseViewProjection;
+    uniform mat4 prevViewProjection;
+    uniform mat4 projection;
+#endif
+
 uniform float factor;
+uniform float errorFactor; // 1.0
+uniform bool cameraMoved; // 1 - moved, 0 - not moved
+
 #ifdef CLIP_TO_AABB
     vec3 rgb2ycocg(vec3 rgb) {
         float co = rgb.r - rgb.b;
@@ -54,33 +66,103 @@ uniform float factor;
 #endif
 
 void main() {
-    ivec2 icoordXY = ivec2(gl_FragCoord.xy);
+    if (!cameraMoved) {
+        vec4 c = texelFetch(textureSampler, ivec2(gl_FragCoord.xy), 0);
+        vec4 h = texelFetch(historySampler, ivec2(gl_FragCoord.xy), 0);
+        gl_FragColor = mix(h, c, factor);
+    } else {
+        ivec2 icoordXY = ivec2(gl_FragCoord.xy);
 
-    vec4 newColor = texelFetch(textureSampler, icoordXY, 0);
+        #ifdef OBJECT_BASED
+            #ifdef INT_BASED_HISTORY_SAMPLING
+                vec4 velocityColor = texelFetch(velocitySampler, icoordXY, 0);
+            #else
+                vec4 velocityColor = TEXTUREFUNC(velocitySampler, vUV, 0.0);
+            #endif
 
-    vec4 velocityColor = texelFetch(velocitySampler, icoordXY, 0);
-    velocityColor.rg = velocityColor.rg * 2.0 - vec2(1.0);
-    vec2 velocity = vec2(pow(velocityColor.r, 3.0), pow(velocityColor.g, 3.0)) * velocityColor.a;
+            velocityColor.rg = velocityColor.rg * 2.0 - vec2(1.0);
+            vec2 velocity = vec2(pow(velocityColor.r, 3.0), pow(velocityColor.g, 3.0)) * velocityColor.a;
 
-    #ifdef INT_BASED_HISTORY_SAMPLING
-        velocity = velocity * vec2(textureSize(historySampler, 0));
-        vec4 historyColor = texelFetch(historySampler, ivec2(gl_FragCoord.xy - velocity), 0);
-    #else
-        vec4 historyColor = TEXTUREFUNC(historySampler, vUV - velocity, 0.0);
-    #endif
+            vec2 previousCoords = vUV - velocity;
+        #else
+            vec2 previousCoords;
+            #ifdef INT_BASED_HISTORY_SAMPLING
+                float depth = texelFetch(depthSampler, icoordXY, 0).r;
+            #else
+                vec4 depthVec = TEXTUREFUNC(depthSampler, vUV, 0.0);
+                float depth = depthVec.r;
+            #endif
+            if (depth == 0.0) {
+                previousCoords = vUV;
+            } else {
+                depth = projection[2].z + projection[3].z / depth; // convert from view linear z to NDC z
 
-    #ifdef CLIP_TO_AABB
-        vec3 mean = rgb2ycocg(newColor.rgb);
-        vec3 stddev = mean * mean;
-        { vec3 c = rgb2ycocg(texelFetch(textureSampler, icoordXY + ivec2( 0,  1), 0).rgb); mean += c; stddev += c * c; }
-        { vec3 c = rgb2ycocg(texelFetch(textureSampler, icoordXY + ivec2( 0, -1), 0).rgb); mean += c; stddev += c * c; }
-        { vec3 c = rgb2ycocg(texelFetch(textureSampler, icoordXY + ivec2( 1,  0), 0).rgb); mean += c; stddev += c * c; }
-        { vec3 c = rgb2ycocg(texelFetch(textureSampler, icoordXY + ivec2(-1,  0), 0).rgb); mean += c; stddev += c * c; }
-        mean *= 0.2;
-        stddev = sqrt(max(vec3(0.0), stddev * 0.2 - mean * mean));
-        historyColor = vec4(ycocg2rgb(clipToAABB(rgb2ycocg(historyColor.rgb), rgb2ycocg(newColor.rgb), mean, stddev)), historyColor.a);
-    #endif
+                vec4 cpos = vec4(vUV * 2.0 - 1.0, depth, 1.0);
+                cpos = inverseViewProjection * cpos;
+                if (cpos.w == 0.0) {
+                    previousCoords = vUV;
+                } else {
+                    cpos /= cpos.w;
 
-    gl_FragColor = mix(historyColor, newColor, factor);
+                    vec4 encodedCoords = prevViewProjection * cpos;
+                    if (encodedCoords.w == 0.0) {
+                        previousCoords = vUV;
+                    } else {
+                        encodedCoords /= encodedCoords.w;
+                        previousCoords = encodedCoords.xy * 0.5 + 0.5;
+                    }
+                }
+            }
+        #endif
+
+        #ifdef INT_BASED_HISTORY_SAMPLING
+            vec4 newColor = texelFetch(textureSampler, icoordXY, 0);
+            vec4 historyColor = texelFetch(historySampler, ivec2(previousCoords * vec2(textureSize(historySampler, 0))), 0);
+        #else
+            vec4 newColor = TEXTUREFUNC(textureSampler, vUV, 0.0);
+            vec4 historyColor = TEXTUREFUNC(historySampler, previousCoords, 0.0);
+        #endif
+
+        #ifdef DEBUG_UV
+            if (previousCoords.x > 1.0 || previousCoords.x < 0.0) {
+                gl_FragColor = vec4(0.0, 0.0, 0.5, 1.0);
+            } else if (previousCoords.y < 0.0 || previousCoords.y > 1.0) {
+                gl_FragColor = vec4(0.0, 0.0, 1.0, 1.0);
+            } else {
+                gl_FragColor = vec4(previousCoords, 0.0, 1.0);
+            }
+        #elif defined( DEBUG_UV_CHANGE )
+            vec2 uvChange = abs(vUV - previousCoords);
+            if (uvChange.x == 0.0 && uvChange.y == 0.0) {
+                gl_FragColor = vec4(0.0, 0.0, 1.0, 1.0);
+            } else if (uvChange.x == 0.0 || uvChange.y == 0.0) {
+                gl_FragColor = vec4(0.0, 0.0, 0.5, 1.0);
+            } else {
+                uvChange = vec2(pow(uvChange.x, 1.0 / 3.0), pow(uvChange.y, 1.0 / 3.0));
+                gl_FragColor = vec4(uvChange, 0.0, 1.0);
+            }
+        #elif defined( DEBUG_VELOCITY )
+            vec2 fractCheck = fract(gl_FragCoord.xy / 35.0);
+            if (fractCheck.x < 0.1 && fractCheck.y < 0.1) {
+                newColor = vec4(1.0, 1.0, 1.0, newColor.a);
+            } else {
+                newColor = vec4(newColor.x, newColor.y, 0.0, newColor.a);
+            }
+            gl_FragColor = mix(historyColor, newColor, factor);
+        #else
+            #ifdef CLIP_TO_AABB
+                vec3 mean = rgb2ycocg(newColor.rgb);
+                vec3 stddev = mean * mean;
+                { vec3 c = rgb2ycocg(texelFetch(textureSampler, icoordXY + ivec2( 0,  1), 0).rgb); mean += c; stddev += c * c; }
+                { vec3 c = rgb2ycocg(texelFetch(textureSampler, icoordXY + ivec2( 0, -1), 0).rgb); mean += c; stddev += c * c; }
+                { vec3 c = rgb2ycocg(texelFetch(textureSampler, icoordXY + ivec2( 1,  0), 0).rgb); mean += c; stddev += c * c; }
+                { vec3 c = rgb2ycocg(texelFetch(textureSampler, icoordXY + ivec2(-1,  0), 0).rgb); mean += c; stddev += c * c; }
+                mean *= 0.2;
+                stddev = sqrt(max(vec3(0.0), (stddev * 0.2 - mean * mean) * errorFactor));
+                historyColor = vec4(ycocg2rgb(clipToAABB(rgb2ycocg(historyColor.rgb), rgb2ycocg(newColor.rgb), mean, stddev)), historyColor.a);
+            #endif
+            gl_FragColor = mix(historyColor, newColor, factor);
+        #endif
+    }
 }
 //< VRNET

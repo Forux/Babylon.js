@@ -15,6 +15,7 @@ import type { RenderTargetWrapper } from "core/Engines/renderTargetWrapper";
 import { Halton2DSequence } from "core/Maths/halton2DSequence";
 //> VRNET
 import type { PrePassRenderer } from "../../../Rendering/prePassRenderer";
+import { Matrix, TmpVectors } from "core/Maths/math.vector";
 import type { PrePassEffectConfiguration } from "../../../Rendering/prePassEffectConfiguration";
 //< VRNET
 
@@ -91,6 +92,24 @@ export class TAARenderingPipeline extends PostProcessRenderPipeline {
     }
 
     /**
+     * Enables debug
+     * mode == 0 - disabled
+     * mode == 1 - coordinates mode showing UV on screen, blue means invalid UV point (< 0 or > 1)
+     * mode == 2 - white points mode - showing velocity
+     * mode == 3 - uvchange in rg and blue if uv unchanged
+     */
+    private _debugMODE = 0;
+
+    public set debugMODE(value: number) {
+        this._debugMODE = value;
+        this._updateEffectDefines();
+    }
+
+    public get debugMODE(): number {
+        return this._debugMODE;
+    }
+
+    /**
      * Enables clipping chroma to make sure we use in TAA only close colors
      */
     private _clipToAABB = true;
@@ -102,6 +121,17 @@ export class TAARenderingPipeline extends PostProcessRenderPipeline {
 
     public get clipToAABB(): boolean {
         return this._clipToAABB;
+    }
+    /**
+     * Error factor for chroma in aabb clipping from 0 to 1
+     */
+    private _aabbErrorFactor = 1.0;
+
+    public set aabbErrorFactor(value: number) {
+        this._aabbErrorFactor = value;
+    }
+    public get aabbErrorFactor(): number {
+        return this._aabbErrorFactor;
     }
     //< VRNET
 
@@ -295,6 +325,33 @@ export class TAARenderingPipeline extends PostProcessRenderPipeline {
         super.dispose();
     }
 
+    //> VRNET
+    /**
+     * Gets whether or not the TAA post-process is in object based mode.
+     */
+    @serialize()
+    public get isObjectBased(): boolean {
+        return this._isObjectBased;
+    }
+
+    /**
+     * Sets whether or not the TAA post-process is in object based mode.
+     */
+    public set isObjectBased(value: boolean) {
+        if (this._isObjectBased === value) {
+            return;
+        }
+
+        this._isObjectBased = value;
+        this._updateEffectDefines();
+    }
+
+    private _isObjectBased: boolean = true;
+
+    private _invViewProjection: Nullable<Matrix> = null;
+    private _previousViewProjection: Nullable<Matrix> = null;
+    //< VRNET
+
     private _createPingPongTextures(width: number, height: number) {
         const engine = this._scene.getEngine();
 
@@ -317,7 +374,29 @@ export class TAARenderingPipeline extends PostProcessRenderPipeline {
 
     private _updateEffectDefines(): void {
         //> VRNET
-        const defines: string[] = [this._clipToAABB ? "#define CLIP_TO_AABB" : "", this._intBasedHistorySampling ? "#define INT_BASED_HISTORY_SAMPLING" : ""];
+
+        this._invViewProjection = null;
+        this._previousViewProjection = null;
+
+        if (this._isObjectBased) {
+            if (this._taaPostProcess) {
+                this._taaPostProcess._prePassEffectConfiguration.texturesRequired[0] = Constants.PREPASS_VELOCITY_TEXTURE_TYPE;
+            }
+        } else {
+            this._invViewProjection = Matrix.Identity();
+            this._previousViewProjection = this._scene.getTransformMatrix().clone();
+
+            if (this._taaPostProcess) {
+                this._taaPostProcess._prePassEffectConfiguration.texturesRequired[0] = Constants.PREPASS_DEPTH_TEXTURE_TYPE;
+            }
+        }
+
+        const defines: string[] = [
+            this._isObjectBased ? "#define OBJECT_BASED" : "",
+            this._clipToAABB ? "#define CLIP_TO_AABB" : "",
+            this._debugMODE == 1 ? "#define DEBUG_UV" : this._debugMODE == 2 ? "#define DEBUG_VELOCITY" : this._debugMODE == 3 ? "#define DEBUG_UV_CHANGE" : "",
+            this._intBasedHistorySampling ? "#define INT_BASED_HISTORY_SAMPLING" : "",
+        ];
         //< VRNET
 
         this._taaPostProcess?.updateEffect(defines.join("\n"));
@@ -390,9 +469,9 @@ export class TAARenderingPipeline extends PostProcessRenderPipeline {
 
     private _createTAAPostProcess(): void {
         this._taaPostProcess = new PostProcess("TAA", "taa", {
-            uniforms: ["factor"],
+            uniforms: ["factor", "cameraMoved", "errorFactor", "inverseViewProjection", "prevViewProjection", "projection"],
             //> VRNET
-            samplers: ["historySampler", "velocitySampler"],
+            samplers: ["textureSampler", "historySampler", "velocitySampler", "depthSampler"],
             //< VRNET
             size: 1.0,
             engine: this._scene.getEngine(),
@@ -438,19 +517,33 @@ export class TAARenderingPipeline extends PostProcessRenderPipeline {
             const camera = this._scene.activeCamera;
             //> VRNET
             const prePassRenderer = this._prePassRenderer;
-            if (prePassRenderer) {
-                const velocityIndex = prePassRenderer.getIndex(Constants.PREPASS_VELOCITY_TEXTURE_TYPE);
-                effect.setTexture("velocitySampler", prePassRenderer.getRenderTarget().textures[velocityIndex]);
+            if (this._isObjectBased) {
+                if (prePassRenderer) {
+                    const velocityIndex = prePassRenderer.getIndex(Constants.PREPASS_VELOCITY_TEXTURE_TYPE);
+                    effect.setTexture("velocitySampler", prePassRenderer.getRenderTarget().textures[velocityIndex]);
+                }
+            } else {
+                if (prePassRenderer) {
+                    const depthIndex = prePassRenderer.getIndex(Constants.PREPASS_DEPTH_TEXTURE_TYPE);
+                    effect.setTexture("depthSampler", prePassRenderer.getRenderTarget().textures[depthIndex]);
+                }
+                const viewProjection = TmpVectors.Matrix[0];
+                viewProjection.copyFrom(this._scene.getTransformMatrix());
+                viewProjection.invertToRef(this._invViewProjection!);
+                effect.setMatrix("inverseViewProjection", this._invViewProjection!);
+                effect.setMatrix("prevViewProjection", this._previousViewProjection!);
+                this._previousViewProjection!.copyFrom(viewProjection);
+                effect.setMatrix("projection", this._scene.getProjectionMatrix());
             }
+            this._doneSamples = camera?.hasMoved ? 0 : this._doneSamples + 1;
             //< VRNET
 
             effect._bindTexture("historySampler", this._pingpong ? this._ping.texture : this._pong.texture);
             effect.setFloat("factor", (camera?.hasMoved && this.disableOnCameraMove) || this._firstUpdate ? 1 : this.factor);
+            effect.setFloat("errorFactor", this._aabbErrorFactor);
+            effect.setBool("cameraMoved", camera?.hasMoved ? true : false);
 
             this._firstUpdate = false;
-            //> VRNET
-            this._doneSamples = camera?.hasMoved ? 0 : this._doneSamples + 1;
-            //< VRNET
         });
     }
 

@@ -27,6 +27,7 @@ interface ITextureInfo extends ITextureInfoBase {
 /** @internal */
 interface IRelfectionProbeInfo {
     reflectionMapTexture: string;
+    isRGBD: boolean;
     reflectionSphericalPolynomial: number[][];
     prefiltered: boolean;
     boundingBoxSize: number[];
@@ -156,6 +157,7 @@ export class VRNET_materials_main implements IGLTFLoaderExtension {
                             probI.prefiltered
                         ),
                     };
+                    cubeT.texture.isRGBD = probI.isRGBD ? true : false;
                     cubeT.texture.name = (probI.reflectionMapTexture.split("/").pop() || probI.reflectionMapTexture) + `|ReflectionMap|${babylonMaterial.name}`;
                     if (probI.level) {
                         cubeT.texture.level = probI.level;
@@ -180,10 +182,10 @@ export class VRNET_materials_main implements IGLTFLoaderExtension {
                 babylonMaterial.reflectionTexture = cubeT.texture;
             }
         } else {
-            babylonMaterial.unlit = true;
+            // babylonMaterial.unlit = true;
             // purely experimentally selected multiplier to make the color of unlit material closer to the original
             // pay attention that albedoColor here is in the linear space while gamma in inspector, so it's like multiplying by 0.75 in gamma
-            babylonMaterial.albedoColor = babylonMaterial.albedoColor.multiplyByFloats(0.5, 0.5, 0.5);
+            // babylonMaterial.albedoColor = babylonMaterial.albedoColor.multiplyByFloats(0.5, 0.5, 0.5);
         }
 
         return Promise.all(promises).then(() => {});

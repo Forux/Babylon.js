@@ -15,9 +15,11 @@ import { GLTFLoader } from "../glTFLoader";
  */
 interface ISkyboxInfo {
     texture: string;
+    isRGBD: boolean;
     sphericalPolynomial: number[][];
     exposure: number;
     tintColor: number[];
+    rotation: number;
 }
 
 /**
@@ -90,6 +92,9 @@ export class VRNET_nodes_main implements IGLTFLoaderExtension {
 
         // Create a cube texture from the skybox texture URL
         const texture = CubeTexture.CreateFromPrefilteredData(this._loader["_rootUrl"] + skyboxInfo.texture, this._loader.babylonScene);
+        if (skyboxInfo.isRGBD) {
+            texture.isRGBD = true;
+        }
         texture.coordinatesMode = Texture.SKYBOX_MODE;
 
         if (isEnvironmentTexture) {
@@ -123,6 +128,10 @@ export class VRNET_nodes_main implements IGLTFLoaderExtension {
             skyboxMesh.material = material;
             skyboxMesh.infiniteDistance = true;
             skyboxMesh.parent = skybox;
+
+            if (skyboxInfo.rotation !== undefined) {
+                skyboxMesh.rotation.y = skyboxInfo.rotation;
+            }
         }
 
         return skybox;

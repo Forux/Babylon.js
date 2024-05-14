@@ -10,6 +10,7 @@ import type { IGLTFLoaderExtension } from "../glTFLoaderExtension";
 import { GLTFLoader } from "../glTFLoader";
 import type { IMaterialExtension, ITextureInfo as ITextureInfoBase } from "babylonjs-gltf2interface";
 import { BaseTexture } from "core/Materials/Textures/baseTexture";
+import { Deferred } from "core/Misc/deferred";
 
 /**
  * adding needed property
@@ -142,6 +143,7 @@ export class VRNET_materials_main implements IGLTFLoaderExtension {
             if (null != babylonMaterial) {
                 let cubeT = VRNET_materials_main._ReflectionCache[properties.reflectionProbeInfo.reflectionMapTexture];
                 if (!cubeT || cubeT.loader !== this._loader) {
+                    const deferred = new Deferred<void>();
                     const probI = properties.reflectionProbeInfo;
                     cubeT = {
                         loader: this._loader,
@@ -151,30 +153,33 @@ export class VRNET_materials_main implements IGLTFLoaderExtension {
                             null,
                             false,
                             null,
-                            null,
-                            null,
+                            () => deferred.resolve(),
+                            () => deferred.reject(),
                             undefined,
                             probI.prefiltered
                         ),
                     };
-                    cubeT.texture.isRGBD = probI.isRGBD ? true : false;
-                    cubeT.texture.name = (probI.reflectionMapTexture.split("/").pop() || probI.reflectionMapTexture) + `|ReflectionMap|${babylonMaterial.name}`;
-                    if (probI.level) {
-                        cubeT.texture.level = probI.level;
-                    }
-                    if (probI.boundingBoxSize) {
-                        cubeT.texture.boundingBoxSize = Vector3.FromArray(probI.boundingBoxSize);
-                    }
-                    if (probI.boundingBoxPosition) {
-                        cubeT.texture.boundingBoxPosition = Vector3.FromArray(probI.boundingBoxPosition);
-                    }
-                    if (probI.boundingBoxOffset) {
-                        cubeT.texture.boundingBoxOffset = Vector3.FromArray(probI.boundingBoxOffset);
-                    }
-                    if (probI.reflectionSphericalPolynomial) {
-                        cubeT.texture.sphericalPolynomial = SphericalPolynomial.FromArray(probI.reflectionSphericalPolynomial);
-                    }
                     VRNET_materials_main._ReflectionCache[properties.reflectionProbeInfo.reflectionMapTexture] = cubeT;
+                    promises.push(deferred.promise);
+                    BaseTexture.WhenAllReady([cubeT.texture], () => {
+                        cubeT.texture.isRGBD = probI.isRGBD ? true : false;
+                        cubeT.texture.name = (probI.reflectionMapTexture.split("/").pop() || probI.reflectionMapTexture) + `|ReflectionMap|${babylonMaterial.name}`;
+                        if (probI.level) {
+                            cubeT.texture.level = probI.level;
+                        }
+                        if (probI.boundingBoxSize) {
+                            cubeT.texture.boundingBoxSize = Vector3.FromArray(probI.boundingBoxSize);
+                        }
+                        if (probI.boundingBoxPosition) {
+                            cubeT.texture.boundingBoxPosition = Vector3.FromArray(probI.boundingBoxPosition);
+                        }
+                        if (probI.boundingBoxOffset) {
+                            cubeT.texture.boundingBoxOffset = Vector3.FromArray(probI.boundingBoxOffset);
+                        }
+                        if (probI.reflectionSphericalPolynomial) {
+                            cubeT.texture.sphericalPolynomial = SphericalPolynomial.FromArray(probI.reflectionSphericalPolynomial);
+                        }
+                    });
                 }
 
                 // babylonMaterial.ambientColor = Color3.White();

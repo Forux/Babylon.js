@@ -9,6 +9,8 @@ import { TransformNode } from "core/Meshes/transformNode";
 import type { INode } from "../glTFLoaderInterfaces";
 import type { IGLTFLoaderExtension } from "../glTFLoaderExtension";
 import { GLTFLoader } from "../glTFLoader";
+import { Deferred } from "core/Misc/deferred";
+import { BaseTexture } from "core/Materials/Textures/baseTexture";
 
 /**
  * @internal
@@ -74,67 +76,83 @@ export class VRNET_nodes_main implements IGLTFLoaderExtension {
             const promises = new Array<Promise<any>>();
             return this._loader.loadNodeAsync(context, node, (babylonNode) => {
                 return Promise.all(promises).then(() => {
-                    const skyboxInfo = extension.skyboxes[0]; // Assuming only one skybox per node
-
-                    if (skyboxInfo) {
-                        const skybox = this._createSkybox(skyboxInfo, true);
-                        assign(skybox);
+                    const promises = new Array<Promise<any>>();
+                    for (let i = 0; i < extension.skyboxes.length; i++) {
+                        if (extension.skyboxes[i]) {
+                            const skyboxPromise = this._createSkybox(extension.skyboxes[i], `skybox_${i}`, i === 0);
+                            promises.push(
+                                skyboxPromise.then((skybox) => {
+                                    skybox.parent = babylonNode;
+                                })
+                            );
+                        }
                     }
-
-                    return null;
+                    return Promise.all(promises).then(() => {
+                        babylonNode.name = "skyboxes";
+                        assign(babylonNode);
+                        return babylonNode;
+                    });
                 });
             });
         });
     }
 
-    private _createSkybox(skyboxInfo: ISkyboxInfo, isEnvironmentTexture: boolean): TransformNode {
-        const skybox = new TransformNode("skybox", this._loader.babylonScene);
+    private _createSkybox(skyboxInfo: ISkyboxInfo, name: string, isEnvironmentTexture: boolean): Promise<TransformNode> {
+        const skybox = new TransformNode(name, this._loader.babylonScene);
 
-        // Create a cube texture from the skybox texture URL
-        const texture = CubeTexture.CreateFromPrefilteredData(this._loader["_rootUrl"] + skyboxInfo.texture, this._loader.babylonScene);
-        if (skyboxInfo.isRGBD) {
-            texture.isRGBD = true;
-        }
-        texture.coordinatesMode = Texture.SKYBOX_MODE;
-
-        if (isEnvironmentTexture) {
-            this._loader.babylonScene.environmentTexture = texture;
-        }
-
-        // Create a PBR material for the skybox
-        const material = new BackgroundMaterial("skyboxMaterial", this._loader.babylonScene);
+        const material = new BackgroundMaterial(`${name}_material`, this._loader.babylonScene);
         material.backFaceCulling = false;
-        material.reflectionTexture = texture;
 
         material.useRGBColor = false;
         material.primaryColor = skyboxInfo.tintColor ? Color3.FromArray(skyboxInfo.tintColor) : Color3.White();
         material.enableNoise = true;
 
-        // Set the spherical polynomial coefficients if available
-        if (skyboxInfo.sphericalPolynomial) {
-            material.reflectionTexture.sphericalPolynomial = SphericalPolynomial.FromArray(skyboxInfo.sphericalPolynomial);
-        }
-
-        // Set the exposure and tint color if available
-        if (skyboxInfo.exposure !== undefined) {
-            material.reflectionTexture.level = skyboxInfo.exposure;
-        }
-
         // Create a box mesh with a large size to imitate a skybox
         const skyboxSize = 1000;
-        const box = this._loader.babylonScene.getMeshByName("skybox");
+        let box = this._loader.babylonScene.getMeshByName("skybox");
         if (!box) {
-            const skyboxMesh = CreateBox("skybox", { size: skyboxSize }, skybox.getScene());
-            skyboxMesh.material = material;
-            skyboxMesh.infiniteDistance = true;
-            skyboxMesh.parent = skybox;
+            box = CreateBox("skybox", { size: skyboxSize }, skybox.getScene());
+            box.infiniteDistance = true;
+            box.parent = skybox;
 
             if (skyboxInfo.rotation !== undefined) {
-                skyboxMesh.rotation.y = skyboxInfo.rotation;
+                box.rotation.y = skyboxInfo.rotation;
             }
         }
+        if (isEnvironmentTexture) {
+            box.material = material;
+        }
 
-        return skybox;
+        const deferred = new Deferred<void>();
+        const cube_texture = new CubeTexture(
+            this._loader["_rootUrl"] + skyboxInfo.texture,
+            this._loader.babylonScene,
+            null,
+            false,
+            undefined,
+            () => deferred.resolve(),
+            () => deferred.reject(),
+            undefined,
+            true
+        );
+        BaseTexture.WhenAllReady([cube_texture], () => {
+            if (skyboxInfo.isRGBD) {
+                cube_texture.isRGBD = true;
+            }
+            cube_texture.coordinatesMode = Texture.SKYBOX_MODE;
+            if (isEnvironmentTexture) {
+                this._loader.babylonScene.environmentTexture = cube_texture;
+            }
+            if (skyboxInfo.sphericalPolynomial) {
+                cube_texture.sphericalPolynomial = SphericalPolynomial.FromArray(skyboxInfo.sphericalPolynomial);
+            }
+            if (skyboxInfo.exposure !== undefined) {
+                cube_texture.level = skyboxInfo.exposure;
+            }
+            material.reflectionTexture = cube_texture;
+        });
+
+        return deferred.promise.then(() => skybox);
     }
 }
 

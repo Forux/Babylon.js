@@ -69,10 +69,10 @@ export class VRNET_nodes_main implements IGLTFLoaderExtension {
     /**
      * @internal
      */
-    public loadNodeAsync(context: string, node: INode, assign: (babylonMesh: TransformNode) => void): Nullable<Promise<TransformNode>> {
+    public loadNodeAsync(context: string, node: INode, assign: (babylonNode: TransformNode) => void): Nullable<Promise<TransformNode>> {
         return GLTFLoader.LoadExtensionAsync<VRNETNodesExtension, TransformNode>(context, node, this.name, (extensionContext, extension) => {
             const promises = new Array<Promise<any>>();
-            return this._loader.loadNodeAsync(context, node, (babylonMesh) => {
+            return this._loader.loadNodeAsync(context, node, (babylonNode) => {
                 return Promise.all(promises).then(() => {
                     const skyboxInfo = extension.skyboxes[0]; // Assuming only one skybox per node
 

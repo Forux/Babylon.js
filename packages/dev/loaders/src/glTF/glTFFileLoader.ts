@@ -671,8 +671,14 @@ export class GLTFFileLoader implements IDisposable, ISceneLoaderPluginAsync, ISc
                 scene,
                 fileOrUrl,
                 (data) => {
-                    this._validate(scene, data as string, rootUrl, fileName);
-                    onSuccess({ json: this._parseJson(data as string) });
+                    try {
+                        this._validate(scene, data as string, rootUrl, fileName);
+                        onSuccess({ json: this._parseJson(data as string) });
+                    } catch {
+                        if (onError) {
+                            onError();
+                        }
+                    }
                 },
                 false,
                 onError
@@ -902,8 +908,10 @@ export class GLTFFileLoader implements IDisposable, ISceneLoaderPluginAsync, ISc
             onError,
             onOpened
         ) as IFileRequestInfo;
-        request.onCompleteObservable.add((request) => {
-            this._requests.splice(this._requests.indexOf(request), 1);
+        request.onCompleteObservable.add(() => {
+            // Force the length computable to be true since we can guarantee the data is loaded.
+            request._lengthComputable = true;
+            request._total = request._loaded;
         });
         this._requests.push(request);
         return request;

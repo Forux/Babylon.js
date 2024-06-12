@@ -3120,16 +3120,19 @@ export class Mesh extends AbstractMesh implements IGetSetVerticesData {
         const indices = this.getIndices()!;
         const data: { [kind: string]: FloatArray } = {};
 
-        const separateVertices = (data: FloatArray, stride: number): Float32Array => {
-            const newData = new Float32Array(indices.length * stride);
+        const separateVertices = (data: FloatArray, size: number): Float32Array => {
+            const newData = new Float32Array(indices.length * size);
             let count = 0;
             for (let index = 0; index < indices.length; index++) {
-                for (let offset = 0; offset < stride; offset++) {
-                    newData[count++] = data[indices[index] * stride + offset];
+                for (let offset = 0; offset < size; offset++) {
+                    newData[count++] = data[indices[index] * size + offset];
                 }
             }
             return newData;
         };
+
+        // Save mesh bounding info
+        const meshBoundingInfo = this.getBoundingInfo();
 
         // Save previous submeshes
         const previousSubmeshes = this.geometry ? this.subMeshes.slice(0) : [];
@@ -3142,13 +3145,13 @@ export class Mesh extends AbstractMesh implements IGetSetVerticesData {
         // Update vertex data
         for (const kind of kinds) {
             const vertexBuffer = this.getVertexBuffer(kind)!;
-            const stride = vertexBuffer.getStrideSize();
+            const size = vertexBuffer.getSize();
 
             if (flattenNormals && kind === VertexBuffer.NormalKind) {
                 const normals = this._getFlattenedNormals(indices, data[VertexBuffer.PositionKind]);
-                this.setVerticesData(VertexBuffer.NormalKind, normals, vertexBuffer.isUpdatable(), stride);
+                this.setVerticesData(VertexBuffer.NormalKind, normals, vertexBuffer.isUpdatable(), size);
             } else {
-                this.setVerticesData(kind, separateVertices(data[kind], stride), vertexBuffer.isUpdatable(), stride);
+                this.setVerticesData(kind, separateVertices(data[kind], size), vertexBuffer.isUpdatable(), size);
             }
         }
 
@@ -3189,8 +3192,12 @@ export class Mesh extends AbstractMesh implements IGetSetVerticesData {
         // Update submeshes
         this.releaseSubMeshes();
         for (const previousOne of previousSubmeshes) {
-            SubMesh.AddToMesh(previousOne.materialIndex, previousOne.indexStart, previousOne.indexCount, previousOne.indexStart, previousOne.indexCount, this);
+            const boundingInfo = previousOne.getBoundingInfo();
+            const subMesh = SubMesh.AddToMesh(previousOne.materialIndex, previousOne.indexStart, previousOne.indexCount, previousOne.indexStart, previousOne.indexCount, this);
+            subMesh.setBoundingInfo(boundingInfo);
         }
+
+        this.setBoundingInfo(meshBoundingInfo);
 
         this.synchronizeInstances();
 
@@ -4205,7 +4212,7 @@ export class Mesh extends AbstractMesh implements IGetSetVerticesData {
 
         // Physics
         if (parsedMesh.physicsImpostor) {
-            Mesh._PhysicsImpostorParser(scene, mesh, parsedMesh);
+            mesh.physicsImpostor = Mesh._PhysicsImpostorParser(scene, mesh, parsedMesh);
         }
 
         // Levels
@@ -4287,7 +4294,7 @@ export class Mesh extends AbstractMesh implements IGetSetVerticesData {
 
                 // Physics
                 if (parsedInstance.physicsImpostor) {
-                    Mesh._PhysicsImpostorParser(scene, instance, parsedInstance);
+                    instance.physicsImpostor = Mesh._PhysicsImpostorParser(scene, instance, parsedInstance);
                 }
 
                 // Actions

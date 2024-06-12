@@ -26,7 +26,7 @@ import { ThinEngine } from "./thinEngine";
 import type { IWebRequest } from "../Misc/interfaces/iWebRequest";
 import { EngineStore } from "./engineStore";
 import { ShaderCodeInliner } from "./Processors/shaderCodeInliner";
-import { WebGL2ShaderProcessor } from "../Engines/WebGL/webGL2ShaderProcessors";
+import { NativeShaderProcessor } from "./Native/nativeShaderProcessors";
 import type { IMaterialContext } from "./IMaterialContext";
 import type { IDrawContext } from "./IDrawContext";
 import type { ICanvas, IImage } from "./ICanvas";
@@ -51,6 +51,10 @@ import {
     getNativeAddressMode,
 } from "./Native/nativeHelpers";
 import { AbstractEngine } from "./abstractEngine";
+import { checkNonFloatVertexBuffers } from "../Buffers/buffer.nonFloatVertexBuffers";
+import type { ShaderProcessingContext } from "./Processors/shaderProcessingOptions";
+import { NativeShaderProcessingContext } from "./Native/nativeShaderProcessingContext";
+import type { ShaderLanguage } from "../Materials/shaderLanguage";
 
 declare const _native: INative;
 
@@ -188,12 +192,18 @@ class CommandBufferEncoder {
     }
 }
 
+const remappedAttributesNames: string[] = [];
+
 /** @internal */
 export class NativeEngine extends Engine {
     // This must match the protocol version in NativeEngine.cpp
     private static readonly PROTOCOL_VERSION = 8;
 
-    private readonly _engine: INativeEngine = new _native.Engine();
+    private readonly _engine: INativeEngine = new _native.Engine({
+        version: Engine.Version,
+        nonFloatVertexBuffers: true,
+    });
+
     private readonly _camera: Nullable<INativeCamera> = _native.Camera ? new _native.Camera() : null;
 
     private readonly _commandBufferEncoder = new CommandBufferEncoder(this._engine);
@@ -264,10 +274,10 @@ export class NativeEngine extends Engine {
             supportFloatTexturesResolve: false,
             rg11b10ufColorRenderable: false,
             textureFloat: true,
-            textureFloatLinearFiltering: false,
+            textureFloatLinearFiltering: true,
             textureFloatRender: true,
             textureHalfFloat: true,
-            textureHalfFloatLinearFiltering: false,
+            textureHalfFloatLinearFiltering: true,
             textureHalfFloatRender: true,
             textureLOD: true,
             texelFetch: false,
@@ -314,7 +324,8 @@ export class NativeEngine extends Engine {
             needToAlwaysBindUniformBuffers: false,
             supportRenderPasses: true,
             supportSpriteInstancing: false,
-            forceVertexBufferStrideAndOffsetMultiple4Bytes: false,
+            forceVertexBufferStrideAndOffsetMultiple4Bytes: true,
+            _checkNonFloatVertexBuffersDontRecreatePipelineContext: false,
             _collectUbosUpdatedInFrame: false,
         };
 
@@ -394,7 +405,7 @@ export class NativeEngine extends Engine {
         }
 
         // Shader processor
-        this._shaderProcessor = new WebGL2ShaderProcessor();
+        this._shaderProcessor = new NativeShaderProcessor();
 
         this.onNewSceneAddedObservable.add((scene) => {
             const originalRender = scene.render;
@@ -527,6 +538,8 @@ export class NativeEngine extends Engine {
         effect: Effect,
         overrideVertexBuffers?: { [kind: string]: Nullable<VertexBuffer> }
     ): void {
+        checkNonFloatVertexBuffers(vertexBuffers, effect);
+
         if (indexBuffer) {
             this._engine.recordIndexBuffer(vertexArray, indexBuffer.nativeIndexBuffer!);
         }
@@ -546,14 +559,14 @@ export class NativeEngine extends Engine {
                 }
 
                 if (vertexBuffer) {
-                    const buffer = vertexBuffer.getBuffer() as Nullable<NativeDataBuffer>;
+                    const buffer = vertexBuffer.effectiveBuffer as Nullable<NativeDataBuffer>;
                     if (buffer && buffer.nativeVertexBuffer) {
                         this._engine.recordVertexBuffer(
                             vertexArray,
                             buffer.nativeVertexBuffer!,
                             location,
-                            vertexBuffer.byteOffset,
-                            vertexBuffer.byteStride,
+                            vertexBuffer.effectiveByteOffset,
+                            vertexBuffer.effectiveByteStride,
                             vertexBuffer.getSize(),
                             getNativeAttribType(vertexBuffer.type),
                             vertexBuffer.normalized,
@@ -603,7 +616,15 @@ export class NativeEngine extends Engine {
 
     public override getAttributes(pipelineContext: IPipelineContext, attributesNames: string[]): number[] {
         const nativePipelineContext = pipelineContext as NativePipelineContext;
-        return this._engine.getAttributes(nativePipelineContext.program, attributesNames);
+        const nativeShaderProcessingContext = nativePipelineContext.shaderProcessingContext!;
+
+        remappedAttributesNames.length = 0;
+        for (let index = 0; index < attributesNames.length; index++) {
+            const origAttributeName = attributesNames[index];
+            const attributeName = nativeShaderProcessingContext.remappedAttributeNames[origAttributeName] ?? origAttributeName;
+            remappedAttributesNames[index] = attributeName;
+        }
+        return this._engine.getAttributes(nativePipelineContext.program, remappedAttributesNames);
     }
 
     /**
@@ -662,9 +683,9 @@ export class NativeEngine extends Engine {
         // }
     }
 
-    public override createPipelineContext(): IPipelineContext {
+    public override createPipelineContext(shaderProcessingContext: Nullable<ShaderProcessingContext>): IPipelineContext {
         const isAsync = !!(this._caps.parallelShaderCompile && this._engine.createProgramAsync);
-        return new NativePipelineContext(this, isAsync);
+        return new NativePipelineContext(this, isAsync, shaderProcessingContext as Nullable<NativeShaderProcessingContext>);
     }
 
     public override createMaterialContext(): IMaterialContext | undefined {
@@ -693,6 +714,13 @@ export class NativeEngine extends Engine {
         } else {
             this.createShaderProgram(pipelineContext, vertexSourceCode, fragmentSourceCode, defines);
         }
+    }
+
+    /**
+     * @internal
+     */
+    public override _getShaderProcessingContext(_shaderLanguage: ShaderLanguage): Nullable<ShaderProcessingContext> {
+        return new NativeShaderProcessingContext();
     }
 
     /**
@@ -1249,15 +1277,6 @@ export class NativeEngine extends Engine {
         }
 
         this._alphaMode = mode;
-    }
-
-    /**
-     * Gets the current alpha mode
-     * @see https://doc.babylonjs.com/features/featuresDeepDive/materials/advanced/transparent_rendering
-     * @returns the current alpha mode
-     */
-    public override getAlphaMode(): number {
-        return this._alphaMode;
     }
 
     public override setInt(uniform: WebGLUniformLocation, int: number): boolean {
@@ -2011,6 +2030,7 @@ export class NativeEngine extends Engine {
      * @param fallback defines texture to use while falling back when (compressed) texture file not found.
      * @param loaderOptions options to be passed to the loader
      * @param useSRGBBuffer defines if the texture must be loaded in a sRGB GPU buffer (if supported by the GPU).
+     * @param buffer defines the data buffer to load instead of loading the rootUrl
      * @returns the cube texture as an InternalTexture
      */
     public override createCubeTexture(
@@ -2027,7 +2047,8 @@ export class NativeEngine extends Engine {
         lodOffset: number = 0,
         fallback: Nullable<InternalTexture> = null,
         loaderOptions?: any,
-        useSRGBBuffer = false
+        useSRGBBuffer = false,
+        buffer: Nullable<ArrayBufferView> = null
     ): InternalTexture {
         const texture = fallback ? fallback : new InternalTexture(this, InternalTextureSource.Cube);
         texture.isCube = true;
@@ -2040,6 +2061,7 @@ export class NativeEngine extends Engine {
         if (!this._doNotHandleContextLost) {
             texture._extension = forcedExtension;
             texture._files = files;
+            texture._buffer = buffer;
         }
 
         const lastDot = rootUrl.lastIndexOf(".");
@@ -2086,7 +2108,9 @@ export class NativeEngine extends Engine {
                 );
             };
 
-            if (files && files.length === 6) {
+            if (buffer) {
+                onloaddata(buffer);
+            } else if (files && files.length === 6) {
                 throw new Error(`Multi-file loading not allowed on env files.`);
             } else {
                 const onInternalError = (request?: IWebRequest, exception?: any) => {
@@ -2340,7 +2364,10 @@ export class NativeEngine extends Engine {
     }
 
     // TODO: Refactor to share more logic with base Engine implementation.
-    protected override _setTexture(channel: number, texture: Nullable<BaseTexture>, isPartOfTextureArray = false, depthStencilTexture = false): boolean {
+    /**
+     * @internal
+     */
+    public override _setTexture(channel: number, texture: Nullable<BaseTexture>, isPartOfTextureArray = false, depthStencilTexture = false): boolean {
         const uniform = this._boundUniforms[channel] as unknown as NativeUniform;
         if (!uniform) {
             return false;
@@ -2351,6 +2378,7 @@ export class NativeEngine extends Engine {
             if (this._boundTexturesCache[channel] != null) {
                 this._activeChannel = channel;
                 this._boundTexturesCache[channel] = null;
+                this._unsetNativeTexture(uniform);
             }
             return false;
         }
@@ -2394,7 +2422,7 @@ export class NativeEngine extends Engine {
         );
         this._updateAnisotropicLevel(texture);
 
-        this._setTextureCore(uniform, internalTexture._hardwareTexture.underlyingResource);
+        this._setNativeTexture(uniform, internalTexture._hardwareTexture.underlyingResource);
 
         return true;
     }
@@ -2417,10 +2445,20 @@ export class NativeEngine extends Engine {
         this._commandBufferEncoder.finishEncodingCommand();
     }
 
-    private _setTextureCore(uniform: NativeUniform, texture: NativeTexture) {
+    private _setNativeTexture(uniform: NativeUniform, texture: NativeTexture) {
         this._commandBufferEncoder.startEncodingCommand(_native.Engine.COMMAND_SETTEXTURE);
         this._commandBufferEncoder.encodeCommandArgAsNativeData(uniform);
         this._commandBufferEncoder.encodeCommandArgAsNativeData(texture);
+        this._commandBufferEncoder.finishEncodingCommand();
+    }
+
+    private _unsetNativeTexture(uniform: NativeUniform) {
+        if (!_native.Engine.COMMAND_UNSETTEXTURE) {
+            return;
+        }
+
+        this._commandBufferEncoder.startEncodingCommand(_native.Engine.COMMAND_UNSETTEXTURE);
+        this._commandBufferEncoder.encodeCommandArgAsNativeData(uniform);
         this._commandBufferEncoder.finishEncodingCommand();
     }
 
@@ -2446,15 +2484,30 @@ export class NativeEngine extends Engine {
     /**
      * @internal
      */
-    public override _bindTexture(channel: number, texture: InternalTexture): void {
+    public override _bindTexture(channel: number, texture: Nullable<InternalTexture>): void {
         const uniform = this._boundUniforms[channel] as unknown as NativeUniform;
         if (!uniform) {
             return;
         }
+
         if (texture && texture._hardwareTexture) {
             const underlyingResource = texture._hardwareTexture.underlyingResource;
-            this._setTextureCore(uniform, underlyingResource);
+            this._setNativeTexture(uniform, underlyingResource);
+        } else {
+            this._unsetNativeTexture(uniform);
         }
+    }
+
+    /**
+     * Unbind all textures
+     */
+    public override unbindAllTextures(): void {
+        if (!_native.Engine.COMMAND_DISCARDALLTEXTURES) {
+            return;
+        }
+
+        this._commandBufferEncoder.startEncodingCommand(_native.Engine.COMMAND_DISCARDALLTEXTURES);
+        this._commandBufferEncoder.finishEncodingCommand();
     }
 
     protected override _deleteBuffer(buffer: NativeDataBuffer): void {

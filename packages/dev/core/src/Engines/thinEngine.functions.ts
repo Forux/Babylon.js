@@ -2,6 +2,7 @@ import type { Nullable } from "../types";
 import type { IPipelineContext } from "./IPipelineContext";
 import type { ShaderProcessingContext } from "./Processors/shaderProcessingOptions";
 import { WebGLPipelineContext } from "./WebGL/webGLPipelineContext";
+import type { _loadFile } from "./abstractEngine.functions";
 import { _ConcatenateShader } from "./abstractEngine.functions";
 
 /**
@@ -16,6 +17,7 @@ export interface IThinEngineStateObject {
     _createShaderProgramInjection?: typeof _createShaderProgram;
     createRawShaderProgramInjection?: typeof createRawShaderProgram;
     createShaderProgramInjection?: typeof createShaderProgram;
+    loadFileInjection?: typeof _loadFile;
     cachedPipelines: { [name: string]: IPipelineContext };
 }
 /**
@@ -200,7 +202,7 @@ export function _finalizePipelineContext(pipelineContext: WebGLPipelineContext, 
     if (!linked) {
         // Get more info
         // Vertex
-        if (gl.getShaderParameter(vertexShader, gl.COMPILE_STATUS)) {
+        if (!gl.getShaderParameter(vertexShader, gl.COMPILE_STATUS)) {
             const log = gl.getShaderInfoLog(vertexShader);
             if (log) {
                 pipelineContext.vertexCompilationError = log;
@@ -319,33 +321,6 @@ function _compileRawShader(source: string, type: string, gl: WebGLContext, _cont
     gl.compileShader(shader);
 
     return shader;
-}
-
-/**
- * Binds an effect to the webGL context
- * @param pipelineContext  defines the pipeline context to use
- * @param samplers defines the list of webGL samplers to bind
- * @param uniforms defines the list of webGL uniforms to bind
- * @returns the webGL program
- */
-export function bindSamplers(
-    pipelineContext: IPipelineContext,
-    samplers: string[],
-    uniforms: {
-        [key: string]: Nullable<WebGLUniformLocation>;
-    }
-) {
-    const webGLPipelineContext = pipelineContext as WebGLPipelineContext;
-    _setProgram(webGLPipelineContext.program!, webGLPipelineContext.context!);
-    const _boundUniforms: Nullable<WebGLUniformLocation>[] = [];
-    for (let index = 0; index < samplers.length; index++) {
-        const uniform = uniforms[samplers[index]];
-
-        if (uniform) {
-            _boundUniforms[index] = uniform;
-        }
-    }
-    return _boundUniforms;
 }
 
 /**

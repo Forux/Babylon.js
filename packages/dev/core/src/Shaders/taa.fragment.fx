@@ -48,6 +48,11 @@ uniform bool cameraMoved; // 1 - moved, 0 - not moved
     //     return ycocg; // r = y + co/2 - cg/2, g = cg/2 + y, b = y - cg/2 - co/2
     // }
 
+    vec3 debug_clipToAABB(vec3 cOld, vec3 cNew, vec3 centre, vec3 halfSize) { //За мотивами https://www.dropbox.com/sh/dmye840y307lbpx/AAAnSryCBMKowISJPoGWiz5Fa/msalvi_temporal_supersampling.pptx?dl=0
+        if (all(lessThanEqual(abs(cOld - centre), halfSize))) return false;
+        return true;
+    }
+
     vec3 clipToAABB(vec3 cOld, vec3 cNew, vec3 centre, vec3 halfSize) { //За мотивами https://www.dropbox.com/sh/dmye840y307lbpx/AAAnSryCBMKowISJPoGWiz5Fa/msalvi_temporal_supersampling.pptx?dl=0
         //Якщо cOld попадає в рамки похибки - залишаємо його таким як він був
         if (all(lessThanEqual(abs(cOld - centre), halfSize))) return cOld;
@@ -151,15 +156,24 @@ void main() {
             gl_FragColor = mix(historyColor, newColor, factor);
         #else
             #ifdef CLIP_TO_AABB
-                vec3 mean = rgb2ycocg(newColor.rgb);
-                vec3 stddev = mean * mean;
-                { vec3 c = rgb2ycocg(texelFetch(textureSampler, icoordXY + ivec2( 0,  1), 0).rgb); mean += c; stddev += c * c; }
-                { vec3 c = rgb2ycocg(texelFetch(textureSampler, icoordXY + ivec2( 0, -1), 0).rgb); mean += c; stddev += c * c; }
-                { vec3 c = rgb2ycocg(texelFetch(textureSampler, icoordXY + ivec2( 1,  0), 0).rgb); mean += c; stddev += c * c; }
-                { vec3 c = rgb2ycocg(texelFetch(textureSampler, icoordXY + ivec2(-1,  0), 0).rgb); mean += c; stddev += c * c; }
-                mean *= 0.2;
-                stddev = sqrt(max(vec3(0.0), (stddev * 0.2 - mean * mean) * errorFactor));
-                historyColor = vec4(ycocg2rgb(clipToAABB(rgb2ycocg(historyColor.rgb), rgb2ycocg(newColor.rgb), mean, stddev)), historyColor.a);
+                #ifdef DEBUG_CLIP_TO_AABB
+                    if (debug_clipToAABB(rgb2ycocg(historyColor.rgb), rgb2ycocg(newColor.rgb), mean, stddev)) {
+                        gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0);
+                    } else {
+                        gl_FragColor = newColor;
+                    }
+                    return;
+                #else
+                    vec3 mean = rgb2ycocg(newColor.rgb);
+                    vec3 stddev = mean * mean;
+                    { vec3 c = rgb2ycocg(texelFetch(textureSampler, icoordXY + ivec2( 0,  1), 0).rgb); mean += c; stddev += c * c; }
+                    { vec3 c = rgb2ycocg(texelFetch(textureSampler, icoordXY + ivec2( 0, -1), 0).rgb); mean += c; stddev += c * c; }
+                    { vec3 c = rgb2ycocg(texelFetch(textureSampler, icoordXY + ivec2( 1,  0), 0).rgb); mean += c; stddev += c * c; }
+                    { vec3 c = rgb2ycocg(texelFetch(textureSampler, icoordXY + ivec2(-1,  0), 0).rgb); mean += c; stddev += c * c; }
+                    mean *= 0.2;
+                    stddev = sqrt(max(vec3(0.0), (stddev * 0.2 - mean * mean) * errorFactor));
+                    historyColor = vec4(ycocg2rgb(clipToAABB(rgb2ycocg(historyColor.rgb), rgb2ycocg(newColor.rgb), mean, stddev)), historyColor.a);
+                #endif
             #endif
             gl_FragColor = mix(historyColor, newColor, factor);
         #endif

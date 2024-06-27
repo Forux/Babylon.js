@@ -65,6 +65,14 @@ export class TAARenderingPipeline extends PostProcessRenderPipeline {
     }
 
     /**
+     * Fully redone TAA
+     */
+    public forceRedone() {
+        this._forcedUpdate = true;
+        this._doneSamples = 0;
+    }
+
+    /**
      * Number of samples already done via post process, for example after camera stop moving
      */
     public get doneSamples(): number {
@@ -97,6 +105,7 @@ export class TAARenderingPipeline extends PostProcessRenderPipeline {
      * mode == 1 - coordinates mode showing UV on screen, blue means invalid UV point (< 0 or > 1)
      * mode == 2 - white points mode - showing velocity
      * mode == 3 - uvchange in rg and blue if uv unchanged
+     * mode == 4 - clip to AABB, makes points that are close to previous point to be RED, other to be the same
      */
     private _debugMODE = 0;
 
@@ -211,7 +220,7 @@ export class TAARenderingPipeline extends PostProcessRenderPipeline {
         } else if (value) {
             if (!this._isDirty) {
                 if (this._cameras !== null) {
-                    this._firstUpdate = true;
+                    this._forcedUpdate = true;
                     this._scene.postProcessRenderPipelineManager.attachCamerasToRenderPipeline(this._name, this._cameras);
                 }
             } else {
@@ -237,7 +246,7 @@ export class TAARenderingPipeline extends PostProcessRenderPipeline {
     private _pong: RenderTargetWrapper;
     private _pingpong = 0;
     private _hs: Halton2DSequence;
-    private _firstUpdate = true;
+    private _forcedUpdate = true;
 
     /**
      * Returns true if TAA is supported by the running hardware
@@ -369,7 +378,7 @@ export class TAARenderingPipeline extends PostProcessRenderPipeline {
         );
 
         this._hs.setDimensions(width / 2, height / 2);
-        this._firstUpdate = true;
+        this._forcedUpdate = true;
     }
 
     private _updateEffectDefines(): void {
@@ -394,7 +403,15 @@ export class TAARenderingPipeline extends PostProcessRenderPipeline {
         const defines: string[] = [
             this._isObjectBased ? "#define OBJECT_BASED" : "",
             this._clipToAABB ? "#define CLIP_TO_AABB" : "",
-            this._debugMODE == 1 ? "#define DEBUG_UV" : this._debugMODE == 2 ? "#define DEBUG_VELOCITY" : this._debugMODE == 3 ? "#define DEBUG_UV_CHANGE" : "",
+            this._debugMODE == 1
+                ? "#define DEBUG_UV"
+                : this._debugMODE == 2
+                  ? "#define DEBUG_VELOCITY"
+                  : this._debugMODE == 3
+                    ? "#define DEBUG_UV_CHANGE"
+                    : this._debugMODE == 4
+                      ? "#define DEBUG_CLIP_TO_AABB"
+                      : "",
             this._intBasedHistorySampling ? "#define INT_BASED_HISTORY_SAMPLING" : "",
         ];
         //< VRNET
@@ -453,6 +470,12 @@ export class TAARenderingPipeline extends PostProcessRenderPipeline {
         }
     }
 
+    //> VRNET
+    private isCameraMoved(): boolean {
+        return this._forcedUpdate || (this._scene.activeCamera?.hasMoved ?? false);
+    }
+    //< VRNET
+
     private _disposePostProcesses(): void {
         for (let i = 0; i < this._cameras.length; i++) {
             const camera = this._cameras[i];
@@ -494,7 +517,7 @@ export class TAARenderingPipeline extends PostProcessRenderPipeline {
             }
 
             //> VRNET
-            if (!this.disableJitter && camera && !(camera.hasMoved && this.disableOnCameraMove)) {
+            if (!this.disableJitter && camera && !(this.isCameraMoved() && this.disableOnCameraMove)) {
                 //< VRNET
                 if (camera.mode === Camera.PERSPECTIVE_CAMERA) {
                     const projMat = camera.getProjectionMatrix();
@@ -514,7 +537,6 @@ export class TAARenderingPipeline extends PostProcessRenderPipeline {
         });
 
         this._taaPostProcess.onApplyObservable.add((effect: Effect) => {
-            const camera = this._scene.activeCamera;
             //> VRNET
             const prePassRenderer = this._prePassRenderer;
             if (this._isObjectBased) {
@@ -535,15 +557,15 @@ export class TAARenderingPipeline extends PostProcessRenderPipeline {
                 this._previousViewProjection!.copyFrom(viewProjection);
                 effect.setMatrix("projection", this._scene.getProjectionMatrix());
             }
-            this._doneSamples = camera?.hasMoved ? 0 : this._doneSamples + 1;
+            this._doneSamples = this.isCameraMoved() ? 0 : this._doneSamples + 1;
             //< VRNET
 
             effect._bindTexture("historySampler", this._pingpong ? this._ping.texture : this._pong.texture);
-            effect.setFloat("factor", (camera?.hasMoved && this.disableOnCameraMove) || this._firstUpdate ? 1 : this.factor);
+            effect.setFloat("factor", (this.isCameraMoved() && this.disableOnCameraMove) || this._forcedUpdate ? 1 : this.factor);
             effect.setFloat("errorFactor", this._aabbErrorFactor);
-            effect.setBool("cameraMoved", camera?.hasMoved ? true : false);
+            effect.setBool("cameraMoved", this.isCameraMoved());
 
-            this._firstUpdate = false;
+            this._forcedUpdate = false;
         });
     }
 

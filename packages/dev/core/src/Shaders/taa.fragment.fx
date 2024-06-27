@@ -48,7 +48,7 @@ uniform bool cameraMoved; // 1 - moved, 0 - not moved
     //     return ycocg; // r = y + co/2 - cg/2, g = cg/2 + y, b = y - cg/2 - co/2
     // }
 
-    vec3 debug_clipToAABB(vec3 cOld, vec3 cNew, vec3 centre, vec3 halfSize) { //За мотивами https://www.dropbox.com/sh/dmye840y307lbpx/AAAnSryCBMKowISJPoGWiz5Fa/msalvi_temporal_supersampling.pptx?dl=0
+    bool debug_clipToAABB(vec3 cOld, vec3 cNew, vec3 centre, vec3 halfSize) { //За мотивами https://www.dropbox.com/sh/dmye840y307lbpx/AAAnSryCBMKowISJPoGWiz5Fa/msalvi_temporal_supersampling.pptx?dl=0
         if (all(lessThanEqual(abs(cOld - centre), halfSize))) return false;
         return true;
     }

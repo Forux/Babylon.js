@@ -10,7 +10,6 @@ import type { INode } from "../glTFLoaderInterfaces";
 import type { IGLTFLoaderExtension } from "../glTFLoaderExtension";
 import { GLTFLoader } from "../glTFLoader";
 import { Deferred } from "core/Misc/deferred";
-import { BaseTexture } from "core/Materials/Textures/baseTexture";
 
 /**
  * @internal
@@ -124,32 +123,29 @@ export class VRNET_nodes_main implements IGLTFLoaderExtension {
         }
 
         const deferred = new Deferred<void>();
-        const cube_texture = new CubeTexture(
-            this._loader["_rootUrl"] + skyboxInfo.texture,
-            this._loader.babylonScene,
-            null,
-            false,
-            undefined,
-            () => deferred.resolve(),
-            () => deferred.reject(),
-            undefined,
-            true
-        );
-        BaseTexture.WhenAllReady([cube_texture], () => {
+        const textureUrl = this._loader["_rootUrl"] + skyboxInfo.texture;
+        this._loader.babylonScene._loadFile(textureUrl, (data) => {
+            const cubeTexture = new CubeTexture(textureUrl, this._loader.babylonScene, {
+                noMipmap: false,
+                buffer: new Uint8Array(data as ArrayBuffer),
+                onLoad: () => deferred.resolve(),
+                onError: () => deferred.reject(),
+                prefiltered: true,
+            });
             if (skyboxInfo.isRGBD) {
-                cube_texture.isRGBD = true;
+                cubeTexture.isRGBD = true;
             }
-            cube_texture.coordinatesMode = Texture.SKYBOX_MODE;
+            cubeTexture.coordinatesMode = Texture.SKYBOX_MODE;
             if (isEnvironmentTexture) {
-                this._loader.babylonScene.environmentTexture = cube_texture;
+                this._loader.babylonScene.environmentTexture = cubeTexture;
             }
             if (skyboxInfo.sphericalPolynomial) {
-                cube_texture.sphericalPolynomial = SphericalPolynomial.FromArray(skyboxInfo.sphericalPolynomial);
+                cubeTexture.sphericalPolynomial = SphericalPolynomial.FromArray(skyboxInfo.sphericalPolynomial);
             }
             if (skyboxInfo.exposure !== undefined) {
-                cube_texture.level = skyboxInfo.exposure;
+                cubeTexture.level = skyboxInfo.exposure;
             }
-            material.reflectionTexture = cube_texture;
+            material.reflectionTexture = cubeTexture;
         });
 
         return deferred.promise.then(() => skybox);

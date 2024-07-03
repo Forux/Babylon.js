@@ -1,6 +1,7 @@
 import type { Nullable } from "core/types";
 import { PBRMaterial } from "core/Materials/PBR/pbrMaterial";
 import type { Material } from "core/Materials/material";
+import type { ICubeTextureCreationOptions } from "core/Materials/Textures/cubeTexture";
 import { CubeTexture } from "core/Materials/Textures/cubeTexture";
 import { Vector3 } from "core/Maths/math.vector";
 import { Color3 } from "core/Maths/math.color";
@@ -145,46 +146,53 @@ export class VRNET_materials_main implements IGLTFLoaderExtension {
                 if (!cubeT || cubeT.loader !== this._loader) {
                     const deferred = new Deferred<void>();
                     const probI = properties.reflectionProbeInfo;
-                    cubeT = {
-                        loader: this._loader,
-                        texture: new CubeTexture(
-                            this._loader["_rootUrl"] + probI.reflectionMapTexture,
-                            this._loader.babylonScene,
-                            null,
-                            false,
-                            null,
-                            () => deferred.resolve(),
-                            () => deferred.reject(),
-                            undefined,
-                            probI.prefiltered
-                        ),
-                    };
-                    VRNET_materials_main._ReflectionCache[properties.reflectionProbeInfo.reflectionMapTexture] = cubeT;
+
+                    this._loader.babylonScene._loadFile(
+                        this._loader["_rootUrl"] + probI.reflectionMapTexture,
+                        (data) => {
+                            const cubeTextureOptions: ICubeTextureCreationOptions = {
+                                noMipmap: false,
+                                buffer: new Uint8Array(data as ArrayBuffer),
+                                onLoad: () => deferred.resolve(),
+                                onError: () => deferred.reject(),
+                                prefiltered: probI.prefiltered,
+                                lodScale: 0.8,
+                            };
+                            cubeT = {
+                                loader: this._loader,
+                                texture: new CubeTexture(this._loader["_rootUrl"] + probI.reflectionMapTexture, this._loader.babylonScene, cubeTextureOptions),
+                            };
+                            cubeT.texture.isRGBD = probI.isRGBD ? true : false;
+                            cubeT.texture.name = (probI.reflectionMapTexture.split("/").pop() || probI.reflectionMapTexture) + `|ReflectionMap|${babylonMaterial.name}`;
+                            if (probI.level) {
+                                cubeT.texture.level = probI.level;
+                            }
+                            if (probI.boundingBoxSize) {
+                                cubeT.texture.boundingBoxSize = Vector3.FromArray(probI.boundingBoxSize);
+                            }
+                            if (probI.boundingBoxPosition) {
+                                cubeT.texture.boundingBoxPosition = Vector3.FromArray(probI.boundingBoxPosition);
+                            }
+                            if (probI.boundingBoxOffset) {
+                                cubeT.texture.boundingBoxOffset = Vector3.FromArray(probI.boundingBoxOffset);
+                            }
+                            if (probI.reflectionSphericalPolynomial) {
+                                cubeT.texture.sphericalPolynomial = SphericalPolynomial.FromArray(probI.reflectionSphericalPolynomial);
+                            }
+                            VRNET_materials_main._ReflectionCache[properties.reflectionProbeInfo.reflectionMapTexture] = cubeT;
+                            babylonMaterial.reflectionTexture = cubeT.texture;
+                        },
+                        undefined,
+                        undefined,
+                        true,
+                        () => deferred.reject()
+                    );
+
                     promises.push(deferred.promise);
-                    BaseTexture.WhenAllReady([cubeT.texture], () => {
-                        cubeT.texture.isRGBD = probI.isRGBD ? true : false;
-                        cubeT.texture.name = (probI.reflectionMapTexture.split("/").pop() || probI.reflectionMapTexture) + `|ReflectionMap|${babylonMaterial.name}`;
-                        if (probI.level) {
-                            cubeT.texture.level = probI.level;
-                        }
-                        if (probI.boundingBoxSize) {
-                            cubeT.texture.boundingBoxSize = Vector3.FromArray(probI.boundingBoxSize);
-                        }
-                        if (probI.boundingBoxPosition) {
-                            cubeT.texture.boundingBoxPosition = Vector3.FromArray(probI.boundingBoxPosition);
-                        }
-                        if (probI.boundingBoxOffset) {
-                            cubeT.texture.boundingBoxOffset = Vector3.FromArray(probI.boundingBoxOffset);
-                        }
-                        if (probI.reflectionSphericalPolynomial) {
-                            cubeT.texture.sphericalPolynomial = SphericalPolynomial.FromArray(probI.reflectionSphericalPolynomial);
-                        }
-                    });
                 }
 
                 // babylonMaterial.ambientColor = Color3.White();
                 babylonMaterial.enableSpecularAntiAliasing = false;
-                babylonMaterial.reflectionTexture = cubeT.texture;
             }
         } else {
             // babylonMaterial.unlit = true;

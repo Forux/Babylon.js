@@ -55,6 +55,18 @@ import { checkNonFloatVertexBuffers } from "../Buffers/buffer.nonFloatVertexBuff
 import type { ShaderProcessingContext } from "./Processors/shaderProcessingOptions";
 import { NativeShaderProcessingContext } from "./Native/nativeShaderProcessingContext";
 import type { ShaderLanguage } from "../Materials/shaderLanguage";
+import type { WebGLHardwareTexture } from "./WebGL/webGLHardwareTexture";
+
+import "../Buffers/buffer.align";
+
+// REVIEW: add a flag to effect to prevent multiple compilations of the same shader.
+declare module "../Materials/effect" {
+    /** internal */
+    export interface Effect {
+        /** internal */
+        _checkedNonFloatVertexBuffers?: boolean;
+    }
+}
 
 declare const _native: INative;
 
@@ -538,7 +550,10 @@ export class NativeEngine extends Engine {
         effect: Effect,
         overrideVertexBuffers?: { [kind: string]: Nullable<VertexBuffer> }
     ): void {
-        checkNonFloatVertexBuffers(vertexBuffers, effect);
+        if (!effect._checkedNonFloatVertexBuffers) {
+            checkNonFloatVertexBuffers(vertexBuffers, effect);
+            effect._checkedNonFloatVertexBuffers = true;
+        }
 
         if (indexBuffer) {
             this._engine.recordIndexBuffer(vertexArray, indexBuffer.nativeIndexBuffer!);
@@ -1552,9 +1567,9 @@ export class NativeEngine extends Engine {
         return this._engine.createTexture();
     }
 
-    protected override _deleteTexture(texture: Nullable<WebGLTexture>): void {
+    protected override _deleteTexture(texture: Nullable<WebGLHardwareTexture>): void {
         if (texture) {
-            this._engine.deleteTexture(texture as NativeTexture);
+            this._engine.deleteTexture(texture.underlyingResource as NativeTexture);
         }
     }
 

@@ -124,36 +124,29 @@ export class VRNET_nodes_main implements IGLTFLoaderExtension {
 
         const deferred = new Deferred<void>();
         const textureUrl = this._loader["_rootUrl"] + skyboxInfo.texture;
-        this._loader.babylonScene._loadFile(
-            textureUrl,
-            (data) => {
-                const cubeTexture = new CubeTexture(textureUrl, this._loader.babylonScene, {
-                    noMipmap: false,
-                    buffer: new Uint8Array(data as ArrayBuffer),
-                    onLoad: () => deferred.resolve(),
-                    onError: () => deferred.reject(),
-                    prefiltered: true,
-                });
-                if (skyboxInfo.isRGBD) {
-                    cubeTexture.isRGBD = true;
-                }
-                cubeTexture.coordinatesMode = Texture.SKYBOX_MODE;
-                if (isEnvironmentTexture) {
-                    this._loader.babylonScene.environmentTexture = cubeTexture;
-                }
-                if (skyboxInfo.sphericalPolynomial) {
-                    cubeTexture.sphericalPolynomial = SphericalPolynomial.FromArray(skyboxInfo.sphericalPolynomial);
-                }
-                if (skyboxInfo.exposure !== undefined) {
-                    cubeTexture.level = skyboxInfo.exposure;
-                }
-                material.reflectionTexture = cubeTexture;
-            },
-            undefined,
-            undefined,
-            true,
-            () => deferred.reject()
-        );
+        this._loader.babylonScene._loadFile(textureUrl, (data) => {
+            const cubeTexture = new CubeTexture(textureUrl, this._loader.babylonScene, {
+                noMipmap: false,
+                buffer: new Uint8Array(data as ArrayBuffer),
+                onLoad: () => deferred.resolve(),
+                onError: () => deferred.reject(),
+                prefiltered: true,
+            });
+            if (skyboxInfo.isRGBD) {
+                cubeTexture.isRGBD = true;
+            }
+            cubeTexture.coordinatesMode = Texture.SKYBOX_MODE;
+            if (isEnvironmentTexture) {
+                this._loader.babylonScene.environmentTexture = cubeTexture;
+            }
+            if (skyboxInfo.sphericalPolynomial) {
+                cubeTexture.sphericalPolynomial = SphericalPolynomial.FromArray(skyboxInfo.sphericalPolynomial);
+            }
+            if (skyboxInfo.exposure !== undefined) {
+                cubeTexture.level = skyboxInfo.exposure;
+            }
+            material.reflectionTexture = cubeTexture;
+        });
 
         return deferred.promise.then(() => skybox);
     }

@@ -10,6 +10,7 @@ import type { INode } from "../glTFLoaderInterfaces";
 import type { IGLTFLoaderExtension } from "../glTFLoaderExtension";
 import { GLTFLoader } from "../glTFLoader";
 import { Deferred } from "core/Misc/deferred";
+import { Observable } from "core/Misc/observable";
 
 /**
  * @internal
@@ -53,6 +54,17 @@ export class VRNET_nodes_main implements IGLTFLoaderExtension {
     public order = 200;
 
     private _loader: GLTFLoader;
+
+    /**
+     * @internal
+     */
+    private static _SkyboxCache: {
+        [key: string]: {
+            texture?: CubeTexture;
+            loader: GLTFLoader;
+            loadObservable: Observable<CubeTexture>;
+        };
+    } = {};
 
     /**
      * @internal
@@ -122,33 +134,57 @@ export class VRNET_nodes_main implements IGLTFLoaderExtension {
             box.material = material;
         }
 
-        const deferred = new Deferred<void>();
         const textureUrl = this._loader["_rootUrl"] + skyboxInfo.texture;
-        this._loader.babylonScene._loadFile(textureUrl, (data) => {
-            const cubeTexture = new CubeTexture(textureUrl, this._loader.babylonScene, {
-                noMipmap: false,
-                buffer: new Uint8Array(data as ArrayBuffer),
-                onLoad: () => deferred.resolve(),
-                onError: () => deferred.reject(),
-                prefiltered: true,
-            });
-            if (skyboxInfo.isRGBD) {
-                cubeTexture.isRGBD = true;
-            }
-            cubeTexture.coordinatesMode = Texture.SKYBOX_MODE;
-            if (isEnvironmentTexture) {
-                this._loader.babylonScene.environmentTexture = cubeTexture;
-            }
-            if (skyboxInfo.sphericalPolynomial) {
-                cubeTexture.sphericalPolynomial = SphericalPolynomial.FromArray(skyboxInfo.sphericalPolynomial);
-            }
-            if (skyboxInfo.exposure !== undefined) {
-                cubeTexture.level = skyboxInfo.exposure;
-            }
-            material.reflectionTexture = cubeTexture;
-        });
+        let skyboxT = VRNET_nodes_main._SkyboxCache[skyboxInfo.texture];
+        if (!skyboxT || skyboxT.loader !== this._loader) {
+            const deferred = new Deferred<void>();
+            skyboxT = { loader: this._loader, loadObservable: new Observable<CubeTexture>() };
+            VRNET_nodes_main._SkyboxCache[skyboxInfo.texture] = skyboxT;
+            this._loader.babylonScene._loadFile(
+                textureUrl,
+                (data) => {
+                    skyboxT.texture = new CubeTexture(textureUrl, this._loader.babylonScene, {
+                        noMipmap: false,
+                        buffer: new Uint8Array(data as ArrayBuffer),
+                        onLoad: () => deferred.resolve(),
+                        onError: () => deferred.reject(),
+                        prefiltered: false,
+                    });
+                    if (skyboxInfo.isRGBD) {
+                        skyboxT.texture.isRGBD = true;
+                    }
+                    skyboxT.texture.coordinatesMode = Texture.SKYBOX_MODE;
+                    if (isEnvironmentTexture) {
+                        this._loader.babylonScene.environmentTexture = skyboxT.texture;
+                    }
+                    if (skyboxInfo.sphericalPolynomial) {
+                        skyboxT.texture.sphericalPolynomial = SphericalPolynomial.FromArray(skyboxInfo.sphericalPolynomial);
+                    }
+                    if (skyboxInfo.exposure !== undefined) {
+                        skyboxT.texture.level = skyboxInfo.exposure;
+                    }
+                    material.reflectionTexture = skyboxT.texture;
+                },
+                undefined,
+                undefined,
+                true,
+                () => deferred.reject()
+            );
 
-        return deferred.promise.then(() => skybox);
+            return deferred.promise.then(() => skybox);
+        } else {
+            return new Promise<void>((resolve) => {
+                if (skyboxT.texture) {
+                    material.reflectionTexture = skyboxT.texture;
+                    resolve();
+                } else {
+                    skyboxT.loadObservable.add((texture) => {
+                        material.reflectionTexture = texture;
+                        resolve();
+                    });
+                }
+            }).then(() => skybox);
+        }
     }
 }
 

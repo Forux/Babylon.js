@@ -12,6 +12,7 @@ import { GLTFLoader } from "../glTFLoader";
 import type { IMaterialExtension, ITextureInfo as ITextureInfoBase } from "babylonjs-gltf2interface";
 import { BaseTexture } from "core/Materials/Textures/baseTexture";
 import { Deferred } from "core/Misc/deferred";
+import { Observable } from "core/Misc/observable";
 
 /**
  * adding needed property
@@ -79,8 +80,9 @@ export class VRNET_materials_main implements IGLTFLoaderExtension {
      */
     private static _ReflectionCache: {
         [key: string]: {
-            texture: CubeTexture;
+            texture?: CubeTexture;
             loader: GLTFLoader;
+            loadObservable: Observable<CubeTexture>;
         };
     } = {};
 
@@ -146,6 +148,8 @@ export class VRNET_materials_main implements IGLTFLoaderExtension {
                 if (!cubeT || cubeT.loader !== this._loader) {
                     const deferred = new Deferred<void>();
                     const probI = properties.reflectionProbeInfo;
+                    cubeT = { loader: this._loader, loadObservable: new Observable<CubeTexture>() };
+                    VRNET_materials_main._ReflectionCache[properties.reflectionProbeInfo.reflectionMapTexture] = cubeT;
 
                     this._loader.babylonScene._loadFile(
                         this._loader["_rootUrl"] + probI.reflectionMapTexture,
@@ -155,13 +159,10 @@ export class VRNET_materials_main implements IGLTFLoaderExtension {
                                 buffer: new Uint8Array(data as ArrayBuffer),
                                 onLoad: () => deferred.resolve(),
                                 onError: () => deferred.reject(),
-                                prefiltered: probI.prefiltered,
-                                lodScale: 0.8,
+                                prefiltered: false,
                             };
-                            cubeT = {
-                                loader: this._loader,
-                                texture: new CubeTexture(this._loader["_rootUrl"] + probI.reflectionMapTexture, this._loader.babylonScene, cubeTextureOptions),
-                            };
+                            cubeT.texture = new CubeTexture(this._loader["_rootUrl"] + probI.reflectionMapTexture, this._loader.babylonScene, cubeTextureOptions);
+                            cubeT.loadObservable.notifyObservers(cubeT.texture);
                             cubeT.texture.isRGBD = probI.isRGBD ? true : false;
                             cubeT.texture.name = (probI.reflectionMapTexture.split("/").pop() || probI.reflectionMapTexture) + `|ReflectionMap|${babylonMaterial.name}`;
                             if (probI.level) {
@@ -179,7 +180,6 @@ export class VRNET_materials_main implements IGLTFLoaderExtension {
                             if (probI.reflectionSphericalPolynomial) {
                                 cubeT.texture.sphericalPolynomial = SphericalPolynomial.FromArray(probI.reflectionSphericalPolynomial);
                             }
-                            VRNET_materials_main._ReflectionCache[properties.reflectionProbeInfo.reflectionMapTexture] = cubeT;
                             babylonMaterial.reflectionTexture = cubeT.texture;
                         },
                         undefined,
@@ -189,16 +189,24 @@ export class VRNET_materials_main implements IGLTFLoaderExtension {
                     );
 
                     promises.push(deferred.promise);
+                } else {
+                    promises.push(
+                        new Promise<void>((resolve) => {
+                            if (cubeT.texture) {
+                                babylonMaterial.reflectionTexture = cubeT.texture;
+                                resolve();
+                            } else {
+                                cubeT.loadObservable.add((texture) => {
+                                    babylonMaterial.reflectionTexture = texture;
+                                    resolve();
+                                });
+                            }
+                        })
+                    );
                 }
 
-                // babylonMaterial.ambientColor = Color3.White();
                 babylonMaterial.enableSpecularAntiAliasing = false;
             }
-        } else {
-            // babylonMaterial.unlit = true;
-            // purely experimentally selected multiplier to make the color of unlit material closer to the original
-            // pay attention that albedoColor here is in the linear space while gamma in inspector, so it's like multiplying by 0.75 in gamma
-            // babylonMaterial.albedoColor = babylonMaterial.albedoColor.multiplyByFloats(0.5, 0.5, 0.5);
         }
 
         return Promise.all(promises).then(() => {});

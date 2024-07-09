@@ -180,6 +180,7 @@ export class VRNET_materials_main implements IGLTFLoaderExtension {
                             if (probI.reflectionSphericalPolynomial) {
                                 cubeT.texture.sphericalPolynomial = SphericalPolynomial.FromArray(probI.reflectionSphericalPolynomial);
                             }
+                            cubeT.texture.gammaSpace = probI.prefiltered ? false : true;
                             babylonMaterial.reflectionTexture = cubeT.texture;
                         },
                         undefined,

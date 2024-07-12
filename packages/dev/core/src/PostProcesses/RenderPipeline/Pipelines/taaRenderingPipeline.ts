@@ -561,7 +561,7 @@ export class TAARenderingPipeline extends PostProcessRenderPipeline {
             //< VRNET
 
             effect._bindTexture("historySampler", this._pingpong ? this._ping.texture : this._pong.texture);
-            effect.setFloat("factor", (this.isCameraMoved() && this.disableOnCameraMove) || this._forcedUpdate ? 1 : this.factor);
+            effect.setFloat("factor", this.factor);
             effect.setFloat("errorFactor", this._aabbErrorFactor);
             effect.setBool("cameraMoved", this.isCameraMoved());
 

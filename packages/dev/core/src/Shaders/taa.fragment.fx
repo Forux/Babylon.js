@@ -40,14 +40,6 @@ uniform bool cameraMoved; // 1 - moved, 0 - not moved
         return vec3(r, g, b); // r = y + co/2 - cg/2, g = cg/2 + y, b = y - cg/2 - co/2
     }
 
-    // vec3 rgb2ycocg(vec3 rgb) {
-    //     return rgb; // y = b/4 + r/4 + g/2; co = r - b; cg = g - b/2 - r/2
-    // }
-
-    // vec3 ycocg2rgb(vec3 ycocg) {
-    //     return ycocg; // r = y + co/2 - cg/2, g = cg/2 + y, b = y - cg/2 - co/2
-    // }
-
     bool debug_clipToAABB(vec3 cOld, vec3 cNew, vec3 centre, vec3 halfSize) { //За мотивами https://www.dropbox.com/sh/dmye840y307lbpx/AAAnSryCBMKowISJPoGWiz5Fa/msalvi_temporal_supersampling.pptx?dl=0
         if (all(lessThanEqual(abs(cOld - centre), halfSize))) return false;
         return true;

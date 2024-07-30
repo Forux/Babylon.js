@@ -377,7 +377,7 @@ export class TAARenderingPipeline extends PostProcessRenderPipeline {
             { generateMipMaps: false, generateDepthBuffer: false, type: Constants.TEXTURETYPE_HALF_FLOAT, samplingMode: Constants.TEXTURE_NEAREST_NEAREST }
         );
 
-        this._hs.setDimensions(width / 2, height / 2);
+        this._hs.setDimensions(width, height);
         this._forcedUpdate = true;
     }
 

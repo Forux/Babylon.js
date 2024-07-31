@@ -521,11 +521,11 @@ export class TAARenderingPipeline extends PostProcessRenderPipeline {
                 //< VRNET
                 if (camera.mode === Camera.PERSPECTIVE_CAMERA) {
                     const projMat = camera.getProjectionMatrix();
-                    projMat.setRowFromFloats(2, this._hs.x, this._hs.y, projMat.m[10], projMat.m[11]);
+                    projMat.setRowFromFloats(2, this._hs.x * 2, this._hs.y * 2, projMat.m[10], projMat.m[11]);
                 } else {
                     // We must force the update of the projection matrix so that m[12] and m[13] are recomputed, as we modified them the previous frame
                     const projMat = camera.getProjectionMatrix(true);
-                    projMat.setRowFromFloats(3, this._hs.x + projMat.m[12], this._hs.y + projMat.m[13], projMat.m[14], projMat.m[15]);
+                    projMat.setRowFromFloats(3, this._hs.x * 2 + projMat.m[12], this._hs.y * 2 + projMat.m[13], projMat.m[14], projMat.m[15]);
                 }
             }
 
@@ -549,13 +549,18 @@ export class TAARenderingPipeline extends PostProcessRenderPipeline {
                     const depthIndex = prePassRenderer.getIndex(Constants.PREPASS_DEPTH_TEXTURE_TYPE);
                     effect.setTexture("depthSampler", prePassRenderer.getRenderTarget().textures[depthIndex]);
                 }
+                //reversing jitter
                 const viewProjection = TmpVectors.Matrix[0];
-                viewProjection.copyFrom(this._scene.getTransformMatrix());
+                const tmpProjectionMatrix = TmpVectors.Matrix[1];
+                tmpProjectionMatrix.copyFrom(this._scene.getProjectionMatrix());
+                tmpProjectionMatrix.setRowFromFloats(2, 0, 0, tmpProjectionMatrix.m[10], tmpProjectionMatrix.m[11]);
+                this._scene._viewMatrix.multiplyToRef(tmpProjectionMatrix, viewProjection);
+
                 viewProjection.invertToRef(this._invViewProjection!);
                 effect.setMatrix("inverseViewProjection", this._invViewProjection!);
                 effect.setMatrix("prevViewProjection", this._previousViewProjection!);
                 this._previousViewProjection!.copyFrom(viewProjection);
-                effect.setMatrix("projection", this._scene.getProjectionMatrix());
+                effect.setMatrix("projection", tmpProjectionMatrix);
             }
             this._doneSamples = this.isCameraMoved() ? 0 : this._doneSamples + 1;
             //< VRNET

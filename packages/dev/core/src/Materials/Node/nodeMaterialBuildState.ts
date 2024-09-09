@@ -148,7 +148,7 @@ export class NodeMaterialBuildState {
 
         if (this.shaderLanguage !== ShaderLanguage.WGSL) {
             this.compilationString = "precision highp float;\n" + this.compilationString;
-            this.compilationString = "#if defined(WEBGL2) || defines(WEBGPU)\nprecision highp sampler2DArray;\n#endif\n" + this.compilationString;
+            this.compilationString = "#if defined(WEBGL2) || defined(WEBGPU)\nprecision highp sampler2DArray;\n#endif\n" + this.compilationString;
 
             if (isFragmentMode) {
                 this.compilationString =
@@ -365,11 +365,12 @@ export class NodeMaterialBuildState {
             substitutionVars?: string;
         }
     ) {
+        const store = EngineShaderStore.GetIncludesShadersStore(this.shaderLanguage);
+
         if (options && options.repeatKey) {
             return `#include<${includeName}>${options.substitutionVars ? "(" + options.substitutionVars + ")" : ""}[0..${options.repeatKey}]\n`;
         }
 
-        const store = EngineShaderStore.GetIncludesShadersStore(this.shaderLanguage);
         let code = store[includeName] + "\n";
 
         if (this.sharedData.emitComments) {
@@ -411,6 +412,7 @@ export class NodeMaterialBuildState {
         if (this.functions[key]) {
             return;
         }
+        const store = EngineShaderStore.GetIncludesShadersStore(this.shaderLanguage);
 
         if (!options || (!options.removeAttributes && !options.removeUniforms && !options.removeVaryings && !options.removeIfDef && !options.replaceStrings)) {
             if (options && options.repeatKey) {
@@ -425,8 +427,6 @@ export class NodeMaterialBuildState {
 
             return;
         }
-
-        const store = EngineShaderStore.GetIncludesShadersStore(this.shaderLanguage);
 
         this.functions[key] = store[includeName];
 
@@ -550,7 +550,7 @@ export class NodeMaterialBuildState {
             return `select(${falseStatement}, ${trueStatement}, ${condition})`;
         }
 
-        return `${condition} ? ${trueStatement} : ${falseStatement}`;
+        return `(${condition}) ? ${trueStatement} : ${falseStatement}`;
     }
 
     /**
@@ -610,6 +610,17 @@ export class NodeMaterialBuildState {
             return "textureSampleLevel";
         }
         return "texture2DLodEXT";
+    }
+
+    public _toLinearSpace(output: NodeMaterialConnectionPoint) {
+        if (this.shaderLanguage === ShaderLanguage.WGSL) {
+            if (output.type === NodeMaterialBlockConnectionPointTypes.Color3 || output.type === NodeMaterialBlockConnectionPointTypes.Vector3) {
+                return `toLinearSpaceVec3(${output.associatedVariableName})`;
+            }
+
+            return `toLinearSpace(${output.associatedVariableName})`;
+        }
+        return `toLinearSpace(${output.associatedVariableName})`;
     }
 
     /**

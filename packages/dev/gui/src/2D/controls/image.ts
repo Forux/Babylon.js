@@ -25,7 +25,7 @@ export class Image extends Control {
     private _imageHeight: number;
     private _loaded = false;
     private _stretch = Image.STRETCH_FILL;
-    private _source: Nullable<string>;
+    private _source: Nullable<string> = null;
     private _autoScale = false;
 
     private _sourceLeft = 0;
@@ -587,6 +587,7 @@ export class Image extends Control {
         if (imgElement.style && this._source?.endsWith(".svg")) {
             imgElement.style.visibility = "hidden";
             imgElement.style.position = "absolute";
+            imgElement.style.top = "0";
             engine.getRenderingCanvas()?.parentNode?.appendChild(imgElement);
             addedToDom = true;
         }

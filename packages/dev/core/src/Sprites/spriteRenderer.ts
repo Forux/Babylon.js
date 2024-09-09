@@ -14,11 +14,10 @@ import type { Scene } from "../scene";
 import "../Engines/Extensions/engine.alpha";
 import "../Engines/Extensions/engine.dynamicBuffer";
 
-import "../Shaders/sprites.fragment";
-import "../Shaders/sprites.vertex";
 import type { ThinEngine } from "../Engines/thinEngine";
 import { Logger } from "core/Misc/logger";
 import { BindLogDepth } from "core/Materials/materialHelper.functions";
+import { ShaderLanguage } from "core/Materials/shaderLanguage";
 
 /**
  * Class used to render sprites.
@@ -26,6 +25,11 @@ import { BindLogDepth } from "core/Materials/materialHelper.functions";
  * It can be used either to render Sprites or ThinSprites with ThinEngine only.
  */
 export class SpriteRenderer {
+    /**
+     * Force all the sprites to compile to glsl even on WebGPU engines.
+     * False by default. This is mostly meant for backward compatibility.
+     */
+    public static ForceGLSL = false;
     /**
      * Defines the texture of the spritesheet
      */
@@ -127,6 +131,16 @@ export class SpriteRenderer {
         this._createEffects();
     }
 
+    /** Shader language used by the material */
+    protected _shaderLanguage = ShaderLanguage.GLSL;
+
+    /**
+     * Gets the shader language used in this renderer.
+     */
+    public get shaderLanguage(): ShaderLanguage {
+        return this._shaderLanguage;
+    }
+
     private readonly _engine: AbstractEngine;
     private readonly _useVAO: boolean = false;
     private readonly _useInstancing: boolean = false;
@@ -144,6 +158,7 @@ export class SpriteRenderer {
     private _drawWrapperBase: DrawWrapper;
     private _drawWrapperDepth: DrawWrapper;
     private _vertexArrayObject: WebGLVertexArrayObject;
+    private _isDisposed = false;
 
     /**
      * Creates a new sprite Renderer
@@ -198,10 +213,31 @@ export class SpriteRenderer {
         this._vertexBuffers["cellInfo"] = cellInfo;
         this._vertexBuffers[VertexBuffer.ColorKind] = colors;
 
+        this._initShaderSourceAsync();
+    }
+
+    private _shadersLoaded = false;
+
+    private async _initShaderSourceAsync() {
+        const engine = this._engine;
+
+        if (engine.isWebGPU && !SpriteRenderer.ForceGLSL) {
+            this._shaderLanguage = ShaderLanguage.WGSL;
+
+            await Promise.all([import("../ShadersWGSL/sprites.vertex"), import("../ShadersWGSL/sprites.fragment")]);
+        } else {
+            await Promise.all([import("../Shaders/sprites.vertex"), import("../Shaders/sprites.fragment")]);
+        }
+
+        this._shadersLoaded = true;
         this._createEffects();
     }
 
     private _createEffects() {
+        if (this._isDisposed) {
+            return;
+        }
+
         this._drawWrapperBase?.dispose();
         this._drawWrapperDepth?.dispose();
 
@@ -232,7 +268,12 @@ export class SpriteRenderer {
             [VertexBuffer.PositionKind, "options", "offsets", "inverts", "cellInfo", VertexBuffer.ColorKind],
             ["view", "projection", "textureInfos", "alphaTest", "vFogInfos", "vFogColor", "logarithmicDepthConstant"],
             ["diffuseSampler"],
-            defines
+            defines,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            this._shaderLanguage
         );
 
         this._drawWrapperDepth.effect = this._drawWrapperBase.effect;
@@ -254,7 +295,7 @@ export class SpriteRenderer {
         projectionMatrix: IMatrixLike,
         customSpriteUpdate: Nullable<(sprite: ThinSprite, baseSize: ISize) => void> = null
     ): void {
-        if (!this.texture || !this.texture.isReady() || !sprites.length) {
+        if (!this._shadersLoaded || !this.texture || !this.texture.isReady() || !sprites.length) {
             return;
         }
 
@@ -514,7 +555,8 @@ export class SpriteRenderer {
             this.texture.dispose();
             (<any>this.texture) = null;
         }
-        this._drawWrapperBase.dispose();
-        this._drawWrapperDepth.dispose();
+        this._drawWrapperBase?.dispose();
+        this._drawWrapperDepth?.dispose();
+        this._isDisposed = true;
     }
 }

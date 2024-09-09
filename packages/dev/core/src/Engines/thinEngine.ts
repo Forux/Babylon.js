@@ -42,8 +42,8 @@ import { IsWindowObjectExist } from "../Misc/domManagement";
 import { WebGLShaderProcessor } from "./WebGL/webGLShaderProcessors";
 import { WebGL2ShaderProcessor } from "./WebGL/webGL2ShaderProcessors";
 import { WebGLDataBuffer } from "../Meshes/WebGL/webGLDataBuffer";
-import { CeilingPOT, FloorPOT, GetExponentOfTwo, NearestPOT } from "../Misc/tools.functions";
-import { AbstractEngine, QueueNewFrame } from "./abstractEngine";
+import { GetExponentOfTwo } from "../Misc/tools.functions";
+import { AbstractEngine } from "./abstractEngine";
 import { Constants } from "./constants";
 import { WebGLHardwareTexture } from "./WebGL/webGLHardwareTexture";
 import { ShaderLanguage } from "../Materials/shaderLanguage";
@@ -147,13 +147,6 @@ export class ThinEngine extends AbstractEngine {
     public get version(): number {
         return this._webGLVersion;
     }
-
-    // Updatable statics so stick with vars here
-
-    /**
-     * Gets or sets the epsilon value used by collision engine
-     */
-    public static CollisionsEpsilon = 0.001;
 
     /**
      * Gets or sets the relative url used to load shaders if using the engine in non-minified mode
@@ -774,6 +767,7 @@ export class ThinEngine extends AbstractEngine {
             needTypeSuffixInShaderConstants: this._webGLVersion !== 1,
             supportMSAA: this._webGLVersion !== 1,
             supportSSAO2: this._webGLVersion !== 1,
+            supportIBLShadows: this._webGLVersion !== 1,
             supportExtendedTextureFormats: this._webGLVersion !== 1,
             supportSwitchCaseInShader: this._webGLVersion !== 1,
             supportSyncTextureRead: true,
@@ -1000,12 +994,13 @@ export class ThinEngine extends AbstractEngine {
             this.unBindFramebuffer(this._currentRenderTarget);
         }
         this._currentRenderTarget = rtWrapper;
-        this._bindUnboundFramebuffer(webglRTWrapper._MSAAFramebuffer ? webglRTWrapper._MSAAFramebuffer : webglRTWrapper._framebuffer);
+        this._bindUnboundFramebuffer(webglRTWrapper._framebuffer);
 
         const gl = this._gl;
         if (!rtWrapper.isMulti) {
             if (rtWrapper.is2DArray || rtWrapper.is3D) {
                 gl.framebufferTextureLayer(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, rtWrapper.texture!._hardwareTexture?.underlyingResource, lodLevel, layer);
+                webglRTWrapper._currentLOD = lodLevel;
             } else if (rtWrapper.isCube) {
                 gl.framebufferTexture2D(
                     gl.FRAMEBUFFER,
@@ -1039,6 +1034,10 @@ export class ThinEngine extends AbstractEngine {
             } else {
                 gl.framebufferTexture2D(gl.FRAMEBUFFER, attachment, gl.TEXTURE_2D, depthStencilTexture._hardwareTexture?.underlyingResource, lodLevel);
             }
+        }
+
+        if (webglRTWrapper._MSAAFramebuffer) {
+            this._bindUnboundFramebuffer(webglRTWrapper._MSAAFramebuffer);
         }
 
         if (this._cachedViewport && !forceFullscreenViewport) {
@@ -1080,7 +1079,7 @@ export class ThinEngine extends AbstractEngine {
         }
 
         // Cull face
-        const cullFace = this.cullBackFaces ?? cullBackFaces ?? true ? this._gl.BACK : this._gl.FRONT;
+        const cullFace = (this.cullBackFaces ?? cullBackFaces ?? true) ? this._gl.BACK : this._gl.FRONT;
         if (this._depthCullingState.cullFace !== cullFace || force) {
             this._depthCullingState.cullFace = cullFace;
         }
@@ -1902,6 +1901,7 @@ export class ThinEngine extends AbstractEngine {
      * @param onError defines a function to call when the effect creation has failed
      * @param indexParameters defines an object containing the index values to use to compile shaders (like the maximum number of simultaneous lights)
      * @param shaderLanguage the language the shader is written in (default: GLSL)
+     * @param extraInitializationsAsync additional async code to run before preparing the effect
      * @returns the new Effect
      */
     public createEffect(
@@ -1914,7 +1914,8 @@ export class ThinEngine extends AbstractEngine {
         onCompiled?: Nullable<(effect: Effect) => void>,
         onError?: Nullable<(effect: Effect, errors: string) => void>,
         indexParameters?: any,
-        shaderLanguage = ShaderLanguage.GLSL
+        shaderLanguage = ShaderLanguage.GLSL,
+        extraInitializationsAsync?: () => Promise<void>
     ): Effect {
         const vertex = typeof baseName === "string" ? baseName : baseName.vertexToken || baseName.vertexSource || baseName.vertexElement || baseName.vertex;
         const fragment = typeof baseName === "string" ? baseName : baseName.fragmentToken || baseName.fragmentSource || baseName.fragmentElement || baseName.fragment;
@@ -1932,7 +1933,7 @@ export class ThinEngine extends AbstractEngine {
             if (onCompiled && compiledEffect.isReady()) {
                 onCompiled(compiledEffect);
             }
-
+            compiledEffect._refCount++;
             return compiledEffect;
         }
         if (this._gl) {
@@ -1950,7 +1951,8 @@ export class ThinEngine extends AbstractEngine {
             onError,
             indexParameters,
             name,
-            (<IEffectCreationOptions>attributesNamesOrOptions).shaderLanguage ?? shaderLanguage
+            (<IEffectCreationOptions>attributesNamesOrOptions).shaderLanguage ?? shaderLanguage,
+            (<IEffectCreationOptions>attributesNamesOrOptions).extraInitializationsAsync ?? extraInitializationsAsync
         );
         this._compiledEffects[name] = effect;
 
@@ -2067,12 +2069,13 @@ export class ThinEngine extends AbstractEngine {
         vertexSourceCode: string,
         fragmentSourceCode: string,
         createAsRaw: boolean,
-        _rawVertexSourceCode: string,
-        _rawFragmentSourceCode: string,
+        rawVertexSourceCode: string,
+        rawFragmentSourceCode: string,
         rebuildRebind: any,
         defines: Nullable<string>,
         transformFeedbackVaryings: Nullable<string[]>,
-        _key: string
+        key: string,
+        onReady: () => void
     ) {
         const stateObject = getStateObject(this._gl);
         stateObject._contextWasLost = this._contextWasLost;
@@ -2086,12 +2089,13 @@ export class ThinEngine extends AbstractEngine {
             vertexSourceCode,
             fragmentSourceCode,
             createAsRaw,
-            _rawVertexSourceCode,
-            _rawFragmentSourceCode,
+            rawVertexSourceCode,
+            rawFragmentSourceCode,
             rebuildRebind,
             defines,
             transformFeedbackVaryings,
-            _key
+            key,
+            onReady
         );
     }
 
@@ -3407,7 +3411,7 @@ export class ThinEngine extends AbstractEngine {
         texture.isReady = true;
         texture.type = texture.type !== -1 ? texture.type : Constants.TEXTURETYPE_UNSIGNED_BYTE;
         texture.format =
-            texture.format !== -1 ? texture.format : format ?? (extension === ".jpg" && !texture._useSRGBBuffer ? Constants.TEXTUREFORMAT_RGB : Constants.TEXTUREFORMAT_RGBA);
+            texture.format !== -1 ? texture.format : (format ?? (extension === ".jpg" && !texture._useSRGBBuffer ? Constants.TEXTUREFORMAT_RGB : Constants.TEXTUREFORMAT_RGBA));
 
         if (
             processFunction(potWidth, potHeight, img, extension, texture, () => {
@@ -3421,6 +3425,34 @@ export class ThinEngine extends AbstractEngine {
         this._prepareWebGLTextureContinuation(texture, scene, noMipmap, isCompressed, samplingMode);
     }
 
+    public _getInternalFormatFromDepthTextureFormat(textureFormat: number, hasDepth: boolean, hasStencil: boolean): number {
+        const gl = this._gl;
+
+        if (!hasDepth) {
+            return gl.STENCIL_INDEX8;
+        }
+
+        const format: GLenum = hasStencil ? gl.DEPTH_STENCIL : gl.DEPTH_COMPONENT;
+        let internalFormat = format;
+        if (this.webGLVersion > 1) {
+            if (textureFormat === Constants.TEXTUREFORMAT_DEPTH16) {
+                internalFormat = gl.DEPTH_COMPONENT16;
+            } else if (textureFormat === Constants.TEXTUREFORMAT_DEPTH24) {
+                internalFormat = gl.DEPTH_COMPONENT24;
+            } else if (textureFormat === Constants.TEXTUREFORMAT_DEPTH24UNORM_STENCIL8 || textureFormat === Constants.TEXTUREFORMAT_DEPTH24_STENCIL8) {
+                internalFormat = hasStencil ? gl.DEPTH24_STENCIL8 : gl.DEPTH_COMPONENT24;
+            } else if (textureFormat === Constants.TEXTUREFORMAT_DEPTH32_FLOAT) {
+                internalFormat = gl.DEPTH_COMPONENT32F;
+            } else if (textureFormat === Constants.TEXTUREFORMAT_DEPTH32FLOAT_STENCIL8) {
+                internalFormat = hasStencil ? gl.DEPTH32F_STENCIL8 : gl.DEPTH_COMPONENT32F;
+            }
+        } else {
+            internalFormat = gl.DEPTH_COMPONENT16;
+        }
+
+        return internalFormat;
+    }
+
     /**
      * @internal
      */
@@ -3429,24 +3461,24 @@ export class ThinEngine extends AbstractEngine {
         generateDepthBuffer: boolean,
         width: number,
         height: number,
-        samples = 1
+        samples = 1,
+        depthTextureFormat?: number
     ): Nullable<WebGLRenderbuffer> {
         const gl = this._gl;
 
+        depthTextureFormat = depthTextureFormat ?? (generateStencilBuffer ? Constants.TEXTUREFORMAT_DEPTH24_STENCIL8 : Constants.TEXTUREFORMAT_DEPTH32_FLOAT);
+
+        const internalFormat = this._getInternalFormatFromDepthTextureFormat(depthTextureFormat, generateDepthBuffer, generateStencilBuffer);
+
         // Create the depth/stencil buffer
         if (generateStencilBuffer && generateDepthBuffer) {
-            return this._createRenderBuffer(width, height, samples, gl.DEPTH_STENCIL, gl.DEPTH24_STENCIL8, gl.DEPTH_STENCIL_ATTACHMENT);
+            return this._createRenderBuffer(width, height, samples, gl.DEPTH_STENCIL, internalFormat, gl.DEPTH_STENCIL_ATTACHMENT);
         }
         if (generateDepthBuffer) {
-            let depthFormat: GLenum = gl.DEPTH_COMPONENT16;
-            if (this._webGLVersion > 1) {
-                depthFormat = gl.DEPTH_COMPONENT32F;
-            }
-
-            return this._createRenderBuffer(width, height, samples, depthFormat, depthFormat, gl.DEPTH_ATTACHMENT);
+            return this._createRenderBuffer(width, height, samples, internalFormat, internalFormat, gl.DEPTH_ATTACHMENT);
         }
         if (generateStencilBuffer) {
-            return this._createRenderBuffer(width, height, samples, gl.STENCIL_INDEX8, gl.STENCIL_INDEX8, gl.STENCIL_ATTACHMENT);
+            return this._createRenderBuffer(width, height, samples, internalFormat, internalFormat, gl.STENCIL_ATTACHMENT);
         }
 
         return null;
@@ -3874,9 +3906,10 @@ export class ThinEngine extends AbstractEngine {
      * Force the engine to release all cached effects. This means that next effect compilation will have to be done completely even if a similar effect was already compiled
      */
     public releaseEffects() {
-        for (const name in this._compiledEffects) {
-            const webGLPipelineContext = this._compiledEffects[name].getPipelineContext() as WebGLPipelineContext;
-            this._deletePipelineContext(webGLPipelineContext);
+        const keys = Object.keys(this._compiledEffects);
+        for (const name of keys) {
+            const effect = this._compiledEffects[name];
+            effect.dispose();
         }
 
         this._compiledEffects = {};
@@ -4379,44 +4412,6 @@ export class ThinEngine extends AbstractEngine {
 
         return this._HasMajorPerformanceCaveat;
     }
-
-    /**
-     * Find the next highest power of two.
-     * @param x Number to start search from.
-     * @returns Next highest power of two.
-     */
-    public static CeilingPOT: (x: number) => number = CeilingPOT;
-
-    /**
-     * Find the next lowest power of two.
-     * @param x Number to start search from.
-     * @returns Next lowest power of two.
-     */
-    public static FloorPOT: (x: number) => number = FloorPOT;
-
-    /**
-     * Find the nearest power of two.
-     * @param x Number to start search from.
-     * @returns Next nearest power of two.
-     */
-    public static NearestPOT: (x: number) => number = NearestPOT;
-
-    /**
-     * Get the closest exponent of two
-     * @param value defines the value to approximate
-     * @param max defines the maximum value to return
-     * @param mode defines how to define the closest value
-     * @returns closest exponent of two of the given value
-     */
-    public static GetExponentOfTwo: (value: number, max: number, mode: number) => number = GetExponentOfTwo;
-
-    /**
-     * Queue a new function into the requested animation frame pool (ie. this function will be executed by the browser (or the javascript engine) for the next frame)
-     * @param func - the function to be called
-     * @param requester - the object that will request the next frame. Falls back to window.
-     * @returns frame number
-     */
-    public static QueueNewFrame: (func: () => void, requester?: any) => number = QueueNewFrame;
 }
 
 interface TexImageParameters {

@@ -214,14 +214,14 @@ function _loadShader(shader: any, key: string, optionalKey: string, callback: (d
     }
 
     // Direct source ?
-    if (shader.substr(0, 7) === "source:") {
-        callback(shader.substr(7));
+    if (shader.substring(0, 7) === "source:") {
+        callback(shader.substring(7));
         return;
     }
 
     // Base64 encoded ?
-    if (shader.substr(0, 7) === "base64:") {
-        const shaderBinary = window.atob(shader.substr(7));
+    if (shader.substring(0, 7) === "base64:") {
+        const shaderBinary = window.atob(shader.substring(7));
         callback(shaderBinary);
         return;
     }
@@ -281,7 +281,7 @@ export const createAndPreparePipelineContext = (
     createPipelineContext: typeof AbstractEngine.prototype.createPipelineContext,
     _preparePipelineContext: typeof AbstractEngine.prototype._preparePipelineContext,
     _executeWhenRenderingStateIsCompiled: typeof AbstractEngine.prototype._executeWhenRenderingStateIsCompiled
-) => {
+): IPipelineContext => {
     try {
         const pipelineContext: IPipelineContext = options.existingPipelineContext || createPipelineContext(options.shaderProcessingContext);
         pipelineContext._name = options.name;
@@ -290,6 +290,8 @@ export const createAndPreparePipelineContext = (
             stateObject.cachedPipelines[options.name] = pipelineContext;
         }
 
+        // Flagged as async as we may need to delay load some processing tools
+        // This does not break anything as the execution is waiting for _executeWhenRenderingStateIsCompiled
         _preparePipelineContext(
             pipelineContext,
             options.vertex,
@@ -300,12 +302,13 @@ export const createAndPreparePipelineContext = (
             options.rebuildRebind,
             options.defines,
             options.transformFeedbackVaryings,
-            ""
+            "",
+            () => {
+                _executeWhenRenderingStateIsCompiled(pipelineContext, () => {
+                    options.onRenderingStateCompiled?.(pipelineContext);
+                });
+            }
         );
-
-        _executeWhenRenderingStateIsCompiled(pipelineContext, () => {
-            options.onRenderingStateCompiled?.(pipelineContext);
-        });
 
         return pipelineContext;
     } catch (e) {

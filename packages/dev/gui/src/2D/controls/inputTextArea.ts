@@ -358,7 +358,7 @@ export class InputTextArea extends InputText {
                         relativeIndex = this._cursorInfo.relativeEndIndex;
                     }
 
-                    const currentText = currentLine.text.substr(0, relativeIndex);
+                    const currentText = currentLine.text.substring(0, relativeIndex);
                     const currentWidth = this._contextForBreakLines.measureText(currentText).width;
 
                     let upperWidth = 0;
@@ -372,7 +372,7 @@ export class InputTextArea extends InputText {
                         tmpIndex++;
                         upperLineRelativeIndex++;
                         previousWidth = Math.abs(currentWidth - upperWidth);
-                        upperWidth = this._contextForBreakLines.measureText(upperLine.text.substr(0, upperLineRelativeIndex)).width;
+                        upperWidth = this._contextForBreakLines.measureText(upperLine.text.substring(0, upperLineRelativeIndex)).width;
                     }
 
                     // Find closest move
@@ -430,7 +430,7 @@ export class InputTextArea extends InputText {
                         relativeIndex = this._cursorInfo.relativeEndIndex;
                     }
 
-                    const currentText = currentLine.text.substr(0, relativeIndex);
+                    const currentText = currentLine.text.substring(0, relativeIndex);
                     const currentWidth = this._contextForBreakLines.measureText(currentText).width;
 
                     let underWidth = 0;
@@ -443,7 +443,7 @@ export class InputTextArea extends InputText {
                         tmpIndex++;
                         underLineRelativeIndex++;
                         previousWidth = Math.abs(currentWidth - underWidth);
-                        underWidth = this._contextForBreakLines.measureText(underLine.text.substr(0, underLineRelativeIndex)).width;
+                        underWidth = this._contextForBreakLines.measureText(underLine.text.substring(0, underLineRelativeIndex)).width;
                     }
 
                     // Find closest move
@@ -769,8 +769,10 @@ export class InputTextArea extends InputText {
 
         this._cursorInfo.globalStartIndex += deltaIndex;
         this._cursorInfo.globalEndIndex = this._cursorInfo.globalStartIndex;
+        this._clickedCoordinateX = null;
+        this._clickedCoordinateY = null;
 
-        this._textHasChanged();
+        super._textHasChanged();
     }
 
     public override _draw(context: ICanvasRenderingContext): void {
@@ -863,7 +865,8 @@ export class InputTextArea extends InputText {
         if (this._isFocused) {
             // Render cursor
             if (!this._blinkIsEven || this._isTextHighlightOn) {
-                let cursorLeft = this._scrollLeft + context.measureText(this._lines[this._cursorInfo.currentLineIndex].text.substr(0, this._cursorInfo.relativeStartIndex)).width;
+                let cursorLeft =
+                    this._scrollLeft + context.measureText(this._lines[this._cursorInfo.currentLineIndex].text.substring(0, this._cursorInfo.relativeStartIndex)).width;
 
                 if (cursorLeft < this._clipTextLeft) {
                     this._scrollLeft += this._clipTextLeft - cursorLeft;
@@ -881,7 +884,7 @@ export class InputTextArea extends InputText {
                     this._scrollTop += this._clipTextTop - cursorTop;
                     cursorTop = this._clipTextTop;
                     this._markAsDirty();
-                } else if (cursorTop + this._fontOffset.height > this._clipTextTop + this._availableHeight) {
+                } else if (cursorTop + this._fontOffset.height > this._clipTextTop + this._availableHeight && this._availableHeight > this._fontOffset.height) {
                     this._scrollTop += this._clipTextTop + this._availableHeight - cursorTop - this._fontOffset.height;
                     cursorTop = this._clipTextTop + this._availableHeight - this._fontOffset.height;
                     this._markAsDirty();
@@ -927,7 +930,7 @@ export class InputTextArea extends InputText {
                     const begin = i === startLineIndex ? this._cursorInfo.relativeStartIndex : 0;
                     const end = i === endLineIndex ? this._cursorInfo.relativeEndIndex : line.text.length;
 
-                    const leftOffsetWidth = context.measureText(line.text.substr(0, begin)).width;
+                    const leftOffsetWidth = context.measureText(line.text.substring(0, begin)).width;
                     const selectedText = line.text.substring(begin, end);
                     const hightlightWidth = context.measureText(selectedText).width;
 
@@ -1077,7 +1080,7 @@ export class InputTextArea extends InputText {
                 while (currentSize < relativeXPosition && this._lines[this._cursorInfo.currentLineIndex].text.length > relativeIndex) {
                     relativeIndex++;
                     previousDist = Math.abs(relativeXPosition - currentSize);
-                    currentSize = this._contextForBreakLines.measureText(this._lines[this._cursorInfo.currentLineIndex].text.substr(0, relativeIndex)).width;
+                    currentSize = this._contextForBreakLines.measureText(this._lines[this._cursorInfo.currentLineIndex].text.substring(0, relativeIndex)).width;
                 }
 
                 // Find closest move
@@ -1129,7 +1132,10 @@ export class InputTextArea extends InputText {
 
                 this._cursorInfo.relativeStartIndex = this._cursorInfo.globalStartIndex - tmpLength;
 
-                if (this._highlightCursorInfo.initialStartIndex !== -1 && this._cursorInfo.globalStartIndex >= this._highlightCursorInfo.initialStartIndex) {
+                if (!this._isTextHighlightOn) {
+                    this._cursorInfo.relativeEndIndex = this._cursorInfo.relativeStartIndex;
+                    this._cursorInfo.globalEndIndex = this._cursorInfo.globalStartIndex;
+                } else if (this._highlightCursorInfo.initialStartIndex !== -1 && this._cursorInfo.globalStartIndex >= this._highlightCursorInfo.initialStartIndex) {
                     // Current line is at least below the initial highlight index
                     while (tmpLength + lineLength <= this._cursorInfo.globalEndIndex) {
                         tmpLength += lineLength;
@@ -1141,9 +1147,6 @@ export class InputTextArea extends InputText {
                     }
 
                     this._cursorInfo.relativeEndIndex = this._cursorInfo.globalEndIndex - tmpLength;
-                } else if (!this._isTextHighlightOn) {
-                    this._cursorInfo.relativeEndIndex = this._cursorInfo.relativeStartIndex;
-                    this._cursorInfo.globalEndIndex = this._cursorInfo.globalStartIndex;
                 }
             }
         }

@@ -19,10 +19,7 @@ import { DepthRenderer } from "../../../Rendering/depthRenderer";
 import type { ISize } from "../../../Maths/math.size";
 
 import "../postProcessRenderPipelineManagerSceneComponent";
-
-import "../../../Shaders/screenSpaceReflection2.fragment";
-import "../../../Shaders/screenSpaceReflection2Blur.fragment";
-import "../../../Shaders/screenSpaceReflection2BlurCombiner.fragment";
+import { ShaderLanguage } from "core/Materials/shaderLanguage";
 
 const trs = Matrix.Compose(new Vector3(0.5, 0.5, 0.5), Quaternion.Identity(), new Vector3(0.5, 0.5, 0.5));
 const trsWebGPU = Matrix.Compose(new Vector3(0.5, 0.5, 1), Quaternion.Identity(), new Vector3(0.5, 0.5, 0));
@@ -968,7 +965,19 @@ export class SSRRenderingPipeline extends PostProcessRenderPipeline {
             this._scene.getEngine(),
             false,
             "",
-            this._textureType
+            this._textureType,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            this._scene.getEngine().isWebGPU ? ShaderLanguage.WGSL : ShaderLanguage.GLSL,
+            (useWebGPU, list) => {
+                if (useWebGPU) {
+                    list.push(import("../../../ShadersWGSL/screenSpaceReflection2.fragment"));
+                } else {
+                    list.push(import("../../../Shaders/screenSpaceReflection2.fragment"));
+                }
+            }
         );
 
         this._updateEffectDefines();
@@ -1071,7 +1080,19 @@ export class SSRRenderingPipeline extends PostProcessRenderPipeline {
             engine,
             false,
             "",
-            this._textureType
+            this._textureType,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            this._scene.getEngine().isWebGPU ? ShaderLanguage.WGSL : ShaderLanguage.GLSL,
+            (useWebGPU, list) => {
+                if (useWebGPU) {
+                    list.push(import("../../../ShadersWGSL/screenSpaceReflection2Blur.fragment"));
+                } else {
+                    list.push(import("../../../Shaders/screenSpaceReflection2Blur.fragment"));
+                }
+            }
         );
         this._blurPostProcessX.autoClear = false;
 
@@ -1092,7 +1113,19 @@ export class SSRRenderingPipeline extends PostProcessRenderPipeline {
             engine,
             false,
             "",
-            this._textureType
+            this._textureType,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            this._scene.getEngine().isWebGPU ? ShaderLanguage.WGSL : ShaderLanguage.GLSL,
+            (useWebGPU, list) => {
+                if (useWebGPU) {
+                    list.push(import("../../../ShadersWGSL/screenSpaceReflection2Blur.fragment"));
+                } else {
+                    list.push(import("../../../Shaders/screenSpaceReflection2Blur.fragment"));
+                }
+            }
         );
         this._blurPostProcessY.autoClear = false;
 
@@ -1137,7 +1170,19 @@ export class SSRRenderingPipeline extends PostProcessRenderPipeline {
             engine,
             false,
             defines,
-            this._textureType
+            this._textureType,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            this._scene.getEngine().isWebGPU ? ShaderLanguage.WGSL : ShaderLanguage.GLSL,
+            (useWebGPU, list) => {
+                if (useWebGPU) {
+                    list.push(import("../../../ShadersWGSL/screenSpaceReflection2BlurCombiner.fragment"));
+                } else {
+                    list.push(import("../../../Shaders/screenSpaceReflection2BlurCombiner.fragment"));
+                }
+            }
         );
         this._blurCombinerPostProcess.autoClear = false;
 

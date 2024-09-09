@@ -2,7 +2,6 @@
 import { Logger } from "../Misc/logger";
 import type { Nullable, DataArray, IndicesArray, Immutable, FloatArray } from "../types";
 import { Color4 } from "../Maths/math";
-import { Engine } from "../Engines/engine";
 import { InternalTexture, InternalTextureSource } from "../Materials/Textures/internalTexture";
 import type { IEffectCreationOptions, IShaderPath } from "../Materials/effect";
 import { Effect } from "../Materials/effect";
@@ -59,8 +58,6 @@ import type { WebGPURenderTargetWrapper } from "./WebGPU/webgpuRenderTargetWrapp
 
 import "../Buffers/buffer.align";
 
-import "../ShadersWGSL/postprocess.vertex";
-
 import type { VideoTexture } from "../Materials/Textures/videoTexture";
 import type { RenderTargetTexture } from "../Materials/Textures/renderTargetTexture";
 import type { RenderTargetWrapper } from "./renderTargetWrapper";
@@ -92,7 +89,6 @@ import { resetCachedPipeline } from "../Materials/effect.functions";
 import { WebGPUExternalTexture } from "./WebGPU/webgpuExternalTexture";
 import type { TextureSampler } from "../Materials/Textures/textureSampler";
 import type { StorageBuffer } from "../Buffers/storageBuffer";
-import { _WarnImport } from "core/Misc/devTools";
 
 const viewDescriptorSwapChainAntialiasing: GPUTextureViewDescriptor = {
     label: `TextureView_SwapChain_ResolveTarget`,
@@ -200,15 +196,12 @@ export interface WebGPUEngineOptions extends AbstractEngineOptions, GPURequestAd
  */
 export class WebGPUEngine extends AbstractEngine {
     // Default glslang options.
-    private static readonly _GLSLslangDefaultOptions: GlslangOptions = {
+    private static readonly _GlslangDefaultOptions: GlslangOptions = {
         jsPath: `${Tools._DefaultCdnUrl}/glslang/glslang.js`,
         wasmPath: `${Tools._DefaultCdnUrl}/glslang/glslang.wasm`,
     };
 
     private static _InstanceId = 0;
-
-    /** true to enable using TintWASM to convert Spir-V to WGSL */
-    public static UseTWGSL = true;
 
     /** A unique id to identify this instance */
     public readonly uniqueId = -1;
@@ -229,6 +222,7 @@ export class WebGPUEngine extends AbstractEngine {
     public _options: WebGPUEngineOptions;
     private _glslang: any = null;
     private _tintWASM: Nullable<WebGPUTintWASM> = null;
+    private _glslangAndTintAreFullyLoaded = false;
     private _adapter: GPUAdapter;
     private _adapterSupportedExtensions: GPUFeatureName[];
     private _adapterInfo: GPUAdapterInfo = {
@@ -626,7 +620,7 @@ export class WebGPUEngine extends AbstractEngine {
         options.deviceDescriptor = options.deviceDescriptor || {};
         options.enableGPUDebugMarkers = options.enableGPUDebugMarkers ?? false;
 
-        Logger.Log(`Babylon.js v${Engine.Version} - ${this.description} engine`);
+        Logger.Log(`Babylon.js v${AbstractEngine.Version} - ${this.description} engine`);
         if (!navigator.gpu) {
             Logger.Error("WebGPU is not supported by your browser.");
             return;
@@ -655,6 +649,28 @@ export class WebGPUEngine extends AbstractEngine {
     //------------------------------------------------------------------------------
     //                              Initialization
     //------------------------------------------------------------------------------
+    private _workingGlslangAndTintPromise: Nullable<Promise<void>> = null;
+
+    /**
+     * Load the glslang and tintWASM libraries and prepare them for use.
+     * @returns a promise that resolves when the engine is ready to use the glslang and tintWASM
+     */
+    public prepareGlslangAndTintAsync(): Promise<void> {
+        if (!this._workingGlslangAndTintPromise) {
+            this._workingGlslangAndTintPromise = new Promise<void>((resolve) => {
+                this._initGlslang(this._glslangOptions ?? this._options?.glslangOptions).then((glslang: any) => {
+                    this._glslang = glslang;
+                    this._tintWASM = new WebGPUTintWASM();
+                    this._tintWASM.initTwgsl(this._twgslOptions ?? this._options?.twgslOptions).then(() => {
+                        this._glslangAndTintAreFullyLoaded = true;
+                        resolve();
+                    });
+                });
+            });
+        }
+
+        return this._workingGlslangAndTintPromise;
+    }
 
     /**
      * Initializes the WebGPU context and dependencies.
@@ -666,16 +682,8 @@ export class WebGPUEngine extends AbstractEngine {
         (this.uniqueId as number) = WebGPUEngine._InstanceId++;
         this._glslangOptions = glslangOptions;
         this._twgslOptions = twgslOptions;
-        return this._initGlslang(glslangOptions ?? this._options?.glslangOptions)
-            .then((glslang: any) => {
-                this._glslang = glslang;
-                this._tintWASM = WebGPUEngine.UseTWGSL ? new WebGPUTintWASM() : null;
-                return this._tintWASM
-                    ? this._tintWASM.initTwgsl(twgslOptions ?? this._options?.twgslOptions).then(() => {
-                          return navigator.gpu!.requestAdapter(this._options);
-                      })
-                    : navigator.gpu!.requestAdapter(this._options);
-            })
+        return navigator
+            .gpu!.requestAdapter(this._options)
             .then((adapter: GPUAdapter | undefined) => {
                 if (!adapter) {
                     // eslint-disable-next-line no-throw-literal
@@ -769,8 +777,10 @@ export class WebGPUEngine extends AbstractEngine {
                 }
             })
             .then(() => {
+                this._initializeLimits();
+
                 this._bufferManager = new WebGPUBufferManager(this, this._device);
-                this._textureHelper = new WebGPUTextureManager(this, this._device, this._glslang, this._tintWASM, this._bufferManager, this._deviceEnabledExtensions);
+                this._textureHelper = new WebGPUTextureManager(this, this._device, this._bufferManager, this._deviceEnabledExtensions);
                 this._cacheSampler = new WebGPUCacheSampler(this._device);
                 this._cacheBindGroups = new WebGPUCacheBindGroups(this._device, this._cacheSampler, this);
                 this._timestampQuery = new WebGPUTimestampQuery(this, this._device, this._bufferManager);
@@ -798,8 +808,6 @@ export class WebGPUEngine extends AbstractEngine {
 
                 this._uploadEncoder = this._device.createCommandEncoder(this._uploadEncoderDescriptor);
                 this._renderEncoder = this._device.createCommandEncoder(this._renderEncoderDescriptor);
-
-                this._initializeLimits();
 
                 this._emptyVertexBuffer = new VertexBuffer(this, [0], "", {
                     stride: 1,
@@ -839,7 +847,7 @@ export class WebGPUEngine extends AbstractEngine {
     private _initGlslang(glslangOptions?: GlslangOptions): Promise<any> {
         glslangOptions = glslangOptions || {};
         glslangOptions = {
-            ...WebGPUEngine._GLSLslangDefaultOptions,
+            ...WebGPUEngine._GlslangDefaultOptions,
             ...glslangOptions,
         };
 
@@ -935,6 +943,7 @@ export class WebGPUEngine extends AbstractEngine {
             needTypeSuffixInShaderConstants: true,
             supportMSAA: true,
             supportSSAO2: true,
+            supportIBLShadows: true,
             supportExtendedTextureFormats: true,
             supportSwitchCaseInShader: true,
             supportSyncTextureRead: false,
@@ -1252,8 +1261,8 @@ export class WebGPUEngine extends AbstractEngine {
     /**
      * @internal
      */
-    public _getShaderProcessingContext(shaderLanguage: ShaderLanguage): Nullable<ShaderProcessingContext> {
-        return new WebGPUShaderProcessingContext(shaderLanguage);
+    public _getShaderProcessingContext(shaderLanguage: ShaderLanguage, pureMode: boolean): Nullable<ShaderProcessingContext> {
+        return new WebGPUShaderProcessingContext(shaderLanguage, pureMode);
     }
 
     private _currentPassIsMainPass() {
@@ -1910,6 +1919,7 @@ export class WebGPUEngine extends AbstractEngine {
      * @param onError defines a function to call when the effect creation has failed
      * @param indexParameters defines an object containing the index values to use to compile shaders (like the maximum number of simultaneous lights)
      * @param shaderLanguage the language the shader is written in (default: GLSL)
+     * @param extraInitializationsAsync additional async code to run before preparing the effect
      * @returns the new Effect
      */
     public createEffect(
@@ -1922,7 +1932,8 @@ export class WebGPUEngine extends AbstractEngine {
         onCompiled?: Nullable<(effect: Effect) => void>,
         onError?: Nullable<(effect: Effect, errors: string) => void>,
         indexParameters?: any,
-        shaderLanguage = ShaderLanguage.GLSL
+        shaderLanguage = ShaderLanguage.GLSL,
+        extraInitializationsAsync?: () => Promise<void>
     ): Effect {
         const vertex = typeof baseName === "string" ? baseName : baseName.vertexToken || baseName.vertexSource || baseName.vertexElement || baseName.vertex;
         const fragment = typeof baseName === "string" ? baseName : baseName.fragmentToken || baseName.fragmentSource || baseName.fragmentElement || baseName.fragment;
@@ -1940,7 +1951,7 @@ export class WebGPUEngine extends AbstractEngine {
             if (onCompiled && compiledEffect.isReady()) {
                 onCompiled(compiledEffect);
             }
-
+            compiledEffect._refCount++;
             return compiledEffect;
         }
         const effect = new Effect(
@@ -1955,7 +1966,8 @@ export class WebGPUEngine extends AbstractEngine {
             onError,
             indexParameters,
             name,
-            (<IEffectCreationOptions>attributesNamesOrOptions).shaderLanguage ?? shaderLanguage
+            (<IEffectCreationOptions>attributesNamesOrOptions).shaderLanguage ?? shaderLanguage,
+            (<IEffectCreationOptions>attributesNamesOrOptions).extraInitializationsAsync ?? extraInitializationsAsync
         );
         this._compiledEffects[name] = effect;
 
@@ -1994,12 +2006,14 @@ export class WebGPUEngine extends AbstractEngine {
         return {
             vertexStage: {
                 module: this._device.createShaderModule({
+                    label: "vertex",
                     code: vertexShader,
                 }),
                 entryPoint: "main",
             },
             fragmentStage: {
                 module: this._device.createShaderModule({
+                    label: "fragment",
                     code: fragmentShader,
                 }),
                 entryPoint: "main",
@@ -2099,18 +2113,25 @@ export class WebGPUEngine extends AbstractEngine {
     /**
      * @internal
      */
-    public _preparePipelineContext(
+    public async _preparePipelineContext(
         pipelineContext: IPipelineContext,
         vertexSourceCode: string,
         fragmentSourceCode: string,
         createAsRaw: boolean,
         rawVertexSourceCode: string,
         rawFragmentSourceCode: string,
-        rebuildRebind: any,
-        defines: Nullable<string>
+        _rebuildRebind: any,
+        defines: Nullable<string>,
+        _transformFeedbackVaryings: Nullable<string[]>,
+        _key: string,
+        onReady: () => void
     ) {
         const webGpuContext = pipelineContext as WebGPUPipelineContext;
         const shaderLanguage = webGpuContext.shaderProcessingContext.shaderLanguage;
+
+        if (shaderLanguage === ShaderLanguage.GLSL && !this._glslangAndTintAreFullyLoaded) {
+            await this.prepareGlslangAndTintAsync();
+        }
 
         if (this.dbgShowShaderCode) {
             Logger.Log(["defines", defines]);
@@ -2131,6 +2152,8 @@ export class WebGPUEngine extends AbstractEngine {
         } else {
             webGpuContext.stages = this._compilePipelineStageDescriptor(vertexSourceCode, fragmentSourceCode, defines, shaderLanguage);
         }
+
+        onReady();
     }
 
     /**
@@ -2434,7 +2457,7 @@ export class WebGPUEngine extends AbstractEngine {
                 texture.baseHeight = imageBitmap.height;
                 texture.width = imageBitmap.width;
                 texture.height = imageBitmap.height;
-                texture.format = texture.format !== -1 ? texture.format : format ?? Constants.TEXTUREFORMAT_RGBA;
+                texture.format = texture.format !== -1 ? texture.format : (format ?? Constants.TEXTUREFORMAT_RGBA);
                 texture.type = texture.type !== -1 ? texture.type : Constants.TEXTURETYPE_UNSIGNED_BYTE;
                 texture._creationFlags = creationFlags ?? 0;
 
@@ -3632,7 +3655,7 @@ export class WebGPUEngine extends AbstractEngine {
         }
 
         // Cull face
-        const cullFace = this.cullBackFaces ?? cullBackFaces ?? true ? 1 : 2;
+        const cullFace = (this.cullBackFaces ?? cullBackFaces ?? true) ? 1 : 2;
         if (this._depthCullingState.cullFace !== cullFace || force) {
             this._depthCullingState.cullFace = cullFace;
         }

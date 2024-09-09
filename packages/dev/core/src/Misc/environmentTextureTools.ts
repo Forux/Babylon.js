@@ -2,7 +2,7 @@
 import type { Nullable } from "../types";
 import { Tools } from "./tools";
 import { Vector3 } from "../Maths/math.vector";
-import { Scalar } from "../Maths/math.scalar";
+import { ILog2 } from "../Maths/math.scalar.functions";
 import { SphericalPolynomial } from "../Maths/sphericalPolynomial";
 import { InternalTexture, InternalTextureSource } from "../Materials/Textures/internalTexture";
 import { BaseTexture } from "../Materials/Textures/baseTexture";
@@ -18,9 +18,8 @@ import "../Engines/Extensions/engine.renderTargetCube";
 import "../Engines/Extensions/engine.readTexture";
 import "../Materials/Textures/baseTexture.polynomial";
 
-import "../Shaders/rgbdEncode.fragment";
-import "../Shaders/rgbdDecode.fragment";
-import { DumpTools } from "../Misc/dumpTools";
+import { DumpDataAsync } from "../Misc/dumpTools";
+import { ShaderLanguage } from "core/Materials";
 
 const DefaultEnvironmentTextureImageType = "image/png";
 const CurrentVersion = 2;
@@ -263,7 +262,7 @@ export async function CreateEnvTextureAsync(texture: BaseTexture, options: Creat
     engine.flushFramebuffer();
 
     // Read and collect all mipmaps data from the cube.
-    const mipmapsCount = Scalar.ILog2(internalTexture.width);
+    const mipmapsCount = ILog2(internalTexture.width);
     for (let i = 0; i <= mipmapsCount; i++) {
         const faceWidth = Math.pow(2, mipmapsCount - i);
 
@@ -302,7 +301,7 @@ export async function CreateEnvTextureAsync(texture: BaseTexture, options: Creat
 
             const rgbdEncodedData = await engine._readTexturePixels(tempTexture, faceWidth, faceWidth);
 
-            const imageEncodedData = await DumpTools.DumpDataAsync(faceWidth, faceWidth, rgbdEncodedData, imageType, undefined, false, true, options.imageQuality);
+            const imageEncodedData = await DumpDataAsync(faceWidth, faceWidth, rgbdEncodedData, imageType, undefined, false, true, options.imageQuality);
 
             specularTextures[i * 6 + face] = imageEncodedData as ArrayBuffer;
 
@@ -420,7 +419,7 @@ export function CreateImageDataArrayBufferViews(data: ArrayBufferView, info: Env
     const specularInfo = info.specular as EnvironmentTextureSpecularInfoV1;
 
     // Double checks the enclosed info
-    let mipmapsCount = Scalar.Log2(info.width);
+    let mipmapsCount = Math.log2(info.width);
     mipmapsCount = Math.round(mipmapsCount) + 1;
     if (specularInfo.mipmaps.length !== 6 * mipmapsCount) {
         throw new Error(`Unsupported specular mipmaps number "${specularInfo.mipmaps.length}"`);
@@ -489,25 +488,27 @@ function _OnImageReadyAsync(
                 image
             );
 
-            rgbdPostProcess!.getEffect().executeWhenCompiled(() => {
-                // Uncompress the data to a RTT
-                rgbdPostProcess!.externalTextureSamplerBinding = true;
-                rgbdPostProcess!.onApply = (effect) => {
-                    effect._bindTexture("textureSampler", tempTexture);
-                    effect.setFloat2("scale", 1, engine._features.needsInvertingBitmap && image instanceof ImageBitmap ? -1 : 1);
-                };
+            rgbdPostProcess?.onEffectCreatedObservable.addOnce((effect) => {
+                effect.executeWhenCompiled(() => {
+                    // Uncompress the data to a RTT
+                    rgbdPostProcess!.externalTextureSamplerBinding = true;
+                    rgbdPostProcess!.onApply = (effect) => {
+                        effect._bindTexture("textureSampler", tempTexture);
+                        effect.setFloat2("scale", 1, engine._features.needsInvertingBitmap && image instanceof ImageBitmap ? -1 : 1);
+                    };
 
-                if (!engine.scenes.length) {
-                    return;
-                }
+                    if (!engine.scenes.length) {
+                        return;
+                    }
 
-                engine.scenes[0].postProcessManager.directRender([rgbdPostProcess!], cubeRtt, true, face, i);
+                    engine.scenes[0].postProcessManager.directRender([rgbdPostProcess!], cubeRtt, true, face, i);
 
-                // Cleanup
-                engine.restoreDefaultFramebuffer();
-                tempTexture.dispose();
-                URL.revokeObjectURL(url);
-                resolve();
+                    // Cleanup
+                    engine.restoreDefaultFramebuffer();
+                    tempTexture.dispose();
+                    URL.revokeObjectURL(url);
+                    resolve();
+                });
             });
         } else {
             engine._uploadImageToTexture(texture, image, face, i);
@@ -531,12 +532,12 @@ function _OnImageReadyAsync(
  * @param imageType the mime type of the image data
  * @returns a promise
  */
-export function UploadLevelsAsync(texture: InternalTexture, imageData: ArrayBufferView[][], imageType: string = DefaultEnvironmentTextureImageType): Promise<void> {
+export async function UploadLevelsAsync(texture: InternalTexture, imageData: ArrayBufferView[][], imageType: string = DefaultEnvironmentTextureImageType): Promise<void> {
     if (!Tools.IsExponentOfTwo(texture.width)) {
         throw new Error("Texture size must be a power of two");
     }
 
-    const mipmapsCount = Scalar.ILog2(texture.width) + 1;
+    const mipmapsCount = ILog2(texture.width) + 1;
 
     // Gets everything ready.
     const engine = texture.getEngine() as Engine;
@@ -575,7 +576,15 @@ export function UploadLevelsAsync(texture: InternalTexture, imageData: ArrayBuff
     }
 
     // Expand the texture if possible
+    let shaderLanguage = ShaderLanguage.GLSL;
     if (expandTexture) {
+        if (engine.isWebGPU) {
+            shaderLanguage = ShaderLanguage.WGSL;
+            await import("../ShadersWGSL/rgbdDecode.fragment");
+        } else {
+            await import("../Shaders/rgbdDecode.fragment");
+        }
+
         // Simply run through the decode PP
         rgbdPostProcess = new PostProcess(
             "rgbdDecode",
@@ -591,7 +600,9 @@ export function UploadLevelsAsync(texture: InternalTexture, imageData: ArrayBuff
             texture.type,
             undefined,
             null,
-            false
+            false,
+            undefined,
+            shaderLanguage
         );
 
         texture._isRGBD = false;

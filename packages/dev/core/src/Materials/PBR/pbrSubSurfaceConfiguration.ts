@@ -9,7 +9,6 @@ import type { RenderTargetTexture } from "../../Materials/Textures/renderTargetT
 import { MaterialFlags } from "../materialFlags";
 import type { UniformBuffer } from "../../Materials/uniformBuffer";
 import type { EffectFallbacks } from "../effectFallbacks";
-import { Scalar } from "../../Maths/math.scalar";
 import type { CubeTexture } from "../Textures/cubeTexture";
 import { TmpVectors } from "../../Maths/math.vector";
 import type { SubMesh } from "../../Meshes/subMesh";
@@ -350,6 +349,14 @@ export class PBRSubSurfaceConfiguration extends MaterialPluginBase {
         this._internalMarkScenePrePassDirty();
     }
 
+    /**
+     * Gets a boolean indicating that the plugin is compatible with a given shader language.
+     * @returns true if the plugin is compatible with the shader language
+     */
+    public override isCompatible(): boolean {
+        return true;
+    }
+
     constructor(material: PBRBaseMaterial, addToPluginList = true) {
         super(material, "PBRSubSurface", 130, new MaterialSubSurfaceDefines(), addToPluginList);
 
@@ -375,6 +382,12 @@ export class PBRSubSurfaceConfiguration extends MaterialPluginBase {
 
                 if (this._translucencyColorTexture && MaterialFlags.TranslucencyColorTextureEnabled) {
                     if (!this._translucencyColorTexture.isReadyOrNotBlocking()) {
+                        return false;
+                    }
+                }
+
+                if (this._translucencyIntensityTexture && MaterialFlags.TranslucencyIntensityTextureEnabled) {
+                    if (!this._translucencyIntensityTexture.isReadyOrNotBlocking()) {
                         return false;
                     }
                 }
@@ -513,11 +526,14 @@ export class PBRSubSurfaceConfiguration extends MaterialPluginBase {
             return;
         }
 
-        subMesh.getRenderingMesh().getWorldMatrix().decompose(TmpVectors.Vector3[0]);
-
-        const thicknessScale = Math.max(Math.abs(TmpVectors.Vector3[0].x), Math.abs(TmpVectors.Vector3[0].y), Math.abs(TmpVectors.Vector3[0].z));
-
-        uniformBuffer.updateFloat2("vThicknessParam", this.minimumThickness * thicknessScale, (this.maximumThickness - this.minimumThickness) * thicknessScale);
+        // If min/max thickness is 0, avoid decompising to determine the scaled thickness (it's always zero).
+        if (this.maximumThickness === 0.0 && this.minimumThickness === 0.0) {
+            uniformBuffer.updateFloat2("vThicknessParam", 0, 0);
+        } else {
+            subMesh.getRenderingMesh().getWorldMatrix().decompose(TmpVectors.Vector3[0]);
+            const thicknessScale = Math.max(Math.abs(TmpVectors.Vector3[0].x), Math.abs(TmpVectors.Vector3[0].y), Math.abs(TmpVectors.Vector3[0].z));
+            uniformBuffer.updateFloat2("vThicknessParam", this.minimumThickness * thicknessScale, (this.maximumThickness - this.minimumThickness) * thicknessScale);
+        }
     }
 
     public override bindForSubMesh(uniformBuffer: UniformBuffer, scene: Scene, engine: Engine, subMesh: SubMesh): void {
@@ -549,6 +565,11 @@ export class PBRSubSurfaceConfiguration extends MaterialPluginBase {
                 BindTextureMatrix(this._translucencyColorTexture, uniformBuffer, "translucencyColor");
             }
 
+            if (this._translucencyIntensityTexture && MaterialFlags.TranslucencyIntensityTextureEnabled && defines.SS_TRANSLUCENCYINTENSITY_TEXTURE) {
+                uniformBuffer.updateFloat2("vTranslucencyIntensityInfos", this._translucencyIntensityTexture.coordinatesIndex, this._translucencyIntensityTexture.level);
+                BindTextureMatrix(this._translucencyIntensityTexture, uniformBuffer, "translucencyIntensity");
+            }
+
             if (refractionTexture && MaterialFlags.RefractionTextureEnabled) {
                 uniformBuffer.updateMatrix("refractionMatrix", refractionTexture.getRefractionTextureMatrix());
 
@@ -571,7 +592,7 @@ export class PBRSubSurfaceConfiguration extends MaterialPluginBase {
                 );
 
                 if (realTimeFiltering) {
-                    uniformBuffer.updateFloat2("vRefractionFilteringInfo", width, Scalar.Log2(width));
+                    uniformBuffer.updateFloat2("vRefractionFilteringInfo", width, Math.log2(width));
                 }
 
                 if ((<any>refractionTexture).boundingBoxSize) {
@@ -704,6 +725,10 @@ export class PBRSubSurfaceConfiguration extends MaterialPluginBase {
         if (this._translucencyColorTexture) {
             activeTextures.push(this._translucencyColorTexture);
         }
+
+        if (this._translucencyIntensityTexture) {
+            activeTextures.push(this._translucencyIntensityTexture);
+        }
     }
 
     public override getAnimatables(animatables: IAnimatable[]): void {
@@ -717,6 +742,10 @@ export class PBRSubSurfaceConfiguration extends MaterialPluginBase {
 
         if (this._translucencyColorTexture && this._translucencyColorTexture.animations && this._translucencyColorTexture.animations.length > 0) {
             animatables.push(this._translucencyColorTexture);
+        }
+
+        if (this._translucencyIntensityTexture && this._translucencyIntensityTexture.animations && this._translucencyIntensityTexture.animations.length > 0) {
+            animatables.push(this._translucencyIntensityTexture);
         }
     }
 
@@ -732,6 +761,10 @@ export class PBRSubSurfaceConfiguration extends MaterialPluginBase {
 
             if (this._translucencyColorTexture) {
                 this._translucencyColorTexture.dispose();
+            }
+
+            if (this._translucencyIntensityTexture) {
+                this._translucencyIntensityTexture.dispose();
             }
         }
     }

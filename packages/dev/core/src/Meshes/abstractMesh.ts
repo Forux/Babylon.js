@@ -5,7 +5,6 @@ import type { Scene, IDisposable } from "../scene";
 import { ScenePerformancePriority } from "../scene";
 import type { Vector2 } from "../Maths/math.vector";
 import { Quaternion, Matrix, Vector3, TmpVectors } from "../Maths/math.vector";
-import { Engine } from "../Engines/engine";
 import type { Node } from "../node";
 import { VertexBuffer } from "../Buffers/buffer";
 import type { IGetSetVerticesData } from "../Meshes/mesh.vertexData";
@@ -45,6 +44,7 @@ import type { RenderingGroup } from "../Rendering/renderingGroup";
 import type { IEdgesRendererOptions } from "../Rendering/edgesRenderer";
 import type { MorphTarget } from "../Morph/morphTarget";
 import { nativeOverride } from "../Misc/decorators";
+import { AbstractEngine } from "core/Engines/abstractEngine";
 
 function applyMorph(data: FloatArray, kind: string, morphTargetManager: MorphTargetManager): void {
     let getTargetData: Nullable<(target: MorphTarget) => Nullable<FloatArray>> = null;
@@ -231,6 +231,12 @@ class _InternalAbstractMeshDataInfo {
      * We use that as a clue to force the material to sideOrientation = null
      */
     public _sideOrientationHint = false;
+
+    /**
+     * @internal
+     * if this is set to true, the mesh will be visible only if its parent(s) are also visible
+     */
+    public _inheritVisibility = false;
 }
 
 /**
@@ -537,9 +543,40 @@ export abstract class AbstractMesh extends TransformNode implements IDisposable,
     public alphaIndex = Number.MAX_VALUE;
 
     /**
+     * If set to true, a mesh will only be visible only if its parent(s) are also visible (default is false)
+     */
+    public get inheritVisibility(): boolean {
+        return this._internalAbstractMeshDataInfo._inheritVisibility;
+    }
+
+    public set inheritVisibility(value: boolean) {
+        this._internalAbstractMeshDataInfo._inheritVisibility = value;
+    }
+
+    private _isVisible = true;
+    /**
      * Gets or sets a boolean indicating if the mesh is visible (renderable). Default is true
      */
-    public isVisible = true;
+    public get isVisible(): boolean {
+        if (!this._isVisible || !this.inheritVisibility || !this._parentNode) {
+            return this._isVisible;
+        }
+        if (this._isVisible) {
+            let parent: Nullable<Node> = this._parentNode;
+            while (parent) {
+                const parentVisible = (parent as AbstractMesh).isVisible;
+                if (typeof parentVisible !== "undefined") {
+                    return parentVisible;
+                }
+                parent = parent.parent;
+            }
+        }
+        return this._isVisible;
+    }
+
+    public set isVisible(value: boolean) {
+        this._isVisible = value;
+    }
 
     /**
      * Gets or sets a boolean indicating if the mesh can be picked (by scene.pick for instance or through actions). Default is true
@@ -1897,7 +1934,7 @@ export abstract class AbstractMesh extends TransformNode implements IDisposable,
             this._internalAbstractMeshDataInfo._meshCollisionData._diffPositionForCollisions
         );
 
-        if (this._internalAbstractMeshDataInfo._meshCollisionData._diffPositionForCollisions.length() > Engine.CollisionsEpsilon) {
+        if (this._internalAbstractMeshDataInfo._meshCollisionData._diffPositionForCollisions.length() > AbstractEngine.CollisionsEpsilon) {
             this.position.addInPlace(this._internalAbstractMeshDataInfo._meshCollisionData._diffPositionForCollisions);
         }
 

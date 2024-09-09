@@ -13,7 +13,7 @@ import { InstantiationTools } from "../../Misc/instantiationTools";
 import { Plane } from "../../Maths/math.plane";
 import { EncodeArrayBufferToBase64 } from "../../Misc/stringTools";
 import { GenerateBase64StringFromTexture, GenerateBase64StringFromTextureAsync } from "../../Misc/copyTools";
-import { CompatibilityOptions } from "../../Compat/compatibilityOptions";
+import { useOpenGLOrientationForUV } from "../../Compat/compatibilityOptions";
 import type { InternalTexture } from "./internalTexture";
 
 import type { CubeTexture } from "../../Materials/Textures/cubeTexture";
@@ -420,7 +420,7 @@ export class Texture extends BaseTexture {
 
         if (typeof noMipmapOrOptions === "object" && noMipmapOrOptions !== null) {
             noMipmap = noMipmapOrOptions.noMipmap ?? false;
-            invertY = noMipmapOrOptions.invertY ?? (CompatibilityOptions.UseOpenGLOrientationForUV ? false : true);
+            invertY = noMipmapOrOptions.invertY ?? !useOpenGLOrientationForUV;
             samplingMode = noMipmapOrOptions.samplingMode ?? Texture.TRILINEAR_SAMPLINGMODE;
             onLoad = noMipmapOrOptions.onLoad ?? null;
             onError = noMipmapOrOptions.onError ?? null;
@@ -439,7 +439,7 @@ export class Texture extends BaseTexture {
 
         this._gammaSpace = gammaSpace;
         this._noMipmap = noMipmap;
-        this._invertY = invertY === undefined ? (CompatibilityOptions.UseOpenGLOrientationForUV ? false : true) : invertY;
+        this._invertY = invertY === undefined ? !useOpenGLOrientationForUV : invertY;
         this._initialSamplingMode = samplingMode;
         this._buffer = buffer;
         this._deleteBuffer = deleteBuffer;
@@ -907,7 +907,7 @@ export class Texture extends BaseTexture {
         }
 
         if (Texture.SerializeBuffers || Texture.ForceSerializeBuffers) {
-            if (typeof this._buffer === "string" && (this._buffer as string).substr(0, 5) === "data:") {
+            if (typeof this._buffer === "string" && (this._buffer as string).substring(0, 5) === "data:") {
                 serializationObject.base64String = this._buffer;
                 serializationObject.name = serializationObject.name.replace("data:", "");
             } else if (this.url && this.url.startsWith("data:") && this._buffer instanceof Uint8Array) {
@@ -1206,7 +1206,7 @@ export class Texture extends BaseTexture {
         creationFlags?: number,
         forcedExtension?: string
     ): Texture {
-        if (name.substr(0, 5) !== "data:") {
+        if (name.substring(0, 5) !== "data:") {
             name = "data:" + name;
         }
 

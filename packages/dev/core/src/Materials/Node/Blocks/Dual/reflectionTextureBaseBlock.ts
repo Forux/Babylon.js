@@ -15,7 +15,6 @@ import { InputBlock } from "../Input/inputBlock";
 import { NodeMaterialSystemValues } from "../../Enums/nodeMaterialSystemValues";
 import { Constants } from "../../../../Engines/constants";
 
-import "../../../../Shaders/ShadersInclude/reflectionFunction";
 import { CubeTexture } from "../../../Textures/cubeTexture";
 import { Texture } from "../../../Textures/texture";
 import { EngineStore } from "../../../../Engines/engineStore";
@@ -173,6 +172,23 @@ export abstract class ReflectionTextureBaseBlock extends NodeMaterialBlock {
         return this.texture;
     }
 
+    public override initialize(state: NodeMaterialBuildState) {
+        this._initShaderSourceAsync(state.shaderLanguage);
+    }
+
+    private async _initShaderSourceAsync(shaderLanguage: ShaderLanguage) {
+        this._codeIsReady = false;
+
+        if (shaderLanguage === ShaderLanguage.WGSL) {
+            await import("../../../../ShadersWGSL/ShadersInclude/reflectionFunction");
+        } else {
+            await import("../../../../Shaders/ShadersInclude/reflectionFunction");
+        }
+
+        this._codeIsReady = true;
+        this.onCodeIsReadyObservable.notifyObservers(this);
+    }
+
     /**
      * Auto configure the node based on the existing material
      * @param material defines the material to configure
@@ -278,6 +294,7 @@ export abstract class ReflectionTextureBaseBlock extends NodeMaterialBlock {
             return "";
         }
 
+        const isWebGPU = state.shaderLanguage === ShaderLanguage.WGSL;
         this._define3DName = state._getFreeDefineName("REFLECTIONMAP_3D");
         this._defineCubicName = state._getFreeDefineName("REFLECTIONMAP_CUBIC");
         this._defineSphericalName = state._getFreeDefineName("REFLECTIONMAP_SPHERICAL");
@@ -296,7 +313,6 @@ export abstract class ReflectionTextureBaseBlock extends NodeMaterialBlock {
         state._emitUniformFromString(this._reflectionMatrixName, NodeMaterialBlockConnectionPointTypes.Matrix);
 
         let code = "";
-        const isWebGPU = state.shaderLanguage === ShaderLanguage.WGSL;
 
         this._worldPositionNameInFragmentOnlyMode = state._getFreeVariableName("worldPosition");
 
@@ -376,7 +392,7 @@ export abstract class ReflectionTextureBaseBlock extends NodeMaterialBlock {
         state._emitFunctionFromInclude("reflectionFunction", comments, {
             replaceStrings: [
                 { search: /vec3 computeReflectionCoords/g, replace: "void DUMMYFUNC" },
-                { search: /fn computeReflectionCoords/g, replace: "void DUMMYFUNC" },
+                { search: /fn computeReflectionCoords\(worldPos: vec4f,worldNormal: vec3f\)->vec3f/g, replace: "fn DUMMYFUNC()" },
             ],
         });
 
@@ -413,19 +429,14 @@ export abstract class ReflectionTextureBaseBlock extends NodeMaterialBlock {
         if (!worldPos) {
             worldPos = this.generateOnlyFragmentCode ? this._worldPositionNameInFragmentOnlyMode : `v_${this.worldPosition.associatedVariableName}`;
         }
-        let reflectionMatrix = this._reflectionMatrixName;
+        const isWebGPU = state.shaderLanguage === ShaderLanguage.WGSL;
+        const reflectionMatrix = (isWebGPU ? "uniforms." : "") + this._reflectionMatrixName;
         const direction = `normalize(${this._directionWName})`;
         const positionUVW = `${this._positionUVWName}`;
         const vEyePosition = `${this.cameraPosition.associatedVariableName}`;
         const view = `${this.view.associatedVariableName}`;
 
         worldNormalVarName += ".xyz";
-
-        if (state.shaderLanguage === ShaderLanguage.WGSL && !this.generateOnlyFragmentCode) {
-            worldPos = "fragmentInputs." + worldPos;
-
-            reflectionMatrix = "uniforms." + reflectionMatrix;
-        }
 
         let code = `
             #ifdef ${this._defineMirroredEquirectangularFixedName}

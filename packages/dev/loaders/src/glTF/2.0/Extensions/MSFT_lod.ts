@@ -9,8 +9,25 @@ import type { INode, IMaterial, IBuffer, IScene } from "../glTFLoaderInterfaces"
 import type { IGLTFLoaderExtension } from "../glTFLoaderExtension";
 import { GLTFLoader, ArrayItem } from "../glTFLoader";
 import type { IProperty, IMSFTLOD } from "babylonjs-gltf2interface";
+import { registerGLTFExtension, unregisterGLTFExtension } from "../glTFLoaderExtensionRegistry";
 
 const NAME = "MSFT_lod";
+
+declare module "../../glTFFileLoader" {
+    // eslint-disable-next-line jsdoc/require-jsdoc
+    export interface GLTFLoaderExtensionOptions {
+        /**
+         * Defines options for the MSFT_lod extension.
+         */
+        // NOTE: Don't use NAME here as it will break the UMD type declarations.
+        ["MSFT_lod"]: Partial<{
+            /**
+             * Maximum number of LODs to load, starting from the lowest LOD.
+             */
+            maxLODsToLoad: number;
+        }>;
+    }
+}
 
 interface IBufferInfo {
     start: number;
@@ -76,6 +93,9 @@ export class MSFT_lod implements IGLTFLoaderExtension {
      */
     constructor(loader: GLTFLoader) {
         this._loader = loader;
+        // Options takes precedence. The maxLODsToLoad extension property is retained for back compat.
+        // For new extensions, they should only use options.
+        this.maxLODsToLoad = this._loader.parent.extensionOptions[NAME]?.maxLODsToLoad ?? this.maxLODsToLoad;
         this.enabled = this._loader.isExtensionUsed(NAME);
     }
 
@@ -414,4 +434,5 @@ export class MSFT_lod implements IGLTFLoaderExtension {
     }
 }
 
-GLTFLoader.RegisterExtension(NAME, (loader) => new MSFT_lod(loader));
+unregisterGLTFExtension(NAME);
+registerGLTFExtension(NAME, true, (loader) => new MSFT_lod(loader));

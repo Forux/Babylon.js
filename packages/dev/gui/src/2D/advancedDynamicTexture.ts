@@ -152,6 +152,11 @@ export class AdvancedDynamicTexture extends DynamicTexture {
      * Defaults to false.
      */
     public disableTabNavigation = false;
+
+    /**
+     * If set to true, the POINTERTAP event type will be used for "click", instead of POINTERUP
+     */
+    public usePointerTapForClickEvent = false;
     /**
      * Gets or sets a number used to scale rendering size (2 means that the texture will be twice bigger).
      * Useful when you want more antialiasing
@@ -418,7 +423,17 @@ export class AdvancedDynamicTexture extends DynamicTexture {
         this._preKeyboardObserver = scene.onPreKeyboardObservable.add((info) => {
             // check if tab is pressed
             if (!this.disableTabNavigation && info.type === KeyboardEventTypes.KEYDOWN && info.event.code === "Tab") {
-                this._focusNextElement(!info.event.shiftKey);
+                const forward = !info.event.shiftKey;
+                if (
+                    (forward && this._focusProperties.index === this._focusProperties.total - 1) ||
+                    (!forward && this._focusProperties.index === 0 && this._focusProperties.total > 0)
+                ) {
+                    this.focusedControl = null;
+                    this._focusProperties.index = 0;
+                    this._focusProperties.total = -1;
+                    return;
+                }
+                this._focusNextElement(forward);
                 info.event.preventDefault();
                 return;
             }
@@ -974,7 +989,8 @@ export class AdvancedDynamicTexture extends DynamicTexture {
                 pi.type !== PointerEventTypes.POINTERMOVE &&
                 pi.type !== PointerEventTypes.POINTERUP &&
                 pi.type !== PointerEventTypes.POINTERDOWN &&
-                pi.type !== PointerEventTypes.POINTERWHEEL
+                pi.type !== PointerEventTypes.POINTERWHEEL &&
+                pi.type !== PointerEventTypes.POINTERTAP
             ) {
                 return;
             }
@@ -995,6 +1011,8 @@ export class AdvancedDynamicTexture extends DynamicTexture {
         this._attachToOnBlur(scene);
     }
 
+    private _focusProperties: { index: number; total: number } = { index: 0, total: -1 };
+
     private _focusNextElement(forward: boolean = true): void {
         // generate the order of tab-able controls
         const sortedTabbableControls: Control[] = [];
@@ -1012,19 +1030,22 @@ export class AdvancedDynamicTexture extends DynamicTexture {
             // if tabIndex is 0, put it in the end of the list, otherwise sort by tabIndex
             return a.tabIndex === 0 ? 1 : b.tabIndex === 0 ? -1 : a.tabIndex - b.tabIndex;
         });
+        this._focusProperties.total = sortedTabbableControls.length;
         // if no control is focused, focus the first one
+        let nextIndex = -1;
         if (!this._focusedControl) {
-            sortedTabbableControls[0].focus();
+            nextIndex = forward ? 0 : sortedTabbableControls.length - 1;
         } else {
             const currentIndex = sortedTabbableControls.indexOf(this._focusedControl);
-            let nextIndex = currentIndex + (forward ? 1 : -1);
+            nextIndex = currentIndex + (forward ? 1 : -1);
             if (nextIndex < 0) {
                 nextIndex = sortedTabbableControls.length - 1;
             } else if (nextIndex >= sortedTabbableControls.length) {
                 nextIndex = 0;
             }
-            sortedTabbableControls[nextIndex].focus();
         }
+        sortedTabbableControls[nextIndex].focus();
+        this._focusProperties.index = nextIndex;
     }
 
     /**

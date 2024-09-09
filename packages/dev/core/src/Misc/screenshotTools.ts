@@ -7,7 +7,7 @@ import { Constants } from "../Engines/constants";
 import { Logger } from "./logger";
 import { Tools } from "./tools";
 import type { IScreenshotSize } from "./interfaces/screenshotSize";
-import { DumpTools } from "./dumpTools";
+import { DumpData } from "./dumpTools";
 import type { Nullable } from "../types";
 import { ApplyPostProcess } from "./textureTools";
 
@@ -264,35 +264,24 @@ export function CreateScreenshotUsingRenderTarget(
             engine.onEndFrameObservable.addOnce(() => {
                 if (finalWidth === width && finalHeight === height) {
                     texture.readPixels(undefined, undefined, undefined, false)!.then((data) => {
-                        DumpTools.DumpData(width, height, data, successCallback as (data: string | ArrayBuffer) => void, mimeType, fileName, true, undefined, quality);
+                        DumpData(width, height, data, successCallback as (data: string | ArrayBuffer) => void, mimeType, fileName, true, undefined, quality);
                         texture.dispose();
                     });
                 } else {
                     ApplyPostProcess("pass", texture.getInternalTexture()!, scene, undefined, undefined, undefined, finalWidth, finalHeight).then((texture) => {
                         engine._readTexturePixels(texture, finalWidth, finalHeight, -1, 0, null, true, false, 0, 0).then((data) => {
-                            DumpTools.DumpData(
-                                finalWidth,
-                                finalHeight,
-                                data,
-                                successCallback as (data: string | ArrayBuffer) => void,
-                                mimeType,
-                                fileName,
-                                true,
-                                undefined,
-                                quality
-                            );
+                            DumpData(finalWidth, finalHeight, data, successCallback as (data: string | ArrayBuffer) => void, mimeType, fileName, true, undefined, quality);
                             texture.dispose();
                         });
                     });
                 }
             });
 
-            texture.render(true);
-
             // re-render the scene after the camera has been reset to the original camera to avoid a flicker that could occur
             // if the camera used for the RTT rendering stays in effect for the next frame (and if that camera was different from the original camera)
             scene.incrementRenderId();
             scene.resetCachedMaterial();
+            texture.render(true);
             engine.setSize(originalSize.width, originalSize.height);
             camera.getProjectionMatrix(true); // Force cache refresh;
             scene.render();
@@ -313,15 +302,17 @@ export function CreateScreenshotUsingRenderTarget(
         const fxaaPostProcess = new FxaaPostProcess("antialiasing", 1.0, scene.activeCamera);
         texture.addPostProcess(fxaaPostProcess);
         // Async Shader Compilation can lead to none ready effects in synchronous code
-        if (!fxaaPostProcess.getEffect().isReady()) {
-            fxaaPostProcess.getEffect().onCompiled = () => {
+        fxaaPostProcess.onEffectCreatedObservable.addOnce((e) => {
+            if (!e.isReady()) {
+                e.onCompiled = () => {
+                    renderToTexture();
+                };
+            }
+            // The effect is ready we can render
+            else {
                 renderToTexture();
-            };
-        }
-        // The effect is ready we can render
-        else {
-            renderToTexture();
-        }
+            }
+        });
     } else {
         // No need to wait for extra resources to be ready
         renderToTexture();
@@ -347,6 +338,7 @@ export function CreateScreenshotUsingRenderTarget(
  * @param enableStencilBuffer Whether the stencil buffer should be enabled or not (default: false)
  * @param useLayerMask if the camera's layer mask should be used to filter what should be rendered (default: true)
  * @param quality The quality of the image if lossy mimeType is used (e.g. image/jpeg, image/webp). See {@link https://developer.mozilla.org/en-US/docs/Web/API/HTMLCanvasElement/toBlob | HTMLCanvasElement.toBlob()}'s `quality` parameter.
+ * @param customizeTexture An optional callback that can be used to modify the render target texture before taking the screenshot. This can be used, for instance, to enable camera post-processes before taking the screenshot.
  * @returns screenshot as a string of base64-encoded characters. This string can be assigned
  * to the src parameter of an <img> to display it
  */
@@ -361,7 +353,8 @@ export function CreateScreenshotUsingRenderTargetAsync(
     renderSprites = false,
     enableStencilBuffer = false,
     useLayerMask = true,
-    quality?: number
+    quality?: number,
+    customizeTexture?: (texture: RenderTargetTexture) => void
 ): Promise<string> {
     return new Promise((resolve, reject) => {
         CreateScreenshotUsingRenderTarget(
@@ -382,7 +375,8 @@ export function CreateScreenshotUsingRenderTargetAsync(
             renderSprites,
             enableStencilBuffer,
             useLayerMask,
-            quality
+            quality,
+            customizeTexture
         );
     });
 }

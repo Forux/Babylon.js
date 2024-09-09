@@ -31,7 +31,7 @@ import { Mesh } from "../../../Meshes/mesh";
 import { InstancedMesh } from "../../../Meshes/instancedMesh";
 import type { Scene } from "../../../scene";
 import { VertexBuffer } from "../../../Buffers/buffer";
-import { ArrayTools } from "../../../Misc/arrayTools";
+import { BuildArray } from "../../../Misc/arrayTools";
 import { Observable } from "../../../Misc/observable";
 import type { Nullable, FloatArray } from "../../../types";
 import type { IPhysicsPointProximityQuery } from "../../physicsPointProximityQuery";
@@ -291,7 +291,7 @@ export class HavokPlugin implements IPhysicsEnginePluginV2 {
      */
     private _queryCollector;
     private _fixedTimeStep: number = 1 / 60;
-    private _tmpVec3 = ArrayTools.BuildArray(3, Vector3.Zero);
+    private _tmpVec3 = BuildArray(3, Vector3.Zero);
     private _bodies = new Map<bigint, { body: PhysicsBody; index: number }>();
     private _shapes = new Map<bigint, PhysicsShape>();
     private _bodyBuffer: number;
@@ -2108,10 +2108,10 @@ export class HavokPlugin implements IPhysicsEnginePluginV2 {
     public raycast(from: Vector3, to: Vector3, result: PhysicsRaycastResult, query?: IRaycastQuery): void {
         const queryMembership = query?.membership ?? ~0;
         const queryCollideWith = query?.collideWith ?? ~0;
+        const shouldHitTriggers = query?.shouldHitTriggers ?? false;
 
         result.reset(from, to);
 
-        const shouldHitTriggers = false;
         const bodyToIgnore = [BigInt(0)];
         const hkQuery = [this._bVecToV3(from), this._bVecToV3(to), [queryMembership, queryCollideWith], shouldHitTriggers, bodyToIgnore];
         this._hknp.HP_World_CastRayWithCollector(this.world, this._queryCollector, hkQuery);

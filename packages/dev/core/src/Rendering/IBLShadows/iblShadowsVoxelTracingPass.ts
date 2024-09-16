@@ -2,13 +2,12 @@ import { Constants } from "../../Engines/constants";
 import type { AbstractEngine } from "../../Engines/abstractEngine";
 import type { Scene } from "../../scene";
 import { Matrix, Vector2, Vector4 } from "../../Maths/math.vector";
-import "../../Shaders/iblShadowVoxelTracing.fragment";
-import "../../Shaders/iblShadowDebug.fragment";
 import { PostProcess } from "../../PostProcesses/postProcess";
 import type { PostProcessOptions } from "../../PostProcesses/postProcess";
 import type { IblShadowsRenderPipeline } from "./iblShadowsRenderPipeline";
 import type { Effect } from "../../Materials/effect";
 import type { Camera } from "../../Cameras/camera";
+import { ShaderLanguage } from "core/Materials/shaderLanguage";
 
 /**
  * Build cdf maps for IBL importance sampling during IBL shadow computation.
@@ -205,6 +204,7 @@ export class _IblShadowsVoxelTracingPass {
      * Creates the debug post process effect for this pass
      */
     private _createDebugPass() {
+        const isWebGPU = this._engine.isWebGPU;
         if (!this._debugPassPP) {
             const debugOptions: PostProcessOptions = {
                 width: this._engine.getRenderWidth(),
@@ -213,6 +213,14 @@ export class _IblShadowsVoxelTracingPass {
                 samplers: ["debugSampler"],
                 engine: this._engine,
                 reusable: false,
+                shaderLanguage: isWebGPU ? ShaderLanguage.WGSL : ShaderLanguage.GLSL,
+                extraInitializations: (useWebGPU: boolean, list: Promise<any>[]) => {
+                    if (useWebGPU) {
+                        list.push(import("../../ShadersWGSL/iblShadowDebug.fragment"));
+                    } else {
+                        list.push(import("../../Shaders/iblShadowDebug.fragment"));
+                    }
+                },
             };
             this._debugPassPP = new PostProcess(this.debugPassName, "iblShadowDebug", debugOptions);
             this._debugPassPP.autoClear = false;
@@ -242,6 +250,7 @@ export class _IblShadowsVoxelTracingPass {
         if (this._debugVoxelMarchEnabled) {
             defines += "#define VOXEL_MARCH_DIAGNOSTIC_INFO_OPTION 1u\n";
         }
+        const isWebGPU = this._engine.isWebGPU;
         const ppOptions: PostProcessOptions = {
             width: this._engine.getRenderWidth(),
             height: this._engine.getRenderHeight(),
@@ -253,6 +262,14 @@ export class _IblShadowsVoxelTracingPass {
             defines: defines,
             engine: this._engine,
             reusable: false,
+            shaderLanguage: isWebGPU ? ShaderLanguage.WGSL : ShaderLanguage.GLSL,
+            extraInitializations: (useWebGPU: boolean, list: Promise<any>[]) => {
+                if (useWebGPU) {
+                    list.push(import("../../ShadersWGSL/iblShadowVoxelTracing.fragment"));
+                } else {
+                    list.push(import("../../Shaders/iblShadowVoxelTracing.fragment"));
+                }
+            },
         };
         this._outputPP = new PostProcess("voxelTracingPass", "iblShadowVoxelTracing", ppOptions);
         this._outputPP.autoClear = false;
@@ -295,7 +312,7 @@ export class _IblShadowsVoxelTracingPass {
         const prePassRenderer = this._scene.prePassRenderer;
         if (prePassRenderer) {
             const wnormalIndex = prePassRenderer.getIndex(Constants.PREPASS_WORLD_NORMAL_TEXTURE_TYPE);
-            const clipDepthIndex = prePassRenderer.getIndex(Constants.PREPASS_NDC_DEPTH_TEXTURE_TYPE);
+            const clipDepthIndex = prePassRenderer.getIndex(Constants.PREPASS_SCREENSPACE_DEPTH_TEXTURE_TYPE);
             const wPositionIndex = prePassRenderer.getIndex(Constants.PREPASS_POSITION_TEXTURE_TYPE);
             if (wnormalIndex >= 0) effect.setTexture("worldNormalSampler", prePassRenderer.getRenderTarget().textures[wnormalIndex]);
             if (clipDepthIndex >= 0) effect.setTexture("depthSampler", prePassRenderer.getRenderTarget().textures[clipDepthIndex]);

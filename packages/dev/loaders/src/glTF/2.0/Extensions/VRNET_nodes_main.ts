@@ -163,7 +163,7 @@ export class VRNET_nodes_main implements IGLTFLoaderExtension {
                     if (skyboxInfo.exposure !== undefined) {
                         skyboxT.texture.level = skyboxInfo.exposure;
                     }
-                    skyboxT.texture.gammaSpace = false;
+                    skyboxT.texture.gammaSpace = true;
                     material.reflectionTexture = skyboxT.texture;
                 },
                 undefined,

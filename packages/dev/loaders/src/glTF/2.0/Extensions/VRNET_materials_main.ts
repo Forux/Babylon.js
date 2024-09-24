@@ -150,9 +150,11 @@ export class VRNET_materials_main implements IGLTFLoaderExtension {
                     const probI = properties.reflectionProbeInfo;
                     cubeT = { loader: this._loader, loadObservable: new Observable<CubeTexture>() };
                     VRNET_materials_main._ReflectionCache[properties.reflectionProbeInfo.reflectionMapTexture] = cubeT;
+                    const textureUrl = this._loader["_rootUrl"] + probI.reflectionMapTexture;
 
-                    this._loader.babylonScene._loadFile(
-                        this._loader["_rootUrl"] + probI.reflectionMapTexture,
+                    this._loader.parent._loadFile(
+                        this._loader.babylonScene,
+                        textureUrl,
                         (data) => {
                             const cubeTextureOptions: ICubeTextureCreationOptions = {
                                 noMipmap: false,
@@ -183,8 +185,6 @@ export class VRNET_materials_main implements IGLTFLoaderExtension {
                             cubeT.texture.gammaSpace = probI.prefiltered ? false : true;
                             babylonMaterial.reflectionTexture = cubeT.texture;
                         },
-                        undefined,
-                        undefined,
                         true,
                         () => deferred.reject()
                     );

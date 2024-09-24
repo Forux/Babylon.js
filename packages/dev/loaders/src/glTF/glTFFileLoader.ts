@@ -1086,7 +1086,11 @@ export class GLTFFileLoader extends GLTFLoaderOptions implements IDisposable, IS
         let total = 0;
         for (const request of this._requests) {
             if (request._lengthComputable === undefined || request._loaded === undefined || request._total === undefined) {
-                return;
+                //> VRNET
+                // changed return to continue to have a smoother progress of loading
+                // results in incorrect _total value, but we don't use it anyway
+                continue;
+                //< VRNET
             }
 
             lengthComputable = lengthComputable && request._lengthComputable;

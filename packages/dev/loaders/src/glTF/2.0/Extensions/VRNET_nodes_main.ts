@@ -140,7 +140,8 @@ export class VRNET_nodes_main implements IGLTFLoaderExtension {
             const deferred = new Deferred<void>();
             skyboxT = { loader: this._loader, loadObservable: new Observable<CubeTexture>() };
             VRNET_nodes_main._SkyboxCache[skyboxInfo.texture] = skyboxT;
-            this._loader.babylonScene._loadFile(
+            this._loader.parent._loadFile(
+                this._loader.babylonScene,
                 textureUrl,
                 (data) => {
                     skyboxT.texture = new CubeTexture(textureUrl, this._loader.babylonScene, {
@@ -166,8 +167,6 @@ export class VRNET_nodes_main implements IGLTFLoaderExtension {
                     skyboxT.texture.gammaSpace = true;
                     material.reflectionTexture = skyboxT.texture;
                 },
-                undefined,
-                undefined,
                 true,
                 () => deferred.reject()
             );

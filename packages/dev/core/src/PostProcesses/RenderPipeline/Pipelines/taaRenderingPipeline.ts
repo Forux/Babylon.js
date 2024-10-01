@@ -86,20 +86,6 @@ export class TAARenderingPipeline extends PostProcessRenderPipeline {
     public disableJitter = false;
 
     /**
-     * Enables int based history sampling, disables history smoothing
-     */
-    private _intBasedHistorySampling = false;
-
-    public set intBasedHistorySampling(value: boolean) {
-        this._intBasedHistorySampling = value;
-        this._updateEffectDefines();
-    }
-
-    public get intBasedHistorySampling(): boolean {
-        return this._intBasedHistorySampling;
-    }
-
-    /**
      * Enables debug
      * mode == 0 - disabled
      * mode == 1 - coordinates mode showing UV on screen, blue means invalid UV point (< 0 or > 1)
@@ -369,12 +355,12 @@ export class TAARenderingPipeline extends PostProcessRenderPipeline {
 
         this._ping = engine.createRenderTargetTexture(
             { width, height },
-            { generateMipMaps: false, generateDepthBuffer: false, type: Constants.TEXTURETYPE_HALF_FLOAT, samplingMode: Constants.TEXTURE_NEAREST_NEAREST }
+            { generateMipMaps: false, generateDepthBuffer: false, type: Constants.TEXTURETYPE_HALF_FLOAT, samplingMode: Constants.TEXTURE_LINEAR_LINEAR }
         );
 
         this._pong = engine.createRenderTargetTexture(
             { width, height },
-            { generateMipMaps: false, generateDepthBuffer: false, type: Constants.TEXTURETYPE_HALF_FLOAT, samplingMode: Constants.TEXTURE_NEAREST_NEAREST }
+            { generateMipMaps: false, generateDepthBuffer: false, type: Constants.TEXTURETYPE_HALF_FLOAT, samplingMode: Constants.TEXTURE_LINEAR_LINEAR }
         );
 
         this._hs.setDimensions(width, height);
@@ -413,7 +399,6 @@ export class TAARenderingPipeline extends PostProcessRenderPipeline {
                     : this._debugMODE == 4
                       ? "#define DEBUG_CLIP_TO_AABB"
                       : "",
-            this._intBasedHistorySampling ? "#define INT_BASED_HISTORY_SAMPLING" : "",
         ];
         //< VRNET
 
@@ -493,7 +478,7 @@ export class TAARenderingPipeline extends PostProcessRenderPipeline {
 
     private _createTAAPostProcess(): void {
         this._taaPostProcess = new PostProcess("TAA", "taa", {
-            uniforms: ["factor", "cameraMoved", "errorFactor", "inverseViewProjection", "prevViewProjection", "projection"],
+            uniforms: ["factor", "cameraMoved", "errorFactor", "inverseView", "projection"],
             //> VRNET
             samplers: ["textureSampler", "historySampler", "velocitySampler", "depthSampler"],
             //< VRNET
@@ -558,8 +543,7 @@ export class TAARenderingPipeline extends PostProcessRenderPipeline {
                 this._scene._viewMatrix.multiplyToRef(tmpProjectionMatrix, viewProjection);
 
                 viewProjection.invertToRef(this._invViewProjection!);
-                effect.setMatrix("inverseViewProjection", this._invViewProjection!);
-                effect.setMatrix("prevViewProjection", this._previousViewProjection!);
+                effect.setMatrix("inverseView", this._invViewProjection!.multiply(this._previousViewProjection!));
                 this._previousViewProjection!.copyFrom(viewProjection);
                 effect.setMatrix("projection", tmpProjectionMatrix);
             }

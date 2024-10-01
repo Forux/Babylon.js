@@ -14,8 +14,7 @@ uniform sampler2D historySampler;
     uniform sampler2D velocitySampler;
 #else
     uniform sampler2D depthSampler;
-    uniform mat4 inverseViewProjection;
-    uniform mat4 prevViewProjection;
+    uniform mat4 inverseView;
     uniform mat4 projection;
 #endif
 
@@ -71,11 +70,7 @@ void main() {
         ivec2 icoordXY = ivec2(gl_FragCoord.xy);
 
         #ifdef OBJECT_BASED
-            #ifdef INT_BASED_HISTORY_SAMPLING
-                vec4 velocityColor = texelFetch(velocitySampler, icoordXY, 0);
-            #else
-                vec4 velocityColor = TEXTUREFUNC(velocitySampler, vUV, 0.0);
-            #endif
+            vec4 velocityColor = TEXTUREFUNC(velocitySampler, vUV, 0.0);
 
             velocityColor.rg = velocityColor.rg * 2.0 - vec2(1.0);
             vec2 velocity = vec2(pow(velocityColor.r, 3.0), pow(velocityColor.g, 3.0)) * velocityColor.a;
@@ -83,42 +78,25 @@ void main() {
             vec2 previousCoords = vUV - velocity;
         #else
             vec2 previousCoords;
-            #ifdef INT_BASED_HISTORY_SAMPLING
-                float depth = texelFetch(depthSampler, icoordXY, 0).r;
-            #else
-                vec4 depthVec = TEXTUREFUNC(depthSampler, vUV, 0.0);
-                float depth = depthVec.r;
-            #endif
+            float depth = TEXTUREFUNC(depthSampler, vUV, 0.0).r;
             if (depth == 0.0) {
                 previousCoords = vUV;
             } else {
                 depth = projection[2].z + projection[3].z / depth; // convert from view linear z to NDC z
 
                 vec4 cpos = vec4(vUV * 2.0 - 1.0, depth, 1.0);
-                cpos = inverseViewProjection * cpos;
+                cpos = inverseView * cpos;
                 if (cpos.w == 0.0) {
                     previousCoords = vUV;
                 } else {
                     cpos /= cpos.w;
 
-                    vec4 encodedCoords = prevViewProjection * cpos;
-                    if (encodedCoords.w == 0.0) {
-                        previousCoords = vUV;
-                    } else {
-                        encodedCoords /= encodedCoords.w;
-                        previousCoords = encodedCoords.xy * 0.5 + 0.5;
-                    }
-                }
+                    previousCoords = cpos.xy * 0.5 + 0.5;
             }
         #endif
 
-        #ifdef INT_BASED_HISTORY_SAMPLING
-            vec4 newColor = texelFetch(textureSampler, icoordXY, 0);
-            vec4 historyColor = texelFetch(historySampler, ivec2(previousCoords * vec2(textureSize(historySampler, 0))), 0);
-        #else
-            vec4 newColor = TEXTUREFUNC(textureSampler, vUV, 0.0);
-            vec4 historyColor = TEXTUREFUNC(historySampler, previousCoords, 0.0);
-        #endif
+        vec4 newColor = TEXTUREFUNC(textureSampler, vUV, 0.0);
+        vec4 historyColor = TEXTUREFUNC(historySampler, previousCoords, 0.0);
 
         #ifdef DEBUG_UV
             if (previousCoords.x > 1.0 || previousCoords.x < 0.0) {

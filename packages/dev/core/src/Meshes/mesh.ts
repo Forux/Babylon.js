@@ -1830,7 +1830,14 @@ export class Mesh extends AbstractMesh implements IGetSetVerticesData {
         // Wireframe
         let indexToBind;
         if (this._unIndexed) {
-            indexToBind = null;
+            switch (this._getRenderingFillMode(fillMode)) {
+                case Material.WireFrameFillMode:
+                    indexToBind = subMesh._getLinesIndexBuffer(<IndicesArray>this.getIndices(), engine);
+                    break;
+                default:
+                    indexToBind = null;
+                    break;
+            }
         } else {
             switch (this._getRenderingFillMode(fillMode)) {
                 case Material.PointFillMode:
@@ -1886,7 +1893,7 @@ export class Mesh extends AbstractMesh implements IGetSetVerticesData {
         const scene = this.getScene();
         const engine = scene.getEngine();
 
-        if (this._unIndexed || fillMode == Material.PointFillMode) {
+        if ((this._unIndexed && fillMode !== Material.WireFrameFillMode) || fillMode == Material.PointFillMode) {
             // or triangles as points
             engine.drawArraysType(fillMode, subMesh.verticesStart, subMesh.verticesCount, this.forcedInstanceCount || instancesCount);
         } else if (fillMode == Material.WireFrameFillMode) {
@@ -2332,6 +2339,23 @@ export class Mesh extends AbstractMesh implements IGetSetVerticesData {
             engine.currentRenderPassId = currentRenderPassId;
         }
 
+        return this;
+    }
+
+    /**
+     * Render a complete mesh by going through all submeshes
+     * @returns the current mesh
+     * #5SPY1V#2: simple test
+     * #5SPY1V#5: perf test
+     */
+    public directRender(): Mesh {
+        if (!this.subMeshes) {
+            return this;
+        }
+
+        for (const submesh of this.subMeshes) {
+            this.render(submesh, false);
+        }
         return this;
     }
 

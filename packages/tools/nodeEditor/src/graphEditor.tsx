@@ -108,6 +108,7 @@ export class GraphEditor extends React.Component<IGraphEditorProps, IGraphEditor
 
         // Create the stack
         this._historyStack = new HistoryStack(dataProvider, applyUpdate);
+        globalState.stateManager.historyStack = this._historyStack;
 
         // Connect to relevant events
         globalState.stateManager.onUpdateRequiredObservable.add(() => {
@@ -246,20 +247,8 @@ export class GraphEditor extends React.Component<IGraphEditorProps, IGraphEditor
         };
 
         this.props.globalState.hostDocument!.addEventListener("keydown", (evt) => {
-            if (evt.ctrlKey || evt.metaKey) {
-                if (evt.key === "z" || evt.key === "Z") {
-                    if (evt.shiftKey) {
-                        this._historyStack.redo();
-                        return;
-                    }
-
-                    this._historyStack.undo();
-                    return;
-                }
-                if (evt.key === "y" || evt.key === "Y") {
-                    this._historyStack.redo();
-                    return;
-                }
+            if (this._historyStack.processKeyEvent(evt)) {
+                return;
             }
 
             this._graphCanvas.handleKeyDown(

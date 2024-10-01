@@ -40,6 +40,7 @@ uniform mat4 invProjectionMatrix;
 uniform mat4 projectionPixel;
 
 uniform float nearPlaneZ;
+uniform float farPlaneZ;
 uniform float stepSize;
 uniform float maxSteps;
 uniform float strength;
@@ -130,6 +131,9 @@ void main()
         csNormal = (view * vec4(csNormal, 0.0)).xyz;
     #endif
     float depth = texelFetch(depthSampler, ivec2(vUV * texSize), 0).r;
+    #ifdef SSRAYTRACE_SCREENSPACE_DEPTH
+        depth = linearizeDepth(depth, nearPlaneZ, farPlaneZ);
+    #endif
     vec3 csPosition = computeViewPosFromUVDepth(vUV, depth, projection, invProjectionMatrix);
     #ifdef ORTHOGRAPHIC_CAMERA
         vec3 csViewDirection = vec3(0., 0., 1.);
@@ -203,6 +207,7 @@ void main()
         #endif
             thickness,
             nearPlaneZ,
+            farPlaneZ,
             stepSize,
             jitter,
             maxSteps,

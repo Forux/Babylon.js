@@ -225,7 +225,10 @@ export class InternalTexture extends TextureSampler {
     public _creationFlags: number = 0;
     /** @internal */
     public _originalFormat?: number;
-
+    // > VRNET
+    /** @internal */
+    public _internalCompressedFormat?: number;
+    // < VRNET
     // The following three fields helps sharing generated fixed LODs for texture filtering
     // In environment not supporting the textureLOD extension like EDGE. They are for internal use only.
     // They are at the level of the gl texture to benefit from the cache.

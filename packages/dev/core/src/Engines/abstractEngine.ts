@@ -1077,6 +1077,128 @@ export abstract class AbstractEngine {
     /** @internal */
     public abstract _getUnpackAlignement(): number;
 
+    protected async _uploadMipmapsToTextureBase(
+        texture: InternalTexture,
+        width: number,
+        height: number,
+        buffers: ArrayBufferView[],
+        blockInfo: { width: number, height: number, bytesLength: number },
+        bytesInBlock: number,
+        prepareHardwareTexture: () => HardwareTextureWrapper,
+        bindTexture: (resource: any, faceIndex: number) => void,
+        pushData: (
+            data: ArrayBufferView, 
+            mipmapSize: { 
+                width: number, 
+                height: number 
+            }, 
+            faceIndex: number,
+            lod: number
+        ) => void,
+        pushDataBlock: (
+            data: ArrayBufferView, 
+            block: { 
+                xOffset: number, 
+                yOffset: number, 
+                width: number, 
+                height: number 
+            },
+            faceIndex: number, 
+            lod: number) => void,
+        faces?: number
+    ): Promise<void> {
+        return new Promise(async (resolve, reject) => {
+            if (!texture) {
+                return resolve();
+            }
+    
+            if (buffers.length === 0) {
+                return reject(new Error("buffers must be a non-empty array of ArrayBufferViews"));
+            }
+    
+            if (!texture._hardwareTexture) {
+                return reject(new Error("The texture must have have hardware texture to append mipmaps."));
+            }
+    
+            if (texture?._internalCompressedFormat === void 0) {
+                return reject(new Error("Internal compressed format in the texture required to append mipmaps."));
+            }
+    
+            faces ??= 1;
+
+            if (buffers.length % faces !== 0) {
+                return reject(new Error("buffers count must be a multiple of faces count."));
+            }
+            const intdiv = (x: number, y: number) => {
+                return Math.floor((x + 0.5) / y);
+            }
+            const alignTo = (value: number, alignment: number) => {
+                return intdiv((value | 0) + alignment - 1, alignment) * alignment;
+            }
+
+            const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+            
+            const newHardwareTexture = prepareHardwareTexture();
+            const oldHardwareTexture = texture._hardwareTexture;
+            
+            const mipmapCount = buffers.length / faces;
+
+            const blockedLoading = { bytesInBlock, bytesLeft: bytesInBlock };
+            
+            for (let m = 0, i = 0; m < mipmapCount; m++) {
+                let mmWidth  = (width  + (1 << m) - 1) >> m;
+                let mmHeight = (height + (1 << m) - 1) >> m;
+                const blocksCountX = Math.ceil((mmWidth - 0.5) / blockInfo.width);
+                const blocksCountY = Math.ceil((mmHeight - 0.5) / blockInfo.height);
+                const bytesInBlockLine = blockInfo.bytesLength * blocksCountX;
+
+                const dataSize = alignTo(bytesInBlockLine * blocksCountY, this._getUnpackAlignement());
+                for (let f = 0; f < faces; f++, i++) {
+                    const data = new Uint8Array(buffers[i].buffer, buffers[i].byteOffset, buffers[i].byteLength);
+                    if (blockedLoading.bytesLeft <= 0) {
+                        await delay(0);
+                    }
+                    bindTexture(newHardwareTexture, f);
+                    
+                    if(dataSize < blockedLoading.bytesLeft + blockedLoading.bytesInBlock * 0.3) { // Якщо у нас текстура влазить в квоту, або вона невелика - завантажуємо без розбиття
+                        await delay(0);
+                        bindTexture(newHardwareTexture, f);
+                        pushData(data, { width: mmWidth, height: mmHeight }, f, m);
+                        blockedLoading.bytesLeft -= dataSize;
+                    } else { // Якщо текстура велика - завантажуємо частинами
+                        pushData(new Uint8Array(dataSize), { width: mmWidth, height: mmHeight }, f, m); // як виявляється однотонні текстури на відеокарту передаються миттєво. мабуть є якась оптимізація
+                        for(let loadedBlockLines = 0; ; ) {
+                            const canLoadBlockLines = Math.min(Math.max(intdiv(blockedLoading.bytesLeft, bytesInBlockLine), 1), blocksCountY - loadedBlockLines);
+                            const newLoadedBlockLines = loadedBlockLines + canLoadBlockLines;
+                            const loadedLines = Math.min(newLoadedBlockLines * blockInfo.height, mmHeight) - loadedBlockLines * blockInfo.height;
+                            pushDataBlock(data.subarray(loadedBlockLines * bytesInBlockLine, newLoadedBlockLines * bytesInBlockLine), { xOffset: 0, yOffset: loadedBlockLines * blockInfo.height, width: mmWidth, height: loadedLines }, f, m);
+                            loadedBlockLines = newLoadedBlockLines;
+                            blockedLoading.bytesLeft -= canLoadBlockLines * bytesInBlockLine;
+                            if(loadedBlockLines < blocksCountY) { // Switching to frame rendering if not all blocks are loaded
+                                await delay(0);
+                                bindTexture(newHardwareTexture, f);
+                                blockedLoading.bytesLeft = blockedLoading.bytesInBlock;
+                            } else { // Stop loading when everything is loaded
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+            texture.updateSize(width, height);
+            texture._hardwareTexture = newHardwareTexture;
+            oldHardwareTexture.release();
+        });
+    }
+
+    public abstract uploadMipmapsToTexture(
+        texture: InternalTexture,
+        width: number,
+        height: number,
+        buffers: ArrayBufferView[],
+        faces?: number
+    ): Promise<void>;
+
     /**
      * @internal
      */

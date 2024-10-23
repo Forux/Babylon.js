@@ -2785,6 +2785,16 @@ export class WebGPUEngine extends ThinWebGPUEngine {
         }
     }
 
+    public override uploadMipmapsToTexture(
+        texture: InternalTexture, 
+        width: number, 
+        height: number, 
+        buffers: ArrayBufferView[], 
+        faces?: number
+    ): Promise<void> {
+        throw new Error("Method not implemented.");
+    }
+
     /**
      * @internal
      */

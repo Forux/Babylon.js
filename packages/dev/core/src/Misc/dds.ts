@@ -66,52 +66,52 @@ const DXGI_FORMAT_B8G8R8X8_UNORM = 88;
 
 //> VRNET
 // from https://github.com/g-truc/gli/blob/master/gli/dx.hpp
-const DXGI_FORMAT_BC6H_UF16      = 95;
-const DXGI_FORMAT_BC6H_SF16      = 96;
-const DXGI_FORMAT_BC7_UNORM      = 98;
-const DXGI_FORMAT_BC7_UNORM_SRGB     = 99;
-const DXGI_FORMAT_ASTC_4X4_TYPELESS    = 133;
-const DXGI_FORMAT_ASTC_4X4_UNORM     = 134;
-const DXGI_FORMAT_ASTC_4X4_UNORM_SRGB    = 135;
-const DXGI_FORMAT_ASTC_5X4_TYPELESS    = 137;
-const DXGI_FORMAT_ASTC_5X4_UNORM     = 138;
-const DXGI_FORMAT_ASTC_5X4_UNORM_SRGB    = 139;
-const DXGI_FORMAT_ASTC_5X5_TYPELESS    = 141;
-const DXGI_FORMAT_ASTC_5X5_UNORM     = 142;
-const DXGI_FORMAT_ASTC_5X5_UNORM_SRGB    = 143;
-const DXGI_FORMAT_ASTC_6X5_TYPELESS    = 145;
-const DXGI_FORMAT_ASTC_6X5_UNORM     = 146;
-const DXGI_FORMAT_ASTC_6X5_UNORM_SRGB    = 147;
-const DXGI_FORMAT_ASTC_6X6_TYPELESS    = 149;
-const DXGI_FORMAT_ASTC_6X6_UNORM     = 150;
-const DXGI_FORMAT_ASTC_6X6_UNORM_SRGB    = 151;
-const DXGI_FORMAT_ASTC_8X5_TYPELESS    = 153;
-const DXGI_FORMAT_ASTC_8X5_UNORM     = 154;
-const DXGI_FORMAT_ASTC_8X5_UNORM_SRGB    = 155;
-const DXGI_FORMAT_ASTC_8X6_TYPELESS    = 157;
-const DXGI_FORMAT_ASTC_8X6_UNORM    = 158;
-const DXGI_FORMAT_ASTC_8X6_UNORM_SRGB   = 159;
-const DXGI_FORMAT_ASTC_8X8_TYPELESS    = 161;
-const DXGI_FORMAT_ASTC_8X8_UNORM    = 162;
-const DXGI_FORMAT_ASTC_8X8_UNORM_SRGB   = 163;
-const DXGI_FORMAT_ASTC_10X5_TYPELESS   = 165;
-const DXGI_FORMAT_ASTC_10X5_UNORM    = 166;
-const DXGI_FORMAT_ASTC_10X5_UNORM_SRGB   = 167;
-const DXGI_FORMAT_ASTC_10X6_TYPELESS   = 169;
-const DXGI_FORMAT_ASTC_10X6_UNORM    = 170;
-const DXGI_FORMAT_ASTC_10X6_UNORM_SRGB   = 171;
-const DXGI_FORMAT_ASTC_10X8_TYPELESS   = 173;
-const DXGI_FORMAT_ASTC_10X8_UNORM    = 174;
-const DXGI_FORMAT_ASTC_10X8_UNORM_SRGB   = 175;
-const DXGI_FORMAT_ASTC_10X10_TYPELESS   = 177;
-const DXGI_FORMAT_ASTC_10X10_UNORM    = 178;
-const DXGI_FORMAT_ASTC_10X10_UNORM_SRGB   = 179;
-const DXGI_FORMAT_ASTC_12X10_TYPELESS   = 181;
-const DXGI_FORMAT_ASTC_12X10_UNORM    = 182;
-const DXGI_FORMAT_ASTC_12X10_UNORM_SRGB   = 183;
-const DXGI_FORMAT_ASTC_12X12_TYPELESS   = 185;
-const DXGI_FORMAT_ASTC_12X12_UNORM    = 186;
-const DXGI_FORMAT_ASTC_12X12_UNORM_SRGB   = 187;
+const DXGI_FORMAT_BC6H_UF16 = 95;
+const DXGI_FORMAT_BC6H_SF16 = 96;
+const DXGI_FORMAT_BC7_UNORM = 98;
+const DXGI_FORMAT_BC7_UNORM_SRGB = 99;
+const DXGI_FORMAT_ASTC_4X4_TYPELESS = 133;
+const DXGI_FORMAT_ASTC_4X4_UNORM = 134;
+const DXGI_FORMAT_ASTC_4X4_UNORM_SRGB = 135;
+const DXGI_FORMAT_ASTC_5X4_TYPELESS = 137;
+const DXGI_FORMAT_ASTC_5X4_UNORM = 138;
+const DXGI_FORMAT_ASTC_5X4_UNORM_SRGB = 139;
+const DXGI_FORMAT_ASTC_5X5_TYPELESS = 141;
+const DXGI_FORMAT_ASTC_5X5_UNORM = 142;
+const DXGI_FORMAT_ASTC_5X5_UNORM_SRGB = 143;
+const DXGI_FORMAT_ASTC_6X5_TYPELESS = 145;
+const DXGI_FORMAT_ASTC_6X5_UNORM = 146;
+const DXGI_FORMAT_ASTC_6X5_UNORM_SRGB = 147;
+const DXGI_FORMAT_ASTC_6X6_TYPELESS = 149;
+const DXGI_FORMAT_ASTC_6X6_UNORM = 150;
+const DXGI_FORMAT_ASTC_6X6_UNORM_SRGB = 151;
+const DXGI_FORMAT_ASTC_8X5_TYPELESS = 153;
+const DXGI_FORMAT_ASTC_8X5_UNORM = 154;
+const DXGI_FORMAT_ASTC_8X5_UNORM_SRGB = 155;
+const DXGI_FORMAT_ASTC_8X6_TYPELESS = 157;
+const DXGI_FORMAT_ASTC_8X6_UNORM = 158;
+const DXGI_FORMAT_ASTC_8X6_UNORM_SRGB = 159;
+const DXGI_FORMAT_ASTC_8X8_TYPELESS = 161;
+const DXGI_FORMAT_ASTC_8X8_UNORM = 162;
+const DXGI_FORMAT_ASTC_8X8_UNORM_SRGB = 163;
+const DXGI_FORMAT_ASTC_10X5_TYPELESS = 165;
+const DXGI_FORMAT_ASTC_10X5_UNORM = 166;
+const DXGI_FORMAT_ASTC_10X5_UNORM_SRGB = 167;
+const DXGI_FORMAT_ASTC_10X6_TYPELESS = 169;
+const DXGI_FORMAT_ASTC_10X6_UNORM = 170;
+const DXGI_FORMAT_ASTC_10X6_UNORM_SRGB = 171;
+const DXGI_FORMAT_ASTC_10X8_TYPELESS = 173;
+const DXGI_FORMAT_ASTC_10X8_UNORM = 174;
+const DXGI_FORMAT_ASTC_10X8_UNORM_SRGB = 175;
+const DXGI_FORMAT_ASTC_10X10_TYPELESS = 177;
+const DXGI_FORMAT_ASTC_10X10_UNORM = 178;
+const DXGI_FORMAT_ASTC_10X10_UNORM_SRGB = 179;
+const DXGI_FORMAT_ASTC_12X10_TYPELESS = 181;
+const DXGI_FORMAT_ASTC_12X10_UNORM = 182;
+const DXGI_FORMAT_ASTC_12X10_UNORM_SRGB = 183;
+const DXGI_FORMAT_ASTC_12X12_TYPELESS = 185;
+const DXGI_FORMAT_ASTC_12X12_UNORM = 186;
+const DXGI_FORMAT_ASTC_12X12_UNORM_SRGB = 187;
 //< VRNET
 
 const headerLengthInt = 31; // The header length in 32 bit ints
@@ -240,105 +240,61 @@ export class DDSTools {
 
                 //> VRNET
                 if (
-                    dxgiFormat === DXGI_FORMAT_BC7_UNORM
-                    ||
-                    dxgiFormat === DXGI_FORMAT_BC7_UNORM_SRGB
-                    ||
-                    DXGI_FORMAT_ASTC_4X4_TYPELESS
-                    ||
-                    dxgiFormat === DXGI_FORMAT_ASTC_4X4_UNORM
-                    ||
-                    dxgiFormat === DXGI_FORMAT_ASTC_4X4_UNORM_SRGB
-                    ||
-                    dxgiFormat === DXGI_FORMAT_ASTC_5X4_UNORM 
-                    ||
-                    dxgiFormat === DXGI_FORMAT_ASTC_5X4_UNORM_SRGB
-                    ||
-                    dxgiFormat === DXGI_FORMAT_ASTC_5X5_UNORM 
-                    ||
-                    dxgiFormat === DXGI_FORMAT_ASTC_5X5_UNORM_SRGB
-                    ||
-                    dxgiFormat === DXGI_FORMAT_ASTC_6X5_UNORM 
-                    ||
-                    dxgiFormat === DXGI_FORMAT_ASTC_6X5_UNORM_SRGB
-                    ||
-                    dxgiFormat === DXGI_FORMAT_ASTC_6X6_UNORM 
-                    ||
-                    dxgiFormat === DXGI_FORMAT_ASTC_6X6_UNORM_SRGB
-                    ||
-                    dxgiFormat === DXGI_FORMAT_ASTC_8X5_UNORM 
-                    ||
-                    dxgiFormat === DXGI_FORMAT_ASTC_8X5_UNORM_SRGB
-                    ||
-                    dxgiFormat === DXGI_FORMAT_ASTC_8X6_UNORM
-                    ||
-                    dxgiFormat === DXGI_FORMAT_ASTC_8X6_UNORM_SRGB
-                    ||
-                    dxgiFormat === DXGI_FORMAT_ASTC_8X8_UNORM
-                    ||
-                    dxgiFormat === DXGI_FORMAT_ASTC_8X8_UNORM_SRGB
-                    ||
-                    dxgiFormat === DXGI_FORMAT_ASTC_10X5_UNORM
-                    ||
-                    dxgiFormat === DXGI_FORMAT_ASTC_10X5_UNORM_SRGB
-                    ||
-                    dxgiFormat === DXGI_FORMAT_ASTC_10X6_UNORM
-                    ||
-                    dxgiFormat === DXGI_FORMAT_ASTC_10X6_UNORM_SRGB
-                    ||
-                    dxgiFormat === DXGI_FORMAT_ASTC_10X8_UNORM
-                    ||
-                    dxgiFormat === DXGI_FORMAT_ASTC_10X8_UNORM_SRGB
-                    ||
-                    dxgiFormat === DXGI_FORMAT_ASTC_10X10_UNORM
-                    ||
-                    dxgiFormat === DXGI_FORMAT_ASTC_10X10_UNORM_SRGB
-                    ||
-                    dxgiFormat === DXGI_FORMAT_ASTC_12X10_UNORM
-                    ||
-                    dxgiFormat === DXGI_FORMAT_ASTC_12X10_UNORM_SRGB
-                    ||
+                    dxgiFormat === DXGI_FORMAT_BC7_UNORM ||
+                    dxgiFormat === DXGI_FORMAT_BC7_UNORM_SRGB ||
+                    DXGI_FORMAT_ASTC_4X4_TYPELESS ||
+                    dxgiFormat === DXGI_FORMAT_ASTC_4X4_UNORM ||
+                    dxgiFormat === DXGI_FORMAT_ASTC_4X4_UNORM_SRGB ||
+                    dxgiFormat === DXGI_FORMAT_ASTC_5X4_UNORM ||
+                    dxgiFormat === DXGI_FORMAT_ASTC_5X4_UNORM_SRGB ||
+                    dxgiFormat === DXGI_FORMAT_ASTC_5X5_UNORM ||
+                    dxgiFormat === DXGI_FORMAT_ASTC_5X5_UNORM_SRGB ||
+                    dxgiFormat === DXGI_FORMAT_ASTC_6X5_UNORM ||
+                    dxgiFormat === DXGI_FORMAT_ASTC_6X5_UNORM_SRGB ||
+                    dxgiFormat === DXGI_FORMAT_ASTC_6X6_UNORM ||
+                    dxgiFormat === DXGI_FORMAT_ASTC_6X6_UNORM_SRGB ||
+                    dxgiFormat === DXGI_FORMAT_ASTC_8X5_UNORM ||
+                    dxgiFormat === DXGI_FORMAT_ASTC_8X5_UNORM_SRGB ||
+                    dxgiFormat === DXGI_FORMAT_ASTC_8X6_UNORM ||
+                    dxgiFormat === DXGI_FORMAT_ASTC_8X6_UNORM_SRGB ||
+                    dxgiFormat === DXGI_FORMAT_ASTC_8X8_UNORM ||
+                    dxgiFormat === DXGI_FORMAT_ASTC_8X8_UNORM_SRGB ||
+                    dxgiFormat === DXGI_FORMAT_ASTC_10X5_UNORM ||
+                    dxgiFormat === DXGI_FORMAT_ASTC_10X5_UNORM_SRGB ||
+                    dxgiFormat === DXGI_FORMAT_ASTC_10X6_UNORM ||
+                    dxgiFormat === DXGI_FORMAT_ASTC_10X6_UNORM_SRGB ||
+                    dxgiFormat === DXGI_FORMAT_ASTC_10X8_UNORM ||
+                    dxgiFormat === DXGI_FORMAT_ASTC_10X8_UNORM_SRGB ||
+                    dxgiFormat === DXGI_FORMAT_ASTC_10X10_UNORM ||
+                    dxgiFormat === DXGI_FORMAT_ASTC_10X10_UNORM_SRGB ||
+                    dxgiFormat === DXGI_FORMAT_ASTC_12X10_UNORM ||
+                    dxgiFormat === DXGI_FORMAT_ASTC_12X10_UNORM_SRGB ||
                     dxgiFormat === DXGI_FORMAT_ASTC_12X12_UNORM
                 ) {
                     textureType = Constants.TEXTURETYPE_UNSIGNED_INT;
                     break;
                 } else if (
-                    dxgiFormat === DXGI_FORMAT_BC6H_UF16
-                    ||
-                    dxgiFormat === DXGI_FORMAT_BC6H_SF16
-                    ||
-                    DXGI_FORMAT_ASTC_4X4_TYPELESS
-                    ||
-                    DXGI_FORMAT_ASTC_5X4_TYPELESS
-                    ||
-                    DXGI_FORMAT_ASTC_5X5_TYPELESS
-                    ||
-                    DXGI_FORMAT_ASTC_6X5_TYPELESS
-                    ||
-                    DXGI_FORMAT_ASTC_6X6_TYPELESS
-                    ||
-                    DXGI_FORMAT_ASTC_8X5_TYPELESS
-                    ||
-                    DXGI_FORMAT_ASTC_8X6_TYPELESS
-                    ||
-                    DXGI_FORMAT_ASTC_8X8_TYPELESS
-                    ||
-                    DXGI_FORMAT_ASTC_10X5_TYPELESS
-                    ||
-                    DXGI_FORMAT_ASTC_10X6_TYPELESS
-                    ||
-                    DXGI_FORMAT_ASTC_10X8_TYPELESS
-                    ||
-                    DXGI_FORMAT_ASTC_10X10_TYPELESS
-                    ||
-                    DXGI_FORMAT_ASTC_12X10_TYPELESS
-                    ||
+                    dxgiFormat === DXGI_FORMAT_BC6H_UF16 ||
+                    dxgiFormat === DXGI_FORMAT_BC6H_SF16 ||
+                    DXGI_FORMAT_ASTC_4X4_TYPELESS ||
+                    DXGI_FORMAT_ASTC_5X4_TYPELESS ||
+                    DXGI_FORMAT_ASTC_5X5_TYPELESS ||
+                    DXGI_FORMAT_ASTC_6X5_TYPELESS ||
+                    DXGI_FORMAT_ASTC_6X6_TYPELESS ||
+                    DXGI_FORMAT_ASTC_8X5_TYPELESS ||
+                    DXGI_FORMAT_ASTC_8X6_TYPELESS ||
+                    DXGI_FORMAT_ASTC_8X8_TYPELESS ||
+                    DXGI_FORMAT_ASTC_10X5_TYPELESS ||
+                    DXGI_FORMAT_ASTC_10X6_TYPELESS ||
+                    DXGI_FORMAT_ASTC_10X8_TYPELESS ||
+                    DXGI_FORMAT_ASTC_10X10_TYPELESS ||
+                    DXGI_FORMAT_ASTC_12X10_TYPELESS ||
                     DXGI_FORMAT_ASTC_12X12_TYPELESS
                 ) {
                     textureType = Constants.TEXTURETYPE_FLOAT;
                     break;
                 }
-                //< VRNET
+            //< VRNET
         }
 
         return {
@@ -349,9 +305,12 @@ export class DDSTools {
             isRGB: (header[off_pfFlags] & DDPF_RGB) === DDPF_RGB,
             isLuminance: (header[off_pfFlags] & DDPF_LUMINANCE) === DDPF_LUMINANCE,
             isCube: (header[off_caps2] & DDSCAPS2_CUBEMAP) === DDSCAPS2_CUBEMAP,
-            isCompressed: fourCC === FOURCC_DXT1 || fourCC === FOURCC_DXT3 || fourCC === FOURCC_DXT5
-            //> VRNET
-                || (fourCC === FOURCC_DX10 && (dxgiFormat >= DXGI_FORMAT_BC6H_UF16 && dxgiFormat <= DXGI_FORMAT_ASTC_12X12_UNORM_SRGB)),
+            isCompressed:
+                fourCC === FOURCC_DXT1 ||
+                fourCC === FOURCC_DXT3 ||
+                fourCC === FOURCC_DXT5 ||
+                //> VRNET
+                (fourCC === FOURCC_DX10 && dxgiFormat >= DXGI_FORMAT_BC6H_UF16 && dxgiFormat <= DXGI_FORMAT_ASTC_12X12_UNORM_SRGB),
             //< VRNET
             dxgiFormat: dxgiFormat,
             textureType: textureType,
@@ -670,9 +629,8 @@ export class DDSTools {
                             supported = true;
                             break;
 
-
                         //> VRNET
-/*
+                        /*
 public static readonly TEXTUREFORMAT_COMPRESSED_RGBA_ASTC_10x10_KHR = 37819;
     public static readonly TEXTUREFORMAT_COMPRESSED_RGBA_ASTC_10x5_KHR = 37816;
     public static readonly TEXTUREFORMAT_COMPRESSED_RGBA_ASTC_10x6_KHR = 37817;
@@ -898,6 +856,10 @@ const DXGI_FORMAT_ASTC_12X12_UNORM_SRGB   = 187;
         if (computeFormats) {
             internalCompressedFormat = engine._getRGBABufferInternalSizedFormat(info.textureType);
         }
+
+        // > VRNET
+        texture._internalCompressedFormat = internalCompressedFormat;
+        // < VRNET
 
         mipmapCount = 1;
         if (header[off_flags] & DDSD_MIPMAPCOUNT && loadMipmaps !== false) {

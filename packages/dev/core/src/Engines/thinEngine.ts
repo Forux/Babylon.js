@@ -3177,81 +3177,76 @@ export class ThinEngine extends AbstractEngine {
         this._bindTextureDirectly(target, null);
     }
 
-    public uploadMipmapsToTexture(
-        texture: InternalTexture,
-        width: number,
-        height: number,
-        buffers: ArrayBufferView[],
-        faces?: number
-    ): Promise<void> {
+    public uploadMipmapsToTexture(texture: InternalTexture, width: number, height: number, buffers: ArrayBufferView[], faces?: number): Promise<void> {
         const internalCompressedFormat = texture?._internalCompressedFormat;
         if (!internalCompressedFormat) {
             return Promise.reject(new Error("No internal compressed format present"));
         }
         const BLOCK_SIZE = 2 * 1024 * 1024;
-        const BlockSizeByInternalFormat: { [format: number]: { width: number, height: number, bytesLength: number } } = {
-            //ASTC: https://registry.khronos.org/webgl/extensions/WEBGL_compressed_texture_astc/
-            0x93B0: { width: 4, height: 4, bytesLength: 16 },
-            0x93B1: { width: 5, height: 4, bytesLength: 16 },
-            0x93B2: { width: 5, height: 5, bytesLength: 16 },
-            0x93B3: { width: 6, height: 5, bytesLength: 16 },
-            0x93B4: { width: 6, height: 6, bytesLength: 16 },
-            0x93B5: { width: 8, height: 5, bytesLength: 16 },
-            0x93B6: { width: 8, height: 6, bytesLength: 16 },
-            0x93B7: { width: 8, height: 8, bytesLength: 16 },
-            0x93B8: { width: 10, height: 5, bytesLength: 16 },
-            0x93B9: { width: 10, height: 6, bytesLength: 16 },
-            0x93BA: { width: 10, height: 8, bytesLength: 16 },
-            0x93BB: { width: 10, height: 10, bytesLength: 16 },
-            0x93BC: { width: 12, height: 10, bytesLength: 16 },
-            0x93BD: { width: 12, height: 12, bytesLength: 16 },
-            0x93D0: { width: 4, height: 4, bytesLength: 16 },
-            0x93D1: { width: 5, height: 4, bytesLength: 16 },
-            0x93D2: { width: 5, height: 5, bytesLength: 16 },
-            0x93D3: { width: 6, height: 5, bytesLength: 16 },
-            0x93D4: { width: 6, height: 6, bytesLength: 16 },
-            0x93D5: { width: 8, height: 5, bytesLength: 16 },
-            0x93D6: { width: 8, height: 6, bytesLength: 16 },
-            0x93D7: { width: 8, height: 8, bytesLength: 16 },
-            0x93D8: { width: 10, height: 5, bytesLength: 16 },
-            0x93D9: { width: 10, height: 6, bytesLength: 16 },
-            0x93DA: { width: 10, height: 8, bytesLength: 16 },
-            0x93DB: { width: 10, height: 10, bytesLength: 16 },
-            0x93DC: { width: 12, height: 10, bytesLength: 16 },
-            0x93DD: { width: 12, height: 12, bytesLength: 16 },
-            //ETC1: https://registry.khronos.org/webgl/extensions/WEBGL_compressed_texture_etc1/
-            0x8D64: { width: 4, height: 4, bytesLength: 8 },
-            //ETC2: https://registry.khronos.org/webgl/extensions/WEBGL_compressed_texture_etc/
-            0x9270: { width: 4, height: 4, bytesLength: 8 },
-            0x9271: { width: 4, height: 4, bytesLength: 8 },
-            0x9272: { width: 4, height: 4, bytesLength: 16 },
-            0x9273: { width: 4, height: 4, bytesLength: 16 },
-            0x9274: { width: 4, height: 4, bytesLength: 8 },
-            0x9275: { width: 4, height: 4, bytesLength: 8 },
-            0x9276: { width: 4, height: 4, bytesLength: 8 },
-            0x9277: { width: 4, height: 4, bytesLength: 8 },
-            0x9278: { width: 4, height: 4, bytesLength: 16 },
-            0x9279: { width: 4, height: 4, bytesLength: 16 },
-            //DXT: https://registry.khronos.org/webgl/extensions/WEBGL_compressed_texture_s3tc/
-            0x83F0: { width: 4, height: 4, bytesLength: 8 },
-            0x83F1: { width: 4, height: 4, bytesLength: 8 },
-            0x83F2: { width: 4, height: 4, bytesLength: 16 },
-            0x83F3: { width: 4, height: 4, bytesLength: 16 },
-            //BPTC (BC6 and BC7): https://registry.khronos.org/OpenGL/extensions/EXT/EXT_texture_compression_bptc.txt
-            0x8E8C: { width: 4, height: 4, bytesLength: 16 },
-            0x8E8D: { width: 4, height: 4, bytesLength: 16 },
-            0x8E8E: { width: 4, height: 4, bytesLength: 16 },
-            0x8E8F: { width: 4, height: 4, bytesLength: 16 },
-            //RGTC: https://registry.khronos.org/OpenGL/extensions/EXT/EXT_texture_compression_rgtc.txt
-            0x8DBB: { width: 4, height: 4, bytesLength: 8 },
-            0x8DBC: { width: 4, height: 4, bytesLength: 8 },
-            0x8DBD: { width: 4, height: 4, bytesLength: 16 },
-            0x8DBE: { width: 4, height: 4, bytesLength: 16 },
-            //PVRTC: https://registry.khronos.org/webgl/extensions/WEBGL_compressed_texture_pvrtc/
-            // кодування не блочне
+        const blockSizeByInternalFormat = new Map<number, { width: number; height: number; bytesLength: number }>([
+            // ASTC: https://registry.khronos.org/webgl/extensions/WEBGL_compressed_texture_astc/
+            [0x93b0, { width: 4, height: 4, bytesLength: 16 }],
+            [0x93b1, { width: 5, height: 4, bytesLength: 16 }],
+            [0x93b2, { width: 5, height: 5, bytesLength: 16 }],
+            [0x93b3, { width: 6, height: 5, bytesLength: 16 }],
+            [0x93b4, { width: 6, height: 6, bytesLength: 16 }],
+            [0x93b5, { width: 8, height: 5, bytesLength: 16 }],
+            [0x93b6, { width: 8, height: 6, bytesLength: 16 }],
+            [0x93b7, { width: 8, height: 8, bytesLength: 16 }],
+            [0x93b8, { width: 10, height: 5, bytesLength: 16 }],
+            [0x93b9, { width: 10, height: 6, bytesLength: 16 }],
+            [0x93ba, { width: 10, height: 8, bytesLength: 16 }],
+            [0x93bb, { width: 10, height: 10, bytesLength: 16 }],
+            [0x93bc, { width: 12, height: 10, bytesLength: 16 }],
+            [0x93bd, { width: 12, height: 12, bytesLength: 16 }],
+            [0x93d0, { width: 4, height: 4, bytesLength: 16 }],
+            [0x93d1, { width: 5, height: 4, bytesLength: 16 }],
+            [0x93d2, { width: 5, height: 5, bytesLength: 16 }],
+            [0x93d3, { width: 6, height: 5, bytesLength: 16 }],
+            [0x93d4, { width: 6, height: 6, bytesLength: 16 }],
+            [0x93d5, { width: 8, height: 5, bytesLength: 16 }],
+            [0x93d6, { width: 8, height: 6, bytesLength: 16 }],
+            [0x93d7, { width: 8, height: 8, bytesLength: 16 }],
+            [0x93d8, { width: 10, height: 5, bytesLength: 16 }],
+            [0x93d9, { width: 10, height: 6, bytesLength: 16 }],
+            [0x93da, { width: 10, height: 8, bytesLength: 16 }],
+            [0x93db, { width: 10, height: 10, bytesLength: 16 }],
+            [0x93dc, { width: 12, height: 10, bytesLength: 16 }],
+            [0x93dd, { width: 12, height: 12, bytesLength: 16 }],
+            // ETC1: https://registry.khronos.org/webgl/extensions/WEBGL_compressed_texture_etc1/
+            [0x8d64, { width: 4, height: 4, bytesLength: 8 }],
+            // ETC2: https://registry.khronos.org/webgl/extensions/WEBGL_compressed_texture_etc/
+            [0x9270, { width: 4, height: 4, bytesLength: 8 }],
+            [0x9271, { width: 4, height: 4, bytesLength: 8 }],
+            [0x9272, { width: 4, height: 4, bytesLength: 16 }],
+            [0x9273, { width: 4, height: 4, bytesLength: 16 }],
+            [0x9274, { width: 4, height: 4, bytesLength: 8 }],
+            [0x9275, { width: 4, height: 4, bytesLength: 8 }],
+            [0x9276, { width: 4, height: 4, bytesLength: 8 }],
+            [0x9277, { width: 4, height: 4, bytesLength: 8 }],
+            [0x9278, { width: 4, height: 4, bytesLength: 16 }],
+            [0x9279, { width: 4, height: 4, bytesLength: 16 }],
+            // DXT: https://registry.khronos.org/webgl/extensions/WEBGL_compressed_texture_s3tc/
+            [0x83f0, { width: 4, height: 4, bytesLength: 8 }],
+            [0x83f1, { width: 4, height: 4, bytesLength: 8 }],
+            [0x83f2, { width: 4, height: 4, bytesLength: 16 }],
+            [0x83f3, { width: 4, height: 4, bytesLength: 16 }],
+            // BPTC (BC6 and BC7): https://registry.khronos.org/OpenGL/extensions/EXT/EXT_texture_compression_bptc.txt
+            [0x8e8c, { width: 4, height: 4, bytesLength: 16 }],
+            [0x8e8d, { width: 4, height: 4, bytesLength: 16 }],
+            [0x8e8e, { width: 4, height: 4, bytesLength: 16 }],
+            [0x8e8f, { width: 4, height: 4, bytesLength: 16 }],
+            // RGTC: https://registry.khronos.org/OpenGL/extensions/EXT/EXT_texture_compression_rgtc.txt
+            [0x8dbb, { width: 4, height: 4, bytesLength: 8 }],
+            [0x8dbc, { width: 4, height: 4, bytesLength: 8 }],
+            [0x8dbd, { width: 4, height: 4, bytesLength: 16 }],
+            [0x8dbe, { width: 4, height: 4, bytesLength: 16 }],
+        ]);
+        const block = blockSizeByInternalFormat.get(internalCompressedFormat);
+        if (!block) {
+            return Promise.reject(new Error("Unsupported internal compressed format"));
         }
-        const block = BlockSizeByInternalFormat[internalCompressedFormat];
-        const target = (faceIndex: number) => texture.isCube ? this._gl.TEXTURE_CUBE_MAP_POSITIVE_X + faceIndex : this._gl.TEXTURE_2D;
+        const target = (faceIndex: number) => (texture.isCube ? this._gl.TEXTURE_CUBE_MAP_POSITIVE_X + faceIndex : this._gl.TEXTURE_2D);
         return this._uploadMipmapsToTextureBase(
             texture,
             width,
@@ -3259,47 +3254,48 @@ export class ThinEngine extends AbstractEngine {
             buffers,
             block,
             BLOCK_SIZE,
-            () => this._createHardwareTexture(),
-            (resource: WebGLTexture, faceIndex: number) => this._gl.bindTexture(target(faceIndex), resource),
+            (_texture: Nullable<InternalTexture>, faceIndex: number) => this._bindTextureDirectly(target(faceIndex), _texture),
+            (_texture: InternalTexture, faceIndex: number) => {
+                const targ = target(faceIndex);
+                this._bindTextureDirectly(targ, _texture);
+                const samplingParameters = this._getSamplingParameters(texture.samplingMode, texture.generateMipMaps);
+                this._gl.texParameteri(targ, this._gl.TEXTURE_MAG_FILTER, samplingParameters.mag);
+                this._gl.texParameteri(targ, this._gl.TEXTURE_MIN_FILTER, samplingParameters.min);
+                if (_texture.wrapU !== null) {
+                    this._setTextureParameterInteger(targ, this._gl.TEXTURE_WRAP_S, this._getTextureWrapMode(_texture.wrapU), _texture);
+                }
+
+                if (_texture.wrapV !== null) {
+                    this._setTextureParameterInteger(targ, this._gl.TEXTURE_WRAP_T, this._getTextureWrapMode(_texture.wrapV), _texture);
+                }
+
+                if (_texture.wrapR !== null) {
+                    this._setTextureParameterInteger(targ, this._gl.TEXTURE_WRAP_R, this._getTextureWrapMode(_texture.wrapR), _texture);
+                }
+                this._bindTextureDirectly(targ, null);
+            },
             (
-                data: ArrayBufferView, 
-                mipmapSize: { 
-                    width: number, 
-                    height: number 
+                data: ArrayBufferView,
+                mipmapSize: {
+                    width: number;
+                    height: number;
                 },
                 faceIndex: number,
                 lod: number
-            ) => this._gl.compressedTexImage2D(
-                target(faceIndex), 
-                lod, 
-                internalCompressedFormat, 
-                mipmapSize.width, 
-                mipmapSize.height, 
-                0, 
-                data
-            ),
+            ) => this._gl.compressedTexImage2D(target(faceIndex), lod, internalCompressedFormat, mipmapSize.width, mipmapSize.height, 0, data),
             (
-                data: ArrayBufferView, 
-                block: { 
-                    xOffset: number, 
-                    yOffset: number, 
-                    width: number, 
-                    height: number 
+                data: ArrayBufferView,
+                block: {
+                    xOffset: number;
+                    yOffset: number;
+                    width: number;
+                    height: number;
                 },
                 faceIndex: number,
                 lod: number
-            ) => this._gl.compressedTexSubImage2D(
-                target(faceIndex), 
-                lod, 
-                block.xOffset, 
-                block.yOffset, 
-                block.width, 
-                block.height, 
-                internalCompressedFormat, 
-                data
-            ),
+            ) => this._gl.compressedTexSubImage2D(target(faceIndex), lod, block.xOffset, block.yOffset, block.width, block.height, internalCompressedFormat, data),
             faces
-        )
+        );
     }
 
     /**
@@ -4475,7 +4471,6 @@ export class ThinEngine extends AbstractEngine {
         if (flushRenderer) {
             this.flushFramebuffer();
         }
-        console.log(`readPixels format: ${format}`);
         this._gl.readPixels(x, y, width, height, format, this._gl.UNSIGNED_BYTE, data);
         return Promise.resolve(data);
     }

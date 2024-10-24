@@ -1082,48 +1082,49 @@ export abstract class AbstractEngine {
         width: number,
         height: number,
         buffers: ArrayBufferView[],
-        blockInfo: { width: number, height: number, bytesLength: number },
+        blockInfo: { width: number; height: number; bytesLength: number },
         bytesInBlock: number,
-        prepareHardwareTexture: () => HardwareTextureWrapper,
-        bindTexture: (resource: any, faceIndex: number) => void,
+        bindTexture: (texture: InternalTexture, faceIndex: number) => void,
+        finalizeTexture: (texture: InternalTexture, faceIndex: number) => void,
         pushData: (
-            data: ArrayBufferView, 
-            mipmapSize: { 
-                width: number, 
-                height: number 
-            }, 
+            data: ArrayBufferView,
+            mipmapSize: {
+                width: number;
+                height: number;
+            },
             faceIndex: number,
             lod: number
         ) => void,
         pushDataBlock: (
-            data: ArrayBufferView, 
-            block: { 
-                xOffset: number, 
-                yOffset: number, 
-                width: number, 
-                height: number 
+            data: ArrayBufferView,
+            block: {
+                xOffset: number;
+                yOffset: number;
+                width: number;
+                height: number;
             },
-            faceIndex: number, 
-            lod: number) => void,
+            faceIndex: number,
+            lod: number
+        ) => void,
         faces?: number
     ): Promise<void> {
         return new Promise(async (resolve, reject) => {
             if (!texture) {
                 return resolve();
             }
-    
+
             if (buffers.length === 0) {
                 return reject(new Error("buffers must be a non-empty array of ArrayBufferViews"));
             }
-    
+
             if (!texture._hardwareTexture) {
                 return reject(new Error("The texture must have have hardware texture to append mipmaps."));
             }
-    
+
             if (texture?._internalCompressedFormat === void 0) {
                 return reject(new Error("Internal compressed format in the texture required to append mipmaps."));
             }
-    
+
             faces ??= 1;
 
             if (buffers.length % faces !== 0) {
@@ -1131,23 +1132,24 @@ export abstract class AbstractEngine {
             }
             const intdiv = (x: number, y: number) => {
                 return Math.floor((x + 0.5) / y);
-            }
+            };
             const alignTo = (value: number, alignment: number) => {
                 return intdiv((value | 0) + alignment - 1, alignment) * alignment;
-            }
+            };
 
             const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-            
-            const newHardwareTexture = prepareHardwareTexture();
+
+            const newHardwareTexture = this._createHardwareTexture();
             const oldHardwareTexture = texture._hardwareTexture;
-            
+            texture._hardwareTexture = newHardwareTexture;
+
             const mipmapCount = buffers.length / faces;
 
             const blockedLoading = { bytesInBlock, bytesLeft: bytesInBlock };
-            
+
             for (let m = 0, i = 0; m < mipmapCount; m++) {
-                let mmWidth  = (width  + (1 << m) - 1) >> m;
-                let mmHeight = (height + (1 << m) - 1) >> m;
+                const mmWidth = (width + (1 << m) - 1) >> m;
+                const mmHeight = (height + (1 << m) - 1) >> m;
                 const blocksCountX = Math.ceil((mmWidth - 0.5) / blockInfo.width);
                 const blocksCountY = Math.ceil((mmHeight - 0.5) / blockInfo.height);
                 const bytesInBlockLine = blockInfo.bytesLength * blocksCountX;
@@ -1158,31 +1160,41 @@ export abstract class AbstractEngine {
                     if (blockedLoading.bytesLeft <= 0) {
                         await delay(0);
                     }
-                    bindTexture(newHardwareTexture, f);
-                    
-                    if(dataSize < blockedLoading.bytesLeft + blockedLoading.bytesInBlock * 0.3) { // Якщо у нас текстура влазить в квоту, або вона невелика - завантажуємо без розбиття
+                    bindTexture(texture, f);
+
+                    if (dataSize < blockedLoading.bytesLeft + blockedLoading.bytesInBlock * 0.3) {
+                        // Якщо у нас текстура влазить в квоту, або вона невелика - завантажуємо без розбиття
                         await delay(0);
-                        bindTexture(newHardwareTexture, f);
+                        bindTexture(texture, f);
                         pushData(data, { width: mmWidth, height: mmHeight }, f, m);
                         blockedLoading.bytesLeft -= dataSize;
-                    } else { // Якщо текстура велика - завантажуємо частинами
+                    } else {
+                        // Якщо текстура велика - завантажуємо частинами
                         pushData(new Uint8Array(dataSize), { width: mmWidth, height: mmHeight }, f, m); // як виявляється однотонні текстури на відеокарту передаються миттєво. мабуть є якась оптимізація
-                        for(let loadedBlockLines = 0; ; ) {
+                        for (let loadedBlockLines = 0; ; ) {
                             const canLoadBlockLines = Math.min(Math.max(intdiv(blockedLoading.bytesLeft, bytesInBlockLine), 1), blocksCountY - loadedBlockLines);
                             const newLoadedBlockLines = loadedBlockLines + canLoadBlockLines;
                             const loadedLines = Math.min(newLoadedBlockLines * blockInfo.height, mmHeight) - loadedBlockLines * blockInfo.height;
-                            pushDataBlock(data.subarray(loadedBlockLines * bytesInBlockLine, newLoadedBlockLines * bytesInBlockLine), { xOffset: 0, yOffset: loadedBlockLines * blockInfo.height, width: mmWidth, height: loadedLines }, f, m);
+                            pushDataBlock(
+                                data.subarray(loadedBlockLines * bytesInBlockLine, newLoadedBlockLines * bytesInBlockLine),
+                                { xOffset: 0, yOffset: loadedBlockLines * blockInfo.height, width: mmWidth, height: loadedLines },
+                                f,
+                                m
+                            );
                             loadedBlockLines = newLoadedBlockLines;
                             blockedLoading.bytesLeft -= canLoadBlockLines * bytesInBlockLine;
-                            if(loadedBlockLines < blocksCountY) { // Switching to frame rendering if not all blocks are loaded
+                            if (loadedBlockLines < blocksCountY) {
+                                // Switching to frame rendering if not all blocks are loaded
                                 await delay(0);
-                                bindTexture(newHardwareTexture, f);
+                                bindTexture(texture, f);
                                 blockedLoading.bytesLeft = blockedLoading.bytesInBlock;
-                            } else { // Stop loading when everything is loaded
+                            } else {
+                                // Stop loading when everything is loaded
                                 break;
                             }
                         }
                     }
+                    finalizeTexture(texture, f);
                 }
             }
             texture.updateSize(width, height);
@@ -1191,13 +1203,7 @@ export abstract class AbstractEngine {
         });
     }
 
-    public abstract uploadMipmapsToTexture(
-        texture: InternalTexture,
-        width: number,
-        height: number,
-        buffers: ArrayBufferView[],
-        faces?: number
-    ): Promise<void>;
+    public abstract uploadMipmapsToTexture(texture: InternalTexture, width: number, height: number, buffers: ArrayBufferView[], faces?: number): Promise<void>;
 
     /**
      * @internal

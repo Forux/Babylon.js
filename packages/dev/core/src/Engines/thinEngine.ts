@@ -3177,7 +3177,7 @@ export class ThinEngine extends AbstractEngine {
         this._bindTextureDirectly(target, null);
     }
 
-    public uploadMipmapsToTexture(texture: InternalTexture, width: number, height: number, buffers: ArrayBufferView[], faces?: number): Promise<void> {
+    public uploadMipmapsToTexture(texture: InternalTexture, width: number, height: number, buffers: ArrayBufferView[] | ArrayBufferView, faces?: number): Promise<void> {
         const internalCompressedFormat = texture?._internalCompressedFormat;
         if (!internalCompressedFormat) {
             return Promise.reject(new Error("No internal compressed format present"));
@@ -3246,7 +3246,8 @@ export class ThinEngine extends AbstractEngine {
         if (!block) {
             return Promise.reject(new Error("Unsupported internal compressed format"));
         }
-        const target = (faceIndex: number) => (texture.isCube ? this._gl.TEXTURE_CUBE_MAP_POSITIVE_X + faceIndex : this._gl.TEXTURE_2D);
+        const target = (faceIndex?: number) => (texture.isCube ? (faceIndex ? this._gl.TEXTURE_CUBE_MAP_POSITIVE_X + faceIndex : this._gl.TEXTURE_CUBE_MAP) : this._gl.TEXTURE_2D);
+        const mipmapCount = Math.log2(Math.max(width, height)) + 1;
         return this._uploadMipmapsToTextureBase(
             texture,
             width,
@@ -3254,25 +3255,32 @@ export class ThinEngine extends AbstractEngine {
             buffers,
             block,
             BLOCK_SIZE,
-            (_texture: Nullable<InternalTexture>, faceIndex: number) => this._bindTextureDirectly(target(faceIndex), _texture),
-            (_texture: InternalTexture, faceIndex: number) => {
-                const targ = target(faceIndex);
-                this._bindTextureDirectly(targ, _texture);
-                const samplingParameters = this._getSamplingParameters(texture.samplingMode, texture.generateMipMaps);
-                this._gl.texParameteri(targ, this._gl.TEXTURE_MAG_FILTER, samplingParameters.mag);
-                this._gl.texParameteri(targ, this._gl.TEXTURE_MIN_FILTER, samplingParameters.min);
-                if (_texture.wrapU !== null) {
-                    this._setTextureParameterInteger(targ, this._gl.TEXTURE_WRAP_S, this._getTextureWrapMode(_texture.wrapU), _texture);
-                }
+            (_texture: HardwareTextureWrapper) => {
+                this._gl.bindTexture(target(), texture?._hardwareTexture?.underlyingResource ?? null);
+            },
+            (_texture: InternalTexture, _hardwareTexture: HardwareTextureWrapper) => {
+                if (_texture.isCube) {
+                    this._setCubeMapTextureParams(_texture, true, mipmapCount - 1);
+                } else {
+                    const targ = this._gl.TEXTURE_2D;
+                    this._gl.bindTexture(targ, _hardwareTexture?.underlyingResource ?? null);
+                    const samplingParameters = this._getSamplingParameters(texture.samplingMode, texture.generateMipMaps);
+                    this._gl.texParameteri(targ, this._gl.TEXTURE_MAG_FILTER, samplingParameters.mag);
+                    this._gl.texParameteri(targ, this._gl.TEXTURE_MIN_FILTER, samplingParameters.min);
+                    if (_texture.wrapU !== null) {
+                        this._setTextureParameterInteger(targ, this._gl.TEXTURE_WRAP_S, this._getTextureWrapMode(_texture.wrapU), _texture);
+                    }
 
-                if (_texture.wrapV !== null) {
-                    this._setTextureParameterInteger(targ, this._gl.TEXTURE_WRAP_T, this._getTextureWrapMode(_texture.wrapV), _texture);
-                }
+                    if (_texture.wrapV !== null) {
+                        this._setTextureParameterInteger(targ, this._gl.TEXTURE_WRAP_T, this._getTextureWrapMode(_texture.wrapV), _texture);
+                    }
 
-                if (_texture.wrapR !== null) {
-                    this._setTextureParameterInteger(targ, this._gl.TEXTURE_WRAP_R, this._getTextureWrapMode(_texture.wrapR), _texture);
+                    if (_texture.wrapR !== null) {
+                        this._setTextureParameterInteger(targ, this._gl.TEXTURE_WRAP_R, this._getTextureWrapMode(_texture.wrapR), _texture);
+                    }
+                    this._gl.bindTexture(targ, null);
                 }
-                this._bindTextureDirectly(targ, null);
+                // const targ = target(faceIndex);
             },
             (
                 data: ArrayBufferView,

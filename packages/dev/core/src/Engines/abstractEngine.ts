@@ -1204,6 +1204,7 @@ export abstract class AbstractEngine {
             texture.isReady = true;
             texture.onLoadedObservable.notifyObservers(texture);
             oldHardwareTexture.release();
+            resolve();
         });
     }
 

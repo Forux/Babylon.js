@@ -3246,7 +3246,8 @@ export class ThinEngine extends AbstractEngine {
         if (!block) {
             return Promise.reject(new Error("Unsupported internal compressed format"));
         }
-        const target = (faceIndex?: number) => (texture.isCube ? (faceIndex ? this._gl.TEXTURE_CUBE_MAP_POSITIVE_X + faceIndex : this._gl.TEXTURE_CUBE_MAP) : this._gl.TEXTURE_2D);
+        const target = texture.isCube ? this._gl.TEXTURE_CUBE_MAP : this._gl.TEXTURE_2D;
+        const faceTarget = (faceIndex: number) => (texture.isCube ? this._gl.TEXTURE_CUBE_MAP_POSITIVE_X + faceIndex : this._gl.TEXTURE_2D);
         const mipmapCount = Math.log2(Math.max(width, height)) + 1;
         return this._uploadMipmapsToTextureBase(
             texture,
@@ -3256,29 +3257,28 @@ export class ThinEngine extends AbstractEngine {
             block,
             BLOCK_SIZE,
             (_texture: HardwareTextureWrapper) => {
-                this._gl.bindTexture(target(), texture?._hardwareTexture?.underlyingResource ?? null);
+                this._gl.bindTexture(target, texture?._hardwareTexture?.underlyingResource ?? null);
             },
             (_texture: InternalTexture, _hardwareTexture: HardwareTextureWrapper) => {
                 if (_texture.isCube) {
                     this._setCubeMapTextureParams(_texture, true, mipmapCount - 1);
                 } else {
-                    const targ = this._gl.TEXTURE_2D;
-                    this._gl.bindTexture(targ, _hardwareTexture?.underlyingResource ?? null);
+                    this._gl.bindTexture(target, _hardwareTexture?.underlyingResource ?? null);
                     const samplingParameters = this._getSamplingParameters(texture.samplingMode, texture.generateMipMaps);
-                    this._gl.texParameteri(targ, this._gl.TEXTURE_MAG_FILTER, samplingParameters.mag);
-                    this._gl.texParameteri(targ, this._gl.TEXTURE_MIN_FILTER, samplingParameters.min);
+                    this._gl.texParameteri(target, this._gl.TEXTURE_MAG_FILTER, samplingParameters.mag);
+                    this._gl.texParameteri(target, this._gl.TEXTURE_MIN_FILTER, samplingParameters.min);
                     if (_texture.wrapU !== null) {
-                        this._setTextureParameterInteger(targ, this._gl.TEXTURE_WRAP_S, this._getTextureWrapMode(_texture.wrapU), _texture);
+                        this._setTextureParameterInteger(target, this._gl.TEXTURE_WRAP_S, this._getTextureWrapMode(_texture.wrapU), _texture);
                     }
 
                     if (_texture.wrapV !== null) {
-                        this._setTextureParameterInteger(targ, this._gl.TEXTURE_WRAP_T, this._getTextureWrapMode(_texture.wrapV), _texture);
+                        this._setTextureParameterInteger(target, this._gl.TEXTURE_WRAP_T, this._getTextureWrapMode(_texture.wrapV), _texture);
                     }
 
                     if (_texture.wrapR !== null) {
-                        this._setTextureParameterInteger(targ, this._gl.TEXTURE_WRAP_R, this._getTextureWrapMode(_texture.wrapR), _texture);
+                        this._setTextureParameterInteger(target, this._gl.TEXTURE_WRAP_R, this._getTextureWrapMode(_texture.wrapR), _texture);
                     }
-                    this._gl.bindTexture(targ, null);
+                    this._gl.bindTexture(target, null);
                 }
                 // const targ = target(faceIndex);
             },
@@ -3290,7 +3290,7 @@ export class ThinEngine extends AbstractEngine {
                 },
                 faceIndex: number,
                 lod: number
-            ) => this._gl.compressedTexImage2D(target(faceIndex), lod, internalCompressedFormat, mipmapSize.width, mipmapSize.height, 0, data),
+            ) => this._gl.compressedTexImage2D(faceTarget(faceIndex), lod, internalCompressedFormat, mipmapSize.width, mipmapSize.height, 0, data),
             (
                 data: ArrayBufferView,
                 block: {
@@ -3301,7 +3301,7 @@ export class ThinEngine extends AbstractEngine {
                 },
                 faceIndex: number,
                 lod: number
-            ) => this._gl.compressedTexSubImage2D(target(faceIndex), lod, block.xOffset, block.yOffset, block.width, block.height, internalCompressedFormat, data),
+            ) => this._gl.compressedTexSubImage2D(faceTarget(faceIndex), lod, block.xOffset, block.yOffset, block.width, block.height, internalCompressedFormat, data),
             faces
         );
     }

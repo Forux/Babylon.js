@@ -8,7 +8,6 @@ import { Vector3 } from "core/Maths/math.vector";
 import { HemisphericLight } from "core/Lights/hemisphericLight";
 import { ArcRotateCamera } from "core/Cameras/arcRotateCamera";
 import { PreviewType } from "./previewType";
-import { Animation } from "core/Animations/animation";
 import { SceneLoader } from "core/Loading/sceneLoader";
 import { TransformNode } from "core/Meshes/transformNode";
 import type { AbstractMesh } from "core/Meshes/abstractMesh";
@@ -41,7 +40,7 @@ import "core/Helpers/sceneHelpers";
 import "core/Rendering/depthRendererSceneComponent";
 import { ShaderLanguage } from "core/Materials/shaderLanguage";
 import { Engine } from "core/Engines/engine";
-
+import { Animation } from "core/Animations/animation";
 const dontSerializeTextureContent = true;
 
 /**
@@ -128,7 +127,7 @@ export class PreviewManager {
             this._updatePreview();
         });
 
-        this._onPreviewCommandActivatedObserver = globalState.onPreviewCommandActivated.add((forceRefresh: boolean) => {
+        this._onPreviewCommandActivatedObserver = globalState.stateManager.onPreviewCommandActivated.add((forceRefresh: boolean) => {
             if (forceRefresh) {
                 this._currentType = -1;
                 this._scene.disableDepthRenderer();
@@ -369,6 +368,11 @@ export class PreviewManager {
                 this._globalState.particleSystemBlendMode = this._particleSystem?.blendMode ?? ParticleSystem.BLENDMODE_STANDARD;
                 break;
             }
+            case NodeMaterialModes.GaussianSplatting: {
+                this._camera.radius = 6;
+                this._camera.upperRadiusLimit = 5000;
+                break;
+            }
         }
 
         // Material
@@ -547,9 +551,28 @@ export class PreviewManager {
                         );
                         return;
                 }
+            } else if (this._globalState.mode === NodeMaterialModes.GaussianSplatting) {
+                switch (this._globalState.previewType) {
+                    case PreviewType.Parrot:
+                        SceneLoader.AppendAsync("https://assets.babylonjs.com/splats/", "gs_Sqwakers_trimed.splat", this._scene).then(() => {
+                            this._meshes.push(...this._scene.meshes);
+                            this._prepareScene();
+                        });
+                        break;
+                    case PreviewType.BricksSkull:
+                        SceneLoader.AppendAsync("https://assets.babylonjs.com/splats/", "gs_Skull.splat", this._scene).then(() => {
+                            this._meshes.push(...this._scene.meshes);
+                            this._prepareScene();
+                        });
+                        break;
+                    case PreviewType.Plants:
+                        SceneLoader.AppendAsync("https://assets.babylonjs.com/splats/", "gs_Plants.splat", this._scene).then(() => {
+                            this._meshes.push(...this._scene.meshes);
+                            this._prepareScene();
+                        });
+                        break;
+                }
             }
-
-            this._prepareScene();
         }
     }
 
@@ -714,7 +737,7 @@ export class PreviewManager {
 
     public dispose() {
         this._nodeMaterial.onBuildObservable.remove(this._onBuildObserver);
-        this._globalState.onPreviewCommandActivated.remove(this._onPreviewCommandActivatedObserver);
+        this._globalState.stateManager.onPreviewCommandActivated.remove(this._onPreviewCommandActivatedObserver);
         this._globalState.stateManager.onUpdateRequiredObservable.remove(this._onUpdateRequiredObserver);
         this._globalState.onAnimationCommandActivated.remove(this._onAnimationCommandActivatedObserver);
         this._globalState.onPreviewBackgroundChanged.remove(this._onPreviewBackgroundChangedObserver);

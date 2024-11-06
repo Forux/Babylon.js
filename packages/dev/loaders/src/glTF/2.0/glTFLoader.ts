@@ -2459,12 +2459,22 @@ export class GLTFLoader implements IGLTFLoader {
                     babylonTexture.name = image.uri.split("/").pop() || image.uri;
                 }
                 //< VRNET
+
+                // Set the internal texture label.
+                const internalTexture = babylonTexture.getInternalTexture();
+                if (internalTexture) {
+                    internalTexture.label = image.name;
+                }
             })
         );
 
         babylonTexture.wrapU = samplerData.wrapU;
         babylonTexture.wrapV = samplerData.wrapV;
         assign(babylonTexture);
+
+        if (this._parent.useGltfTextureNames) {
+            babylonTexture.name = image.name || image.uri || `image${image.index}`;
+        }
 
         return Promise.all(promises).then(() => {
             return babylonTexture;

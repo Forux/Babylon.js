@@ -8,7 +8,7 @@ import type { Nullable } from "core/types";
 import type { AbstractMesh } from "core/Meshes/abstractMesh";
 import { Mesh } from "core/Meshes/mesh";
 import { Logger } from "core/Misc/logger";
-import { Quaternion, Vector3 } from "core/Maths/math.vector";
+import { Vector3 } from "core/Maths/math.vector";
 import { PointsCloudSystem } from "core/Particles/pointsCloudSystem";
 import { Color4 } from "core/Maths/math.color";
 import { VertexData } from "core/Meshes/mesh.vertexData";
@@ -180,43 +180,46 @@ export class SPLATFileLoader implements ISceneLoaderPluginAsync, ISceneLoaderPlu
     }
 
     private _parse(meshesNames: any, scene: Scene, data: any, rootUrl: string): Promise<Array<AbstractMesh>> {
-        const babylonMeshesArray: Array<Mesh> = []; //The mesh for babylon
-        const parsedPLY = SPLATFileLoader._ConvertPLYToSplat(data as ArrayBuffer);
-        switch (parsedPLY.mode) {
-            case Mode.Splat:
-                {
-                    const gaussianSplatting = new GaussianSplattingMesh("GaussianSplatting", null, scene, this._loadingOptions.keepInRam);
-                    gaussianSplatting._parentContainer = this._assetContainer;
-                    babylonMeshesArray.push(gaussianSplatting);
-                    gaussianSplatting.loadDataAsync(parsedPLY.data);
-                }
-                break;
-            case Mode.PointCloud:
-                {
-                    const pointcloud = new PointsCloudSystem("PointCloud", 1, scene);
-                    if (SPLATFileLoader._BuildPointCloud(pointcloud, parsedPLY.data)) {
-                        return Promise.all([pointcloud.buildMeshAsync()]).then((mesh) => {
-                            babylonMeshesArray.push(mesh[0]);
-                            return babylonMeshesArray;
-                        });
-                    } else {
-                        pointcloud.dispose();
+        return SPLATFileLoader._ConvertPLYToSplat(data as ArrayBuffer).then(async (parsedPLY) => {
+            const babylonMeshesArray: Array<Mesh> = []; //The mesh for babylon
+            switch (parsedPLY.mode) {
+                case Mode.Splat:
+                    {
+                        const gaussianSplatting = new GaussianSplattingMesh("GaussianSplatting", null, scene, this._loadingOptions.keepInRam);
+                        gaussianSplatting._parentContainer = this._assetContainer;
+                        babylonMeshesArray.push(gaussianSplatting);
+                        await gaussianSplatting.updateDataAsync(parsedPLY.data);
                     }
-                }
-                break;
-            case Mode.Mesh:
-                {
-                    if (parsedPLY.faces) {
-                        babylonMeshesArray.push(SPLATFileLoader._BuildMesh(scene, parsedPLY));
-                    } else {
-                        throw new Error("PLY mesh doesn't contain face informations.");
+                    break;
+                case Mode.PointCloud:
+                    {
+                        const pointcloud = new PointsCloudSystem("PointCloud", 1, scene);
+                        if (SPLATFileLoader._BuildPointCloud(pointcloud, parsedPLY.data)) {
+                            return Promise.all([pointcloud.buildMeshAsync()]).then((mesh) => {
+                                babylonMeshesArray.push(mesh[0]);
+                                return babylonMeshesArray;
+                            });
+                        } else {
+                            pointcloud.dispose();
+                        }
                     }
-                }
-                break;
-            default:
-                throw new Error("Unsupported Splat mode");
-        }
-        return Promise.resolve(babylonMeshesArray);
+                    break;
+                case Mode.Mesh:
+                    {
+                        if (parsedPLY.faces) {
+                            babylonMeshesArray.push(SPLATFileLoader._BuildMesh(scene, parsedPLY));
+                        } else {
+                            throw new Error("PLY mesh doesn't contain face informations.");
+                        }
+                    }
+                    break;
+                default:
+                    throw new Error("Unsupported Splat mode");
+            }
+            return new Promise((resolve) => {
+                resolve(babylonMeshesArray);
+            });
+        });
     }
 
     /**
@@ -264,22 +267,32 @@ export class SPLATFileLoader implements ISceneLoaderPluginAsync, ISceneLoaderPlu
      * @param data the .ply data to load
      * @returns the loaded splat buffer
      */
-    private static _ConvertPLYToSplat(data: ArrayBuffer): ParsedPLY {
+    private static _ConvertPLYToSplat(data: ArrayBuffer): Promise<ParsedPLY> {
         const ubuf = new Uint8Array(data);
         const header = new TextDecoder().decode(ubuf.slice(0, 1024 * 10));
         const headerEnd = "end_header\n";
         const headerEndIndex = header.indexOf(headerEnd);
         if (headerEndIndex < 0 || !header) {
             // standard splat
-            return { mode: Mode.Splat, data: data };
+            return new Promise((resolve) => {
+                resolve({ mode: Mode.Splat, data: data });
+            });
         }
+
         const vertexCount = parseInt(/element vertex (\d+)\n/.exec(header)![1]);
         const faceElement = /element face (\d+)\n/.exec(header);
         let faceCount = 0;
         if (faceElement) {
             faceCount = parseInt(faceElement[1]);
         }
-        let rowOffset = 0;
+        const chunkElement = /element chunk (\d+)\n/.exec(header);
+        let chunkCount = 0;
+        if (chunkElement) {
+            chunkCount = parseInt(chunkElement[1]);
+        }
+
+        let rowVertexOffset = 0;
+        let rowChunkOffset = 0;
         const offsets: Record<string, number> = {
             double: 8,
             int: 4,
@@ -296,170 +309,93 @@ export class SPLATFileLoader implements ISceneLoaderPluginAsync, ISceneLoaderPlu
             type: string;
             offset: number;
         };
-        const properties: PlyProperty[] = [];
-        const filtered = header
-            .slice(0, headerEndIndex)
-            .split("\n")
-            .filter((k) => k.startsWith("property "));
+
+        const enum ElementMode {
+            Vertex = 0,
+            Chunk = 1,
+        }
+
+        let chunkMode = ElementMode.Chunk;
+        const vertexProperties: PlyProperty[] = [];
+        const chunkProperties: PlyProperty[] = [];
+        const filtered = header.slice(0, headerEndIndex).split("\n");
         for (const prop of filtered) {
-            const [, type, name] = prop.split(" ");
-            properties.push({ name, type, offset: rowOffset });
-            if (offsets[type]) {
-                rowOffset += offsets[type];
-            } else {
-                Logger.Warn(`Unsupported property type: ${type}.`);
+            if (prop.startsWith("property ")) {
+                const [, type, name] = prop.split(" ");
+
+                if (chunkMode == ElementMode.Chunk) {
+                    chunkProperties.push({ name, type, offset: rowChunkOffset });
+                    rowChunkOffset += offsets[type];
+                } else if (chunkMode == ElementMode.Vertex) {
+                    vertexProperties.push({ name, type, offset: rowVertexOffset });
+                    rowVertexOffset += offsets[type];
+                }
+
+                if (!offsets[type]) {
+                    Logger.Warn(`Unsupported property type: ${type}.`);
+                }
+            } else if (prop.startsWith("element ")) {
+                const [, type] = prop.split(" ");
+                if (type == "chunk") {
+                    chunkMode = ElementMode.Chunk;
+                } else if (type == "vertex") {
+                    chunkMode = ElementMode.Vertex;
+                }
             }
         }
 
-        const rowLength = 3 * 4 + 3 * 4 + 4 + 4;
-        const SH_C0 = 0.28209479177387814;
+        const rowVertexLength = rowVertexOffset;
+        const rowChunkLength = rowChunkOffset;
 
-        const dataView = new DataView(data, headerEndIndex + headerEnd.length);
-        const buffer = new ArrayBuffer(rowLength * vertexCount);
-        const q = new Quaternion();
+        return GaussianSplattingMesh.ConvertPLYToSplatAsync(data).then((buffer) => {
+            const dataView = new DataView(data, headerEndIndex + headerEnd.length);
+            let offset = rowChunkLength * chunkCount + rowVertexLength * vertexCount;
+            // faces
+            const faces: number[] = [];
+            if (faceCount) {
+                for (let i = 0; i < faceCount; i++) {
+                    const faceVertexCount = dataView.getUint8(offset);
+                    if (faceVertexCount != 3) {
+                        continue; // only support triangles
+                    }
+                    offset += 1;
 
-        for (let i = 0; i < vertexCount; i++) {
-            const position = new Float32Array(buffer, i * rowLength, 3);
-            const scale = new Float32Array(buffer, i * rowLength + 12, 3);
-            const rgba = new Uint8ClampedArray(buffer, i * rowLength + 24, 4);
-            const rot = new Uint8ClampedArray(buffer, i * rowLength + 28, 4);
-
-            let r0: number = 255;
-            let r1: number = 0;
-            let r2: number = 0;
-            let r3: number = 0;
-
-            for (let propertyIndex = 0; propertyIndex < properties.length; propertyIndex++) {
-                const property = properties[propertyIndex];
-                let value;
-                switch (property.type) {
-                    case "float":
-                        value = dataView.getFloat32(property.offset + i * rowOffset, true);
-                        break;
-                    case "int":
-                        value = dataView.getInt32(property.offset + i * rowOffset, true);
-                        break;
-                    case "uint":
-                        value = dataView.getUint32(property.offset + i * rowOffset, true);
-                        break;
-                    case "double":
-                        value = dataView.getFloat64(property.offset + i * rowOffset, true);
-                        break;
-                    case "uchar":
-                        value = dataView.getUint8(property.offset + i * rowOffset);
-                        break;
-                    default:
-                        //throw new Error(`Unsupported property type: ${property.type}`);
-                        continue;
-                }
-
-                switch (property.name) {
-                    case "x":
-                        position[0] = value;
-                        break;
-                    case "y":
-                        position[1] = value;
-                        break;
-                    case "z":
-                        position[2] = value;
-                        break;
-                    case "scale_0":
-                        scale[0] = Math.exp(value);
-                        break;
-                    case "scale_1":
-                        scale[1] = Math.exp(value);
-                        break;
-                    case "scale_2":
-                        scale[2] = Math.exp(value);
-                        break;
-                    case "diffuse_red":
-                    case "red":
-                        rgba[0] = value;
-                        break;
-                    case "diffuse_green":
-                    case "green":
-                        rgba[1] = value;
-                        break;
-                    case "diffuse_blue":
-                    case "blue":
-                        rgba[2] = value;
-                        break;
-                    case "f_dc_0":
-                        rgba[0] = (0.5 + SH_C0 * value) * 255;
-                        break;
-                    case "f_dc_1":
-                        rgba[1] = (0.5 + SH_C0 * value) * 255;
-                        break;
-                    case "f_dc_2":
-                        rgba[2] = (0.5 + SH_C0 * value) * 255;
-                        break;
-                    case "f_dc_3":
-                        rgba[3] = (0.5 + SH_C0 * value) * 255;
-                        break;
-                    case "opacity":
-                        rgba[3] = (1 / (1 + Math.exp(-value))) * 255;
-                        break;
-                    case "rot_0":
-                        r0 = value;
-                        break;
-                    case "rot_1":
-                        r1 = value;
-                        break;
-                    case "rot_2":
-                        r2 = value;
-                        break;
-                    case "rot_3":
-                        r3 = value;
-                        break;
+                    for (let j = 0; j < faceVertexCount; j++) {
+                        const vertexIndex = dataView.getUint32(offset + (2 - j) * 4, true); // change face winding
+                        faces.push(vertexIndex);
+                    }
+                    offset += 12;
                 }
             }
 
-            q.set(r1, r2, r3, r0);
-            q.normalize();
-            rot[0] = q.w * 128 + 128;
-            rot[1] = q.x * 128 + 128;
-            rot[2] = q.y * 128 + 128;
-            rot[3] = q.z * 128 + 128;
-        }
-
-        // faces
-        const faces = [];
-        if (faceCount) {
-            let offset = rowOffset * vertexCount;
-            for (let i = 0; i < faceCount; i++) {
-                const faceVertexCount = dataView.getUint8(offset);
-                if (faceVertexCount != 3) {
-                    continue; // only support triangles
+            // early exit for chunked/quantized ply
+            if (chunkCount) {
+                return new Promise((resolve) => {
+                    resolve({ mode: Mode.Splat, data: buffer, faces: faces, hasVertexColors: false });
+                });
+            }
+            // count available properties. if all necessary are present then it's a splat. Otherwise, it's a point cloud
+            // if faces are found, then it's a standard mesh
+            let propertyCount = 0;
+            let propertyColorCount = 0;
+            const splatProperties = ["x", "y", "z", "scale_0", "scale_1", "scale_2", "opacity", "rot_0", "rot_1", "rot_2", "rot_3"];
+            const splatColorProperties = ["red", "green", "blue", "f_dc_0", "f_dc_1", "f_dc_2"];
+            for (let propertyIndex = 0; propertyIndex < vertexProperties.length; propertyIndex++) {
+                const property = vertexProperties[propertyIndex];
+                if (splatProperties.includes(property.name)) {
+                    propertyCount++;
                 }
-                offset += 1;
-
-                for (let j = 0; j < faceVertexCount; j++) {
-                    const vertexIndex = dataView.getUint32(offset + (2 - j) * 4, true); // change face winding
-                    faces.push(vertexIndex);
+                if (splatColorProperties.includes(property.name)) {
+                    propertyColorCount++;
                 }
-                offset += 12;
             }
-        }
-
-        // count available properties. if all necessary are present then it's a splat. Otherwise, it's a point cloud
-        // if faces are found, then it's a standard mesh
-        let propertyCount = 0;
-        let propertyColorCount = 0;
-        const splatProperties = ["x", "y", "z", "scale_0", "scale_1", "scale_2", "opacity", "rot_0", "rot_1", "rot_2", "rot_3"];
-        const splatColorProperties = ["red", "green", "blue", "f_dc_0", "f_dc_1", "f_dc_2"];
-        for (let propertyIndex = 0; propertyIndex < properties.length; propertyIndex++) {
-            const property = properties[propertyIndex];
-            if (splatProperties.includes(property.name)) {
-                propertyCount++;
-            }
-            if (splatColorProperties.includes(property.name)) {
-                propertyColorCount++;
-            }
-        }
-        const hasMandatoryProperties = propertyCount == splatProperties.length && propertyColorCount == 3;
-        const currentMode = faceCount ? Mode.Mesh : hasMandatoryProperties ? Mode.Splat : Mode.PointCloud;
-        // parsed ready ready to be used as a splat
-        return { mode: currentMode, data: buffer, faces: faces, hasVertexColors: !!propertyColorCount };
+            const hasMandatoryProperties = propertyCount == splatProperties.length && propertyColorCount == 3;
+            const currentMode = faceCount ? Mode.Mesh : hasMandatoryProperties ? Mode.Splat : Mode.PointCloud;
+            // parsed ready ready to be used as a splat
+            return new Promise((resolve) => {
+                resolve({ mode: currentMode, data: buffer, faces: faces, hasVertexColors: !!propertyColorCount });
+            });
+        });
     }
 }
 

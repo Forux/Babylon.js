@@ -3660,7 +3660,11 @@ export class Mesh extends AbstractMesh implements IGetSetVerticesData {
      * @returns a new InstancedMesh
      */
     public createInstance(name: string): InstancedMesh {
-        return Mesh._instancedMeshFactory(name, this);
+        const instance = Mesh._instancedMeshFactory(name, this);
+
+        instance.parent = this.parent;
+
+        return instance;
     }
 
     /**
@@ -4276,7 +4280,7 @@ export class Mesh extends AbstractMesh implements IGetSetVerticesData {
 
         // Morph targets
         if (parsedMesh.morphTargetManagerId > -1) {
-            mesh.morphTargetManager = scene.getMorphTargetManagerById(parsedMesh.morphTargetManagerId);
+            mesh._waitingMorphTargetManagerId = parsedMesh.morphTargetManagerId;
         }
 
         // Skeleton

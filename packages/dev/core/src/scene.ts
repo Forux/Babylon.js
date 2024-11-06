@@ -66,7 +66,7 @@ import type { Skeleton } from "./Bones/skeleton";
 import type { Bone } from "./Bones/bone";
 import type { Camera } from "./Cameras/camera";
 import type { Collider } from "./Collisions/collider";
-import type { Ray, MeshPredicate, TrianglePickingPredicate } from "./Culling/ray";
+import type { Ray, MeshPredicate, TrianglePickingPredicate } from "./Culling/ray.core";
 import type { Light } from "./Lights/light";
 import type { PerformanceViewerCollector } from "./Misc/PerformanceViewer/performanceViewerCollector";
 import type { MorphTarget } from "./Morph/morphTarget";
@@ -84,13 +84,20 @@ import type { Mesh } from "./Meshes/mesh";
 import type { SubMesh } from "./Meshes/subMesh";
 import type { Node } from "./node";
 import type { Animation } from "./Animations/animation";
-import type { Animatable } from "./Animations/animatable";
+import type { Animatable } from "./Animations/animatable.core";
 import type { Texture } from "./Materials/Textures/texture";
 import { PointerPickingConfiguration } from "./Inputs/pointerPickingConfiguration";
 import { Logger } from "./Misc/logger";
 import type { AbstractEngine } from "./Engines/abstractEngine";
 import { RegisterClass } from "./Misc/typeStore";
+import type { FrameGraph } from "./FrameGraph/frameGraph";
 import type { IAssetContainer } from "./IAssetContainer";
+
+import type { EffectLayer } from "./Layers/effectLayer";
+import type { Sound } from "./Audio/sound";
+import type { Layer } from "./Layers/layer";
+import type { LensFlareSystem } from "./LensFlares/lensFlareSystem";
+import type { ProceduralTexture } from "./Materials/Textures/Procedurals/proceduralTexture";
 
 /**
  * Define an interface for all classes that will hold resources
@@ -185,6 +192,15 @@ export class Scene implements IAnimatable, IClipPlanesHolder, IAssetContainer {
     // Members
 
     /** @internal */
+    public _tempPickingRay: Nullable<Ray>;
+
+    /** @internal */
+    public _cachedRayForTransform: Ray;
+
+    /** @internal */
+    public _pickWithRayInverseMatrix: Matrix;
+
+    /** @internal */
     public _inputManager = new InputManager(this);
 
     /** Define this parameter if you are using multiple cameras and you want to specify which one should be used for pointer position */
@@ -204,10 +220,28 @@ export class Scene implements IAnimatable, IClipPlanesHolder, IAssetContainer {
      * Gets or sets a boolean that indicates if the scene must clear the depth and stencil buffers before rendering a frame
      */
     public autoClearDepthAndStencil = true;
+
+    private _clearColor: Color4 = new Color4(0.2, 0.2, 0.3, 1.0);
+
+    /**
+     * Observable triggered when the performance priority is changed
+     */
+    public onClearColorChangedObservable = new Observable<Color4>();
+
     /**
      * Defines the color used to clear the render buffer (Default is (0.2, 0.2, 0.3, 1.0))
      */
-    public clearColor: Color4 = new Color4(0.2, 0.2, 0.3, 1.0);
+    public get clearColor(): Color4 {
+        return this._clearColor;
+    }
+
+    public set clearColor(value: Color4) {
+        if (value !== this._clearColor) {
+            this._clearColor = value;
+            this.onClearColorChangedObservable.notifyObservers(this._clearColor);
+        }
+    }
+
     /**
      * Defines the color used to simulate the ambient color (Default is (0, 0, 0))
      */
@@ -290,6 +324,7 @@ export class Scene implements IAnimatable, IClipPlanesHolder, IAssetContainer {
     }
 
     private _forceWireframe = false;
+
     /**
      * Gets or sets a boolean indicating if all rendering must be done in wireframe
      */
@@ -397,6 +432,11 @@ export class Scene implements IAnimatable, IClipPlanesHolder, IAssetContainer {
     public particleSystems: IParticleSystem[] = [];
 
     /**
+     * Gets the current delta time used by animation engine
+     */
+    deltaTime: number;
+
+    /**
      * Gets a list of Animations associated with the scene
      */
     public animations: Animation[] = [];
@@ -481,6 +521,35 @@ export class Scene implements IAnimatable, IClipPlanesHolder, IAssetContainer {
      * The list of postprocesses added to the scene
      */
     public postProcesses: PostProcess[] = [];
+
+    /**
+     * The list of effect layers (highlights/glow) added to the scene
+     * @see https://doc.babylonjs.com/features/featuresDeepDive/mesh/highlightLayer
+     * @see https://doc.babylonjs.com/features/featuresDeepDive/mesh/glowLayer
+     */
+    public effectLayers: Array<EffectLayer> = [];
+
+    /**
+     * The list of sounds used in the scene.
+     */
+    public sounds: Nullable<Array<Sound>> = null;
+
+    /**
+     * The list of layers (background and foreground) of the scene
+     */
+    public layers: Array<Layer> = [];
+
+    /**
+     * The list of lens flare system added to the scene
+     * @see https://doc.babylonjs.com/features/featuresDeepDive/environment/lenseFlare
+     */
+    public lensFlareSystems: Array<LensFlareSystem> = [];
+
+    /**
+     * The list of procedural textures added to the scene
+     * @see https://doc.babylonjs.com/features/featuresDeepDive/materials/using/proceduralTextures
+     */
+    public proceduralTextures: Array<ProceduralTexture> = [];
 
     /**
      * @returns all meshes, lights, cameras, transformNodes and bones
@@ -1332,6 +1401,31 @@ export class Scene implements IAnimatable, IClipPlanesHolder, IAssetContainer {
 
     public get texturesEnabled(): boolean {
         return this._texturesEnabled;
+    }
+
+    private _frameGraph: Nullable<FrameGraph> = null;
+    private _currentCustomRenderFunction?: (updateCameras: boolean, ignoreAnimations: boolean) => void;
+    /**
+     * Gets or sets the frame graph used to render the scene. If set, the scene will use the frame graph to render the scene instead of the default render loop.
+     */
+    public get frameGraph() {
+        return this._frameGraph;
+    }
+
+    public set frameGraph(value: Nullable<FrameGraph>) {
+        if (this._frameGraph) {
+            this._frameGraph = value;
+            if (!value) {
+                this.customRenderFunction = this._currentCustomRenderFunction;
+            }
+            return;
+        }
+
+        this._frameGraph = value;
+        if (value) {
+            this._currentCustomRenderFunction = this.customRenderFunction;
+            this.customRenderFunction = this._renderWithFrameGraph;
+        }
     }
 
     // Physics
@@ -4229,17 +4323,26 @@ export class Scene implements IAnimatable, IClipPlanesHolder, IAssetContainer {
         }
     }
 
-    private _activeMesh(sourceMesh: AbstractMesh, mesh: AbstractMesh): void {
-        if (this._skeletonsEnabled && mesh.skeleton !== null && mesh.skeleton !== undefined) {
-            if (this._activeSkeletons.pushNoDuplicate(mesh.skeleton)) {
-                mesh.skeleton.prepare();
-                this._activeBones.addCount(mesh.skeleton.bones.length, false);
-            }
+    /** @internal */
+    public _prepareSkeleton(mesh: AbstractMesh): void {
+        if (!this._skeletonsEnabled || !mesh.skeleton) {
+            return;
+        }
 
-            if (!mesh.computeBonesUsingShaders) {
-                this._softwareSkinnedMeshes.pushNoDuplicate(<Mesh>mesh);
+        if (this._activeSkeletons.pushNoDuplicate(mesh.skeleton)) {
+            mesh.skeleton.prepare();
+            this._activeBones.addCount(mesh.skeleton.bones.length, false);
+        }
+
+        if (!mesh.computeBonesUsingShaders) {
+            if (this._softwareSkinnedMeshes.pushNoDuplicate(<Mesh>mesh) && this.frameGraph) {
+                (<Mesh>mesh).applySkeleton(mesh.skeleton);
             }
         }
+    }
+
+    private _activeMesh(sourceMesh: AbstractMesh, mesh: AbstractMesh): void {
+        this._prepareSkeleton(mesh);
 
         let forcePush = sourceMesh.hasInstances || sourceMesh.isAnInstance || this.dispatchAllSubMeshesOfActiveMeshes || this._skipFrustumClipping || mesh.alwaysSelectAsActiveMesh;
 
@@ -4298,7 +4401,7 @@ export class Scene implements IAnimatable, IClipPlanesHolder, IAssetContainer {
                 rtt.onClearObservable.notifyObservers(this._engine);
             } else if (!rtt.skipInitialClear && !camera.isRightCamera) {
                 if (this.autoClear) {
-                    this._engine.clear(rtt.clearColor || this.clearColor, !rtt._cleared, true, true);
+                    this._engine.clear(rtt.clearColor || this._clearColor, !rtt._cleared, true, true);
                 }
                 rtt._cleared = true;
             }
@@ -4615,7 +4718,7 @@ export class Scene implements IAnimatable, IClipPlanesHolder, IAssetContainer {
 
     private _clear(): void {
         if (this.autoClearDepthAndStencil || this.autoClear) {
-            this._engine.clear(this.clearColor, this.autoClear || this.forceWireframe || this.forcePointsCloud, this.autoClearDepthAndStencil, this.autoClearDepthAndStencil);
+            this._engine.clear(this._clearColor, this.autoClear || this.forceWireframe || this.forcePointsCloud, this.autoClearDepthAndStencil, this.autoClearDepthAndStencil);
         }
     }
 
@@ -4650,7 +4753,77 @@ export class Scene implements IAnimatable, IClipPlanesHolder, IAssetContainer {
     /**
      * If this function is defined it will take precedence over the standard render() function.
      */
-    public customRenderFunction?: () => void;
+    public customRenderFunction?: (updateCameras: boolean, ignoreAnimations: boolean) => void;
+
+    private _renderWithFrameGraph(updateCameras = true, ignoreAnimations = false): void {
+        this.activeCamera = null;
+
+        this._activeParticleSystems.reset();
+        this._activeSkeletons.reset();
+
+        // Update Cameras
+        if (updateCameras) {
+            for (const camera of this.cameras) {
+                camera.update();
+                if (camera.cameraRigMode !== Constants.RIG_MODE_NONE) {
+                    // rig cameras
+                    for (let index = 0; index < camera._rigCameras.length; index++) {
+                        camera._rigCameras[index].update();
+                    }
+                }
+            }
+        }
+
+        // We must keep these steps because the procedural texture component relies on them.
+        // TODO: move the procedural texture component to the frame graph.
+        for (const step of this._beforeClearStage) {
+            step.action();
+        }
+
+        // Process meshes
+        const meshes = this.getActiveMeshCandidates();
+        const len = meshes.length;
+
+        for (let i = 0; i < len; i++) {
+            const mesh = meshes.data[i];
+
+            if (mesh.isBlocked) {
+                continue;
+            }
+
+            this._totalVertices.addCount(mesh.getTotalVertices(), false);
+
+            if (!mesh.isReady() || !mesh.isEnabled() || mesh.scaling.hasAZeroComponent) {
+                continue;
+            }
+
+            mesh.computeWorldMatrix();
+
+            if (mesh.actionManager && mesh.actionManager.hasSpecificTriggers2(Constants.ACTION_OnIntersectionEnterTrigger, Constants.ACTION_OnIntersectionExitTrigger)) {
+                this._meshesForIntersections.pushNoDuplicate(mesh);
+            }
+        }
+
+        // Animate Particle systems
+        if (this.particlesEnabled) {
+            for (let particleIndex = 0; particleIndex < this.particleSystems.length; particleIndex++) {
+                const particleSystem = this.particleSystems[particleIndex];
+
+                if (!particleSystem.isStarted() || !particleSystem.emitter) {
+                    continue;
+                }
+
+                const emitter = <any>particleSystem.emitter;
+                if (!emitter.position || emitter.isEnabled()) {
+                    this._activeParticleSystems.push(particleSystem);
+                    particleSystem.animate();
+                }
+            }
+        }
+
+        // Render the graph
+        this.frameGraph?.execute();
+    }
 
     /**
      * Render the scene
@@ -4731,7 +4904,7 @@ export class Scene implements IAnimatable, IClipPlanesHolder, IAssetContainer {
             this._renderId++;
             this._engine.currentRenderPassId = Constants.RENDERPASS_MAIN;
 
-            this.customRenderFunction();
+            this.customRenderFunction(updateCameras, ignoreAnimations);
         } else {
             const engine = this.getEngine();
 
@@ -4900,7 +5073,7 @@ export class Scene implements IAnimatable, IClipPlanesHolder, IAssetContainer {
 
         this.importedMeshesFiles = [] as string[];
 
-        if (this.stopAllAnimations) {
+        if (this._activeAnimatables && this.stopAllAnimations) {
             // Ensures that no animatable notifies a callback that could start a new animation group, constantly adding new animatables to the active list...
             this._activeAnimatables.forEach((animatable) => {
                 animatable.onAnimationEndObservable.clear();
@@ -5070,6 +5243,7 @@ export class Scene implements IAnimatable, IClipPlanesHolder, IAssetContainer {
         this.onKeyboardObservable.clear();
         this.onActiveCameraChanged.clear();
         this.onScenePerformancePriorityChangedObservable.clear();
+        this.onClearColorChangedObservable.clear();
         this._isDisposed = true;
     }
 
@@ -5213,11 +5387,6 @@ export class Scene implements IAnimatable, IClipPlanesHolder, IAssetContainer {
      */
     public createPickingRayInCameraSpaceToRef(x: number, y: number, result: Ray, camera?: Camera): Scene {
         throw _WarnImport("Ray");
-    }
-
-    /** @internal */
-    public get _pickingAvailable(): boolean {
-        return false;
     }
 
     /** @internal */

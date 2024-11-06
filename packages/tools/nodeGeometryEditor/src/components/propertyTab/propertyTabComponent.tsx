@@ -1,9 +1,9 @@
 import * as React from "react";
 import type { GlobalState } from "../../globalState";
 import type { Nullable } from "core/types";
-import { LineContainerComponent } from "../../sharedComponents/lineContainerComponent";
+import { LineContainerComponent } from "shared-ui-components/lines/lineContainerComponent";
 import { StringTools } from "shared-ui-components/stringTools";
-import { FileButtonLineComponent } from "../../sharedComponents/fileButtonLineComponent";
+import { FileButtonLine } from "shared-ui-components/lines/fileButtonLineComponent";
 import { Tools } from "core/Misc/tools";
 import { SerializationTools } from "../../serializationTools";
 import { CheckBoxLineComponent } from "../../sharedComponents/checkBoxLineComponent";
@@ -398,6 +398,14 @@ export class PropertyTabComponent extends React.Component<IPropertyTabComponentP
                                 this.props.globalState.stateManager.onGridSizeChanged.notifyObservers();
                             }}
                         />
+                        <CheckBoxLineComponent
+                            label="Undo / Redo"
+                            isSelected={() => DataStorage.ReadBoolean("UndoRedo", true)}
+                            onSelect={(value: boolean) => {
+                                DataStorage.WriteBoolean("UndoRedo", value);
+                                this.props.globalState.stateManager.historyStack.isEnabled = value;
+                            }}
+                        />
                         <TextInputLineComponent
                             label="Node Material ID"
                             value={DataStorage.ReadString("NMEID", "")}
@@ -432,7 +440,7 @@ export class PropertyTabComponent extends React.Component<IPropertyTabComponentP
                         <ButtonLineComponent label="Rebuild" onClick={() => this.props.globalState.stateManager.onRebuildRequiredObservable.notifyObservers()} />
                     </LineContainerComponent>
                     <LineContainerComponent title="FILE">
-                        <FileButtonLineComponent label="Load" onClick={(file) => this.load(file)} accept=".json" />
+                        <FileButtonLine label="Load" onClick={(file) => this.load(file)} accept=".json" />
                         <ButtonLineComponent
                             label="Save"
                             onClick={() => {
@@ -457,7 +465,7 @@ export class PropertyTabComponent extends React.Component<IPropertyTabComponentP
                                 <TextLineComponent label="(*) Mesh and texture data will NOT be serialized by default" ignoreValue={true} additionalClass="label-center" />
                             </>
                         )}
-                        <FileButtonLineComponent label="Load Frame" uploadName={"frame-upload"} onClick={(file) => this.loadFrame(file)} accept=".json" />
+                        <FileButtonLine label="Load Frame" onClick={(file) => this.loadFrame(file)} accept=".json" />
                         <ButtonLineComponent
                             label="Export as GLB"
                             onClick={() => {

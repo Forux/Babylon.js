@@ -1,15 +1,17 @@
 // eslint-disable-next-line import/no-internal-modules
-import type { Nullable } from "core/index";
+import type { ArcRotateCamera, Nullable, Observable } from "core/index";
 
 import type { PropertyValues } from "lit";
-import type { ViewerDetails } from "./viewer";
+import type { ToneMapping, ViewerDetails, ViewerHotSpot, ViewerHotSpotQuery } from "./viewer";
 import type { CanvasViewerOptions } from "./viewerFactory";
 
-import { LitElement, css, html } from "lit";
+import { LitElement, css, defaultConverter, html } from "lit";
 import { customElement, property, query, state } from "lit/decorators.js";
 
+import { Color4 } from "core/Maths/math.color";
 import { AsyncLock } from "core/Misc/asyncLock";
 import { Logger } from "core/Misc/logger";
+import { isToneMapping } from "./viewer";
 import { createViewerForCanvas, getDefaultEngine } from "./viewerFactory";
 
 // Icon SVG is pulled from https://fluentuipr.z22.web.core.windows.net/heads/master/public-docsite-v9/storybook/iframe.html?id=icons-catalog--page&viewMode=story
@@ -18,6 +20,29 @@ const pauseFilledIcon = "M5 2a2 2 0 0 0-2 2v12c0 1.1.9 2 2 2h2a2 2 0 0 0 2-2V4a2
 
 const allowedAnimationSpeeds = [0.5, 1, 1.5, 2] as const;
 
+// Converts any standard html color string to a Color4 object.
+function parseColor(color: string | null | undefined): Nullable<Color4> {
+    if (!color) {
+        return null;
+    }
+
+    const canvas = document.createElement("canvas");
+    canvas.width = canvas.height = 1;
+    const context = canvas.getContext("2d");
+
+    if (!context) {
+        throw new Error("Unable to get 2d context for parseColor");
+    }
+
+    context.clearRect(0, 0, 1, 1);
+    context.fillStyle = color;
+    context.fillRect(0, 0, 1, 1);
+
+    const data = context.getImageData(0, 0, 1, 1).data;
+    return new Color4(data[0] / 255, data[1] / 255, data[2] / 255, data[3] / 255);
+}
+
+// Custom events for the HTML3DElement.
 interface HTML3DElementEventMap extends HTMLElementEventMap {
     viewerready: Event;
     environmentchange: Event;
@@ -38,6 +63,73 @@ export class HTML3DElement extends LitElement {
     private readonly _viewerLock = new AsyncLock();
     private _viewerDetails?: Readonly<ViewerDetails>;
 
+    // Bindings for properties that are synchronized both ways between the lower level Viewer and the HTML3DElement.
+    private readonly _propertyBindings = [
+        this._createPropertyBinding(
+            "clearColor",
+            (details) => details.scene.onClearColorChangedObservable,
+            (details) => (details.scene.clearColor = this.clearColor ?? new Color4(0, 0, 0, 0)),
+            (details) => (this.clearColor = details.scene.clearColor)
+        ),
+        this._createPropertyBinding(
+            "skyboxBlur",
+            (details) => details.viewer.onSkyboxBlurChanged,
+            (details) => (details.viewer.skyboxBlur = this.skyboxBlur ?? details.viewer.skyboxBlur),
+            (details) => (this.skyboxBlur = details.viewer.skyboxBlur)
+        ),
+        this._createPropertyBinding(
+            "toneMapping",
+            (details) => details.viewer.onToneMappingChanged,
+            (details) => {
+                if (this.toneMapping) {
+                    details.viewer.toneMapping = this.toneMapping;
+                }
+            },
+            (details) => {
+                if (details.viewer.toneMapping === "unknown") {
+                    this.toneMapping = null;
+                } else {
+                    this.toneMapping = details.viewer.toneMapping;
+                }
+            }
+        ),
+        this._createPropertyBinding(
+            "contrast",
+            (details) => details.viewer.onContrastChanged,
+            (details) => (details.viewer.contrast = this.contrast ?? details.viewer.contrast),
+            (details) => (this.contrast = details.viewer.contrast)
+        ),
+        this._createPropertyBinding(
+            "exposure",
+            (details) => details.viewer.onExposureChanged,
+            (details) => (details.viewer.exposure = this.exposure ?? details.viewer.exposure),
+            (details) => (this.exposure = details.viewer.exposure)
+        ),
+        this._createPropertyBinding(
+            "cameraAutoOrbit",
+            (details) => details.viewer.onCameraAutoOrbitChanged,
+            (details) => (details.viewer.cameraAutoOrbit = this.cameraAutoOrbit),
+            (details) => (this.cameraAutoOrbit = details.viewer.cameraAutoOrbit)
+        ),
+        this._createPropertyBinding(
+            "animationSpeed",
+            (details) => details.viewer.onAnimationSpeedChanged,
+            (details) => (details.viewer.animationSpeed = this.animationSpeed),
+            (details) => {
+                let speed = details.viewer.animationSpeed;
+                speed = allowedAnimationSpeeds.reduce((prev, curr) => (Math.abs(curr - speed) < Math.abs(prev - speed) ? curr : prev));
+                this.animationSpeed = speed;
+                this._dispatchCustomEvent("animationspeedchange", (type) => new Event(type));
+            }
+        ),
+        this._createPropertyBinding(
+            "selectedAnimation",
+            (details) => details.viewer.onSelectedAnimationChanged,
+            (details) => (details.viewer.selectedAnimation = this.selectedAnimation),
+            (details) => (this.selectedAnimation = details.viewer.selectedAnimation ?? -1)
+        ),
+    ] as const;
+
     // eslint-disable-next-line @typescript-eslint/naming-convention, jsdoc/require-jsdoc
     static override styles = css`
         :host {
@@ -53,6 +145,7 @@ export class HTML3DElement extends LitElement {
                 calc(var(--ui-background-lightness) - 10%),
                 calc(var(--ui-background-opacity) - 0.1)
             );
+            all: inherit;
         }
 
         * {
@@ -61,8 +154,20 @@ export class HTML3DElement extends LitElement {
 
         .full-size {
             display: block;
+            position: relative;
             width: 100%;
             height: 100%;
+        }
+
+        .canvas {
+            outline: none;
+        }
+
+        .children-slot {
+            position: absolute;
+            top: 0;
+            background: transparent;
+            pointer-events: none;
         }
 
         .tool-bar {
@@ -216,6 +321,24 @@ export class HTML3DElement extends LitElement {
     }
 
     /**
+     * Get hotspot world and screen values from a named hotspot
+     * @param name slot of the hot spot
+     * @param result resulting world and screen positions
+     * @returns world and screen space coordinates
+     */
+    public queryHotSpot(name: string, result: ViewerHotSpot): boolean {
+        // Retrieve all hotspots inside the viewer element
+        let resultFound = false;
+        // Iterate through each hotspot to get the 'data-surface' and 'data-name' attributes
+        if (this._viewerDetails) {
+            const hotspot = this.hotspots?.[name];
+            if (hotspot) {
+                resultFound = this._viewerDetails.viewer.getHotSpotToRef(hotspot, result);
+            }
+        }
+        return resultFound;
+    }
+    /**
      * The engine to use for rendering.
      */
     @property({ reflect: true })
@@ -242,6 +365,153 @@ export class HTML3DElement extends LitElement {
     public environment: Nullable<string> = null;
 
     /**
+     * A value between 0 and 1 that specifies how much to blur the skybox.
+     */
+    @property({ attribute: "skybox-blur" })
+    public skyboxBlur: Nullable<number> = null;
+
+    /**
+     * The tone mapping to use for rendering the scene.
+     */
+    @property({
+        attribute: "tone-mapping",
+        converter: (value: string | null): ToneMapping => {
+            if (!value || !isToneMapping(value)) {
+                return "neutral";
+            }
+            return value;
+        },
+    })
+    public toneMapping: Nullable<ToneMapping> = null;
+
+    /**
+     * The contrast applied to the scene.
+     */
+    @property()
+    public contrast: Nullable<number> = null;
+
+    /**
+     * The exposure applied to the scene.
+     */
+    @property()
+    public exposure: Nullable<number> = null;
+
+    /**
+     * The clear color (e.g. background color) for the viewer.
+     */
+    @property({
+        attribute: "clear-color",
+        reflect: true,
+        converter: {
+            fromAttribute: parseColor,
+            toAttribute: (color: Nullable<Color4>) => (color ? color.toHexString() : null),
+        },
+    })
+    public clearColor: Nullable<Color4> = null;
+
+    /**
+     * Enables or disables camera auto-orbit.
+     */
+    @property({
+        attribute: "camera-auto-orbit",
+        type: Boolean,
+    })
+    public cameraAutoOrbit = false;
+
+    /**
+     * Camera orbit can only be set as an attribute, and is set on the camera each time a new model is loaded.
+     * For access to the real time camera properties, use viewerDetails.camera.
+     */
+    @property({
+        attribute: "camera-orbit",
+        converter: (value) => {
+            if (!value) {
+                return null;
+            }
+
+            const array = value.split(/\s+/);
+            if (array.length !== 3) {
+                throw new Error("cameraOrbit should be defined as 'alpha beta radius'");
+            }
+
+            return (camera: ArcRotateCamera) => {
+                for (const [index, property] of (["alpha", "beta", "radius"] as const).entries()) {
+                    const value = array[index];
+                    if (value !== "auto") {
+                        camera[property] = Number(value);
+                    }
+                }
+            };
+        },
+    })
+    private _cameraOrbitCoercer: Nullable<(camera: ArcRotateCamera) => void> = null;
+
+    /**
+     * Camera target can only be set as an attribute, and is set on the camera each time a new model is loaded.
+     * For access to the real time camera properties, use viewerDetails.camera.
+     */
+    @property({
+        attribute: "camera-target",
+        converter: (value) => {
+            if (!value) {
+                return null;
+            }
+
+            const array = value.split(/\s+/);
+            if (array.length !== 3) {
+                throw new Error("cameraTarget should be defined as 'x y z'");
+            }
+
+            return (camera: ArcRotateCamera) => {
+                const target = camera.target;
+                for (const [index, property] of (["x", "y", "z"] as const).entries()) {
+                    const value = array[index];
+                    if (value !== "auto") {
+                        target[property] = Number(value);
+                    }
+                }
+                camera.target = target.clone();
+            };
+        },
+    })
+    private _cameraTargetCoercer: Nullable<(camera: ArcRotateCamera) => void> = null;
+
+    /**
+     * A string value that encodes one or more hotspots.
+     */
+    @property({
+        converter: (value) => {
+            if (!value) {
+                return null;
+            }
+
+            const array = value.split(/\s+/);
+            if (array.length % 8 !== 0) {
+                throw new Error(
+                    `hotspots should be defined in sets of 8 elements: 'name meshIndex pointIndex1 pointIndex2 pointIndex3 barycentricCoord1 barycentricCoord2 barycentricCoord3', but a total of ${array.length} elements were found in '${value}'`
+                );
+            }
+
+            const hotspots: Record<string, ViewerHotSpotQuery> = {};
+            for (let offset = 0; offset < array.length; offset += 8) {
+                hotspots[array[offset]] = {
+                    meshIndex: Number(array[offset + 1]),
+                    pointIndex: [Number(array[offset + 2]), Number(array[offset + 3]), Number(array[offset + 4])],
+                    barycentric: [Number(array[offset + 5]), Number(array[offset + 6]), Number(array[offset + 7])],
+                };
+            }
+            return hotspots;
+        },
+    })
+    public hotspots: Nullable<Record<string, ViewerHotSpotQuery>> = null;
+
+    /**
+     * True if the default animation should play automatically when a model is loaded.
+     */
+    @property({ attribute: "animation-auto-play", reflect: true, type: Boolean })
+    public animationAutoPlay = false;
+
+    /**
      * The list of animation names for the currently loaded model.
      */
     public get animations(): readonly string[] {
@@ -251,9 +521,8 @@ export class HTML3DElement extends LitElement {
     /**
      * The currently selected animation index.
      */
-    public get selectedAnimation(): number {
-        return this._selectedAnimation;
-    }
+    @property({ attribute: "selected-animation" })
+    public selectedAnimation = -1;
 
     /**
      * True if an animation is currently playing.
@@ -265,7 +534,7 @@ export class HTML3DElement extends LitElement {
     /**
      * The speed scale at which animations are played.
      */
-    @property({ attribute: "animation-speed", reflect: true })
+    @property({ attribute: "animation-speed" })
     public animationSpeed = 1;
 
     /**
@@ -276,9 +545,6 @@ export class HTML3DElement extends LitElement {
 
     @state()
     private _animations: string[] = [];
-
-    @state()
-    private _selectedAnimation = -1;
 
     @state()
     private _isAnimationPlaying = false;
@@ -306,26 +572,20 @@ export class HTML3DElement extends LitElement {
     }
 
     // eslint-disable-next-line babylonjs/available
-    override update(changedProperties: PropertyValues): void {
+    override update(changedProperties: PropertyValues<this>): void {
         super.update(changedProperties);
 
-        if (changedProperties.get("engine" satisfies keyof this)) {
+        if (changedProperties.get("engine")) {
             this._tearDownViewer();
             this._setupViewer();
         } else {
-            if (changedProperties.has("animationSpeed")) {
-                this._updateAnimationSpeed();
-            }
+            this._propertyBindings.filter((binding) => changedProperties.has(binding.property)).forEach((binding) => binding.updateViewer());
 
-            if (changedProperties.has("_selectedAnimation")) {
-                this._updateSelectedAnimation();
-            }
-
-            if (changedProperties.has("source" satisfies keyof this)) {
+            if (changedProperties.has("source")) {
                 this._updateModel();
             }
 
-            if (changedProperties.has("environment" satisfies keyof this)) {
+            if (changedProperties.has("environment")) {
                 this._updateEnv();
             }
         }
@@ -333,9 +593,11 @@ export class HTML3DElement extends LitElement {
 
     // eslint-disable-next-line babylonjs/available
     override render() {
+        // NOTE: The unnamed 'slot' element holds all child elements of the <babylon-viewer> that do not specify a 'slot' attribute.
         return html`
             <div class="full-size">
                 <div id="canvasContainer" class="full-size"></div>
+                <slot class="full-size children-slot"></slot>
                 ${this.animations.length === 0
                     ? ""
                     : html`
@@ -368,7 +630,7 @@ export class HTML3DElement extends LitElement {
                                   </select>
                                   ${this.animations.length > 1
                                       ? html`<select aria-label="Select Animation" @change="${this._onSelectedAnimationChanged}">
-                                            ${this.animations.map((name, index) => html`<option value="${index}" .selected="${this.selectedAnimation == index}">${name}</option>`)}
+                                            ${this.animations.map((name, index) => html`<option value="${index}" .selected="${this.selectedAnimation === index}">${name}</option>`)}
                                         </select>`
                                       : ""}
                               </div>
@@ -394,7 +656,7 @@ export class HTML3DElement extends LitElement {
 
     private _onSelectedAnimationChanged(event: Event) {
         const selectElement = event.target as HTMLSelectElement;
-        this._selectedAnimation = Number(selectElement.value);
+        this.selectedAnimation = Number(selectElement.value);
     }
 
     private _onAnimationSpeedChanged(event: Event) {
@@ -420,6 +682,52 @@ export class HTML3DElement extends LitElement {
         }
     }
 
+    // Helper function to simplify keeping Viewer properties in sync with HTML3DElement properties.
+    private _createPropertyBinding(
+        property: keyof HTML3DElement,
+        getObservable: (viewerDetails: Readonly<ViewerDetails>) => Observable<any>,
+        updateViewer: (viewerDetails: Readonly<ViewerDetails>) => void,
+        updateElement: (viewerDetails: Readonly<ViewerDetails>) => void
+    ) {
+        return {
+            property,
+            // Called each time a Viewer instance is created.
+            onInitialized: (viewerDetails: Readonly<ViewerDetails>) => {
+                getObservable(viewerDetails).add(() => {
+                    updateElement(viewerDetails);
+                });
+                updateViewer(viewerDetails);
+            },
+            // Called when the HTML3DElement property should be propagated to the Viewer.
+            updateViewer: () => {
+                if (this._viewerDetails) {
+                    updateViewer(this._viewerDetails);
+                }
+            },
+            // Called to re-sync the HTML3DElement property with its corresponding attribute.
+            syncToAttribute: () => {
+                const descriptor = HTML3DElement.elementProperties.get(property);
+                if (descriptor) {
+                    if (descriptor.attribute) {
+                        const attributeName = descriptor.attribute === true ? property : descriptor.attribute;
+                        if (this.hasAttribute(attributeName)) {
+                            const attributeValue = this.getAttribute(attributeName);
+
+                            const converter =
+                                typeof descriptor.converter === "function"
+                                    ? descriptor.converter
+                                    : descriptor.converter?.fromAttribute !== undefined
+                                      ? descriptor.converter.fromAttribute
+                                      : defaultConverter.fromAttribute;
+
+                            (this as any)[property] = converter ? converter(attributeValue, descriptor.type) : attributeValue;
+                        }
+                    }
+                }
+            },
+        };
+    }
+
     private async _setupViewer() {
         await this._viewerLock.lockAsync(async () => {
             // The first time the element is connected, the canvas container may not be available yet.
@@ -430,7 +738,7 @@ export class HTML3DElement extends LitElement {
 
             if (this._canvasContainer && !this._viewerDetails) {
                 const canvas = document.createElement("canvas");
-                canvas.className = "full-size";
+                canvas.className = "full-size canvas";
                 canvas.setAttribute("touch-action", "none");
                 this._canvasContainer.appendChild(canvas);
 
@@ -449,24 +757,26 @@ export class HTML3DElement extends LitElement {
 
                         details.viewer.onModelChanged.add(() => {
                             this._animations = [...details.viewer.animations];
+
+                            // When attributes are explicitly set, they are re-applied when a new model is loaded.
+                            this._propertyBindings.forEach((binding) => binding.syncToAttribute());
+
+                            // The same goes for camera pose attributes, but it is handled a little differently because there are no corresponding public properties
+                            // (since the underlying Babylon camera already has these properties).
+                            this._cameraOrbitCoercer?.(details.camera);
+                            this._cameraTargetCoercer?.(details.camera);
+
+                            // If animation auto play was set, then start the default animation (if possible).
+                            if (this.animationAutoPlay) {
+                                details.viewer.playAnimation();
+                            }
+
                             this._dispatchCustomEvent("modelchange", (type) => new Event(type));
                         });
 
                         details.viewer.onModelError.add((error) => {
                             this._animations = [...details.viewer.animations];
                             this._dispatchCustomEvent("modelerror", (type) => new ErrorEvent(type, { error }));
-                        });
-
-                        details.viewer.onSelectedAnimationChanged.add(() => {
-                            this._selectedAnimation = details.viewer.selectedAnimation ?? -1;
-                            this._dispatchCustomEvent("selectedanimationchange", (type) => new Event(type));
-                        });
-
-                        details.viewer.onAnimationSpeedChanged.add(() => {
-                            let speed = details.viewer.animationSpeed ?? 1;
-                            speed = allowedAnimationSpeeds.reduce((prev, curr) => (Math.abs(curr - speed) < Math.abs(prev - speed) ? curr : prev));
-                            this.animationSpeed = speed;
-                            this._dispatchCustomEvent("animationspeedchange", (type) => new Event(type));
                         });
 
                         details.viewer.onIsAnimationPlayingChanged.add(() => {
@@ -479,10 +789,10 @@ export class HTML3DElement extends LitElement {
                             this._dispatchCustomEvent("animationprogresschange", (type) => new Event(type));
                         });
 
-                        this._updateSelectedAnimation();
-                        this._updateAnimationSpeed();
                         this._updateModel();
                         this._updateEnv();
+
+                        this._propertyBindings.forEach((binding) => binding.onInitialized(details));
 
                         this._dispatchCustomEvent("viewerready", (type) => new Event(type));
                     },
@@ -507,39 +817,31 @@ export class HTML3DElement extends LitElement {
         });
     }
 
-    private _updateAnimationSpeed() {
-        if (this._viewerDetails) {
-            this._viewerDetails.viewer.animationSpeed = this.animationSpeed;
-        }
-    }
-
-    private _updateSelectedAnimation() {
-        if (this._viewerDetails) {
-            this._viewerDetails.viewer.selectedAnimation = this._selectedAnimation;
-        }
-    }
-
     private async _updateModel() {
-        try {
-            if (this.source) {
-                await this._viewerDetails?.viewer.loadModel(this.source, { pluginExtension: this.extension ?? undefined });
-            } else {
-                await this._viewerDetails?.viewer.resetModel();
+        if (this._viewerDetails) {
+            try {
+                if (this.source) {
+                    await this._viewerDetails.viewer.loadModel(this.source, { pluginExtension: this.extension ?? undefined });
+                } else {
+                    await this._viewerDetails.viewer.resetModel();
+                }
+            } catch (error) {
+                Logger.Log(error);
             }
-        } catch (error) {
-            Logger.Log(error);
         }
     }
 
     private async _updateEnv() {
-        try {
-            if (this.environment) {
-                await this._viewerDetails?.viewer.loadEnvironment(this.environment);
-            } else {
-                await this._viewerDetails?.viewer.resetEnvironment();
+        if (this._viewerDetails) {
+            try {
+                if (this.environment) {
+                    await this._viewerDetails.viewer.loadEnvironment(this.environment);
+                } else {
+                    await this._viewerDetails.viewer.resetEnvironment();
+                }
+            } catch (error) {
+                Logger.Log(error);
             }
-        } catch (error) {
-            Logger.Log(error);
         }
     }
 }

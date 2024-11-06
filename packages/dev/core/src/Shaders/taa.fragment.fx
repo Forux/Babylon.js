@@ -92,6 +92,7 @@ void main() {
                     cpos /= cpos.w;
 
                     previousCoords = cpos.xy * 0.5 + 0.5;
+                }
             }
         #endif
 

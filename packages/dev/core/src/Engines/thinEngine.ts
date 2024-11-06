@@ -34,7 +34,14 @@ import {
     deleteStateObject,
 } from "./thinEngine.functions";
 
-import type { AbstractEngineOptions, ISceneLike, PrepareTextureFunction, PrepareTextureProcessFunction } from "./abstractEngine";
+import type {
+    AbstractEngineOptions,
+    ISceneLike,
+    PrepareTextureAsyncFunction,
+    PrepareTextureFunction,
+    PrepareTextureProcessAsyncFunction,
+    PrepareTextureProcessFunction,
+} from "./abstractEngine";
 import type { PerformanceMonitor } from "../Misc/performanceMonitor";
 import { IsWrapper } from "../Materials/drawWrapper.functions";
 import { Logger } from "../Misc/logger";
@@ -51,6 +58,7 @@ import { InternalTexture, InternalTextureSource } from "../Materials/Textures/in
 import { Effect } from "../Materials/effect";
 import { _ConcatenateShader, _getGlobalDefines } from "./abstractEngine.functions";
 import { resetCachedPipeline } from "core/Materials/effect.functions";
+import type { IAsyncInternalTextureLoader } from "core/Materials/Textures/Loaders/asyncInternalTextureLoader";
 
 /**
  * Keeps track of all the buffer info used in engine.
@@ -2937,6 +2945,12 @@ export class ThinEngine extends AbstractEngine {
         return useSRGBBuffer && this._caps.supportSRGBBuffers && (this.webGLVersion > 1 || noMipmap);
     }
 
+    public asyncUpdateTexture(texture: InternalTexture, scene: ISceneLike, data: ArrayBufferView, bytesInBlock: number, loader: IAsyncInternalTextureLoader): Promise<void> {
+        return this._asyncUpdateTextureBase(texture, scene, data, bytesInBlock, loader, (...args: Parameters<PrepareTextureAsyncFunction>) =>
+            this._prepareWebGLAsyncTexture(...args, texture.format)
+        );
+    }
+
     /**
      * Usually called from Texture.ts.
      * Passed information to create a WebGLTexture
@@ -3177,135 +3191,6 @@ export class ThinEngine extends AbstractEngine {
         this._bindTextureDirectly(target, null);
     }
 
-    public uploadMipmapsToTexture(texture: InternalTexture, width: number, height: number, buffers: ArrayBufferView[] | ArrayBufferView, faces?: number): Promise<void> {
-        const internalCompressedFormat = texture?._internalCompressedFormat;
-        if (!internalCompressedFormat) {
-            return Promise.reject(new Error("No internal compressed format present"));
-        }
-        const BLOCK_SIZE = 2 * 1024 * 1024;
-        const blockSizeByInternalFormat = new Map<number, { width: number; height: number; bytesLength: number }>([
-            // ASTC: https://registry.khronos.org/webgl/extensions/WEBGL_compressed_texture_astc/
-            [0x93b0, { width: 4, height: 4, bytesLength: 16 }],
-            [0x93b1, { width: 5, height: 4, bytesLength: 16 }],
-            [0x93b2, { width: 5, height: 5, bytesLength: 16 }],
-            [0x93b3, { width: 6, height: 5, bytesLength: 16 }],
-            [0x93b4, { width: 6, height: 6, bytesLength: 16 }],
-            [0x93b5, { width: 8, height: 5, bytesLength: 16 }],
-            [0x93b6, { width: 8, height: 6, bytesLength: 16 }],
-            [0x93b7, { width: 8, height: 8, bytesLength: 16 }],
-            [0x93b8, { width: 10, height: 5, bytesLength: 16 }],
-            [0x93b9, { width: 10, height: 6, bytesLength: 16 }],
-            [0x93ba, { width: 10, height: 8, bytesLength: 16 }],
-            [0x93bb, { width: 10, height: 10, bytesLength: 16 }],
-            [0x93bc, { width: 12, height: 10, bytesLength: 16 }],
-            [0x93bd, { width: 12, height: 12, bytesLength: 16 }],
-            [0x93d0, { width: 4, height: 4, bytesLength: 16 }],
-            [0x93d1, { width: 5, height: 4, bytesLength: 16 }],
-            [0x93d2, { width: 5, height: 5, bytesLength: 16 }],
-            [0x93d3, { width: 6, height: 5, bytesLength: 16 }],
-            [0x93d4, { width: 6, height: 6, bytesLength: 16 }],
-            [0x93d5, { width: 8, height: 5, bytesLength: 16 }],
-            [0x93d6, { width: 8, height: 6, bytesLength: 16 }],
-            [0x93d7, { width: 8, height: 8, bytesLength: 16 }],
-            [0x93d8, { width: 10, height: 5, bytesLength: 16 }],
-            [0x93d9, { width: 10, height: 6, bytesLength: 16 }],
-            [0x93da, { width: 10, height: 8, bytesLength: 16 }],
-            [0x93db, { width: 10, height: 10, bytesLength: 16 }],
-            [0x93dc, { width: 12, height: 10, bytesLength: 16 }],
-            [0x93dd, { width: 12, height: 12, bytesLength: 16 }],
-            // ETC1: https://registry.khronos.org/webgl/extensions/WEBGL_compressed_texture_etc1/
-            [0x8d64, { width: 4, height: 4, bytesLength: 8 }],
-            // ETC2: https://registry.khronos.org/webgl/extensions/WEBGL_compressed_texture_etc/
-            [0x9270, { width: 4, height: 4, bytesLength: 8 }],
-            [0x9271, { width: 4, height: 4, bytesLength: 8 }],
-            [0x9272, { width: 4, height: 4, bytesLength: 16 }],
-            [0x9273, { width: 4, height: 4, bytesLength: 16 }],
-            [0x9274, { width: 4, height: 4, bytesLength: 8 }],
-            [0x9275, { width: 4, height: 4, bytesLength: 8 }],
-            [0x9276, { width: 4, height: 4, bytesLength: 8 }],
-            [0x9277, { width: 4, height: 4, bytesLength: 8 }],
-            [0x9278, { width: 4, height: 4, bytesLength: 16 }],
-            [0x9279, { width: 4, height: 4, bytesLength: 16 }],
-            // DXT: https://registry.khronos.org/webgl/extensions/WEBGL_compressed_texture_s3tc/
-            [0x83f0, { width: 4, height: 4, bytesLength: 8 }],
-            [0x83f1, { width: 4, height: 4, bytesLength: 8 }],
-            [0x83f2, { width: 4, height: 4, bytesLength: 16 }],
-            [0x83f3, { width: 4, height: 4, bytesLength: 16 }],
-            // BPTC (BC6 and BC7): https://registry.khronos.org/OpenGL/extensions/EXT/EXT_texture_compression_bptc.txt
-            [0x8e8c, { width: 4, height: 4, bytesLength: 16 }],
-            [0x8e8d, { width: 4, height: 4, bytesLength: 16 }],
-            [0x8e8e, { width: 4, height: 4, bytesLength: 16 }],
-            [0x8e8f, { width: 4, height: 4, bytesLength: 16 }],
-            // RGTC: https://registry.khronos.org/OpenGL/extensions/EXT/EXT_texture_compression_rgtc.txt
-            [0x8dbb, { width: 4, height: 4, bytesLength: 8 }],
-            [0x8dbc, { width: 4, height: 4, bytesLength: 8 }],
-            [0x8dbd, { width: 4, height: 4, bytesLength: 16 }],
-            [0x8dbe, { width: 4, height: 4, bytesLength: 16 }],
-        ]);
-        const block = blockSizeByInternalFormat.get(internalCompressedFormat);
-        if (!block) {
-            return Promise.reject(new Error("Unsupported internal compressed format"));
-        }
-        const target = texture.isCube ? this._gl.TEXTURE_CUBE_MAP : this._gl.TEXTURE_2D;
-        const faceTarget = (faceIndex: number) => (texture.isCube ? this._gl.TEXTURE_CUBE_MAP_POSITIVE_X + faceIndex : this._gl.TEXTURE_2D);
-        const mipmapCount = Math.log2(Math.max(width, height)) + 1;
-        return this._uploadMipmapsToTextureBase(
-            texture,
-            width,
-            height,
-            buffers,
-            block,
-            BLOCK_SIZE,
-            (_texture: HardwareTextureWrapper) => {
-                this._gl.bindTexture(target, texture?._hardwareTexture?.underlyingResource ?? null);
-            },
-            (_texture: InternalTexture, _hardwareTexture: HardwareTextureWrapper) => {
-                if (_texture.isCube) {
-                    this._setCubeMapTextureParams(_texture, true, mipmapCount - 1);
-                } else {
-                    this._gl.bindTexture(target, _hardwareTexture?.underlyingResource ?? null);
-                    const samplingParameters = this._getSamplingParameters(texture.samplingMode, texture.generateMipMaps);
-                    this._gl.texParameteri(target, this._gl.TEXTURE_MAG_FILTER, samplingParameters.mag);
-                    this._gl.texParameteri(target, this._gl.TEXTURE_MIN_FILTER, samplingParameters.min);
-                    if (_texture.wrapU !== null) {
-                        this._setTextureParameterInteger(target, this._gl.TEXTURE_WRAP_S, this._getTextureWrapMode(_texture.wrapU), _texture);
-                    }
-
-                    if (_texture.wrapV !== null) {
-                        this._setTextureParameterInteger(target, this._gl.TEXTURE_WRAP_T, this._getTextureWrapMode(_texture.wrapV), _texture);
-                    }
-
-                    if (_texture.wrapR !== null) {
-                        this._setTextureParameterInteger(target, this._gl.TEXTURE_WRAP_R, this._getTextureWrapMode(_texture.wrapR), _texture);
-                    }
-                    this._gl.bindTexture(target, null);
-                }
-                // const targ = target(faceIndex);
-            },
-            (
-                data: ArrayBufferView,
-                mipmapSize: {
-                    width: number;
-                    height: number;
-                },
-                faceIndex: number,
-                lod: number
-            ) => this._gl.compressedTexImage2D(faceTarget(faceIndex), lod, internalCompressedFormat, mipmapSize.width, mipmapSize.height, 0, data),
-            (
-                data: ArrayBufferView,
-                block: {
-                    xOffset: number;
-                    yOffset: number;
-                    width: number;
-                    height: number;
-                },
-                faceIndex: number,
-                lod: number
-            ) => this._gl.compressedTexSubImage2D(faceTarget(faceIndex), lod, block.xOffset, block.yOffset, block.width, block.height, internalCompressedFormat, data),
-            faces
-        );
-    }
-
     /**
      * @internal
      */
@@ -3381,6 +3266,92 @@ export class ThinEngine extends AbstractEngine {
         }
 
         this._gl.compressedTexImage2D(target, lod, internalFormat, width, height, 0, <DataView>data);
+    }
+
+    /**
+     * @internal
+     */
+    public _uploadCompressedBlockToTextureDirectly(
+        texture: InternalTexture,
+        hardwareTexture: HardwareTextureWrapper,
+        internalFormat: number,
+        isBlock: boolean,
+        width: number,
+        height: number,
+        xOffset: number,
+        yOffset: number,
+        data: ArrayBufferView,
+        faceIndex: number = 0,
+        lod: number = 0
+    ) {
+        const gl = this._gl;
+
+        let target: GLenum = gl.TEXTURE_2D;
+        if (texture.isCube) {
+            target = gl.TEXTURE_CUBE_MAP_POSITIVE_X + faceIndex;
+        }
+
+        if (texture._useSRGBBuffer) {
+            switch (internalFormat) {
+                case Constants.TEXTUREFORMAT_COMPRESSED_RGB8_ETC2:
+                case Constants.TEXTUREFORMAT_COMPRESSED_RGB_ETC1_WEBGL:
+                    // Note, if using ETC1 and sRGB is requested, this will use ETC2 if available.
+                    if (this._caps.etc2) {
+                        internalFormat = gl.COMPRESSED_SRGB8_ETC2;
+                    } else {
+                        texture._useSRGBBuffer = false;
+                    }
+                    break;
+                case Constants.TEXTUREFORMAT_COMPRESSED_RGBA8_ETC2_EAC:
+                    if (this._caps.etc2) {
+                        internalFormat = gl.COMPRESSED_SRGB8_ALPHA8_ETC2_EAC;
+                    } else {
+                        texture._useSRGBBuffer = false;
+                    }
+                    break;
+                case Constants.TEXTUREFORMAT_COMPRESSED_RGBA_BPTC_UNORM:
+                    internalFormat = gl.COMPRESSED_SRGB_ALPHA_BPTC_UNORM_EXT;
+                    break;
+                case Constants.TEXTUREFORMAT_COMPRESSED_RGBA_ASTC_4x4:
+                    internalFormat = gl.COMPRESSED_SRGB8_ALPHA8_ASTC_4x4_KHR;
+                    break;
+                case Constants.TEXTUREFORMAT_COMPRESSED_RGB_S3TC_DXT1:
+                    if (this._caps.s3tc_srgb) {
+                        internalFormat = gl.COMPRESSED_SRGB_S3TC_DXT1_EXT;
+                    } else {
+                        // S3TC sRGB extension not supported
+                        texture._useSRGBBuffer = false;
+                    }
+                    break;
+                case Constants.TEXTUREFORMAT_COMPRESSED_RGBA_S3TC_DXT1:
+                    if (this._caps.s3tc_srgb) {
+                        internalFormat = gl.COMPRESSED_SRGB_ALPHA_S3TC_DXT1_EXT;
+                    } else {
+                        // S3TC sRGB extension not supported
+                        texture._useSRGBBuffer = false;
+                    }
+                    break;
+                case Constants.TEXTUREFORMAT_COMPRESSED_RGBA_S3TC_DXT5:
+                    if (this._caps.s3tc_srgb) {
+                        internalFormat = gl.COMPRESSED_SRGB_ALPHA_S3TC_DXT5_EXT;
+                    } else {
+                        // S3TC sRGB extension not supported
+                        texture._useSRGBBuffer = false;
+                    }
+                    break;
+                default:
+                    // We don't support a sRGB format corresponding to internalFormat, so revert to non sRGB format
+                    texture._useSRGBBuffer = false;
+                    break;
+            }
+        }
+
+        gl.bindTexture(texture.isCube ? gl.TEXTURE_CUBE_MAP : gl.TEXTURE_2D, hardwareTexture?.underlyingResource ?? null);
+        if (isBlock) {
+            gl.compressedTexSubImage2D(target, lod, xOffset, yOffset, width, height, internalFormat, <DataView>data);
+        } else {
+            gl.compressedTexImage2D(target, lod, internalFormat, width, height, 0, <DataView>data);
+        }
     }
 
     /**
@@ -3504,6 +3475,50 @@ export class ThinEngine extends AbstractEngine {
 
         texture.onLoadedObservable.notifyObservers(texture);
         texture.onLoadedObservable.clear();
+    }
+
+    private _prepareWebGLAsyncTexture(
+        texture: InternalTexture,
+        hardwareTexture: HardwareTextureWrapper,
+        scene: ISceneLike,
+        img: { width: number; height: number },
+        invertY: boolean,
+        noMipmap: boolean,
+        isCompressed: boolean,
+        processFunction: PrepareTextureProcessAsyncFunction,
+        samplingMode: number,
+        format: Nullable<number>
+    ): void {
+        const maxTextureSize = this.getCaps().maxTextureSize;
+        const potWidth = Math.min(maxTextureSize, this.needPOTTextures ? GetExponentOfTwo(img.width, maxTextureSize) : img.width);
+        const potHeight = Math.min(maxTextureSize, this.needPOTTextures ? GetExponentOfTwo(img.height, maxTextureSize) : img.height);
+
+        const gl = this._gl;
+        if (!gl) {
+            return;
+        }
+
+        gl.bindTexture(gl.TEXTURE_2D, hardwareTexture.underlyingResource);
+        this._unpackFlipY(invertY === undefined ? true : invertY ? true : false);
+
+        texture.baseWidth = img.width;
+        texture.baseHeight = img.height;
+        texture.width = potWidth;
+        texture.height = potHeight;
+        texture.isReady = true;
+        texture.type = texture.type !== -1 ? texture.type : Constants.TEXTURETYPE_UNSIGNED_BYTE;
+        texture.format = texture.format !== -1 ? texture.format : (format ?? Constants.TEXTUREFORMAT_RGBA);
+
+        if (
+            processFunction(potWidth, potHeight, img, texture, hardwareTexture, () => {
+                this._prepareWebGLTextureContinuation(texture, scene, noMipmap, isCompressed, samplingMode);
+            })
+        ) {
+            // Returning as texture needs extra async steps
+            return;
+        }
+
+        this._prepareWebGLTextureContinuation(texture, scene, noMipmap, isCompressed, samplingMode);
     }
 
     private _prepareWebGLTexture(

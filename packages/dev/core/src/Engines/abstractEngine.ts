@@ -52,6 +52,7 @@ import { Observable } from "../Misc/observable";
 import { EngineFunctionContext, _loadFile } from "./abstractEngine.functions";
 import type { Material } from "core/Materials/material";
 import { _GetCompatibleTextureLoader } from "core/Materials/Textures/Loaders/textureLoaderManager";
+import type { IAsyncInternalTextureLoader } from "core/Materials/Textures/Loaders/asyncInternalTextureLoader";
 
 /**
  * Defines the interface used by objects working like Scene
@@ -180,6 +181,15 @@ export type PrepareTextureProcessFunction = (
     continuationCallback: () => void
 ) => boolean;
 
+export type PrepareTextureProcessAsyncFunction = (
+    width: number,
+    height: number,
+    img: { width: number; height: number },
+    texture: InternalTexture,
+    hardwareTexture: HardwareTextureWrapper,
+    continuationCallback: () => void
+) => boolean;
+
 export type PrepareTextureFunction = (
     texture: InternalTexture,
     extension: string,
@@ -189,6 +199,18 @@ export type PrepareTextureFunction = (
     noMipmap: boolean,
     isCompressed: boolean,
     processFunction: PrepareTextureProcessFunction,
+    samplingMode: number
+) => void;
+
+export type PrepareTextureAsyncFunction = (
+    texture: InternalTexture,
+    hardwareTexture: HardwareTextureWrapper,
+    scene: ISceneLike,
+    img: { width: number; height: number },
+    invertY: boolean,
+    noMipmap: boolean,
+    isCompressed: boolean,
+    processFunction: PrepareTextureProcessAsyncFunction,
     samplingMode: number
 ) => void;
 
@@ -1077,139 +1099,6 @@ export abstract class AbstractEngine {
     /** @internal */
     public abstract _getUnpackAlignement(): number;
 
-    protected async _uploadMipmapsToTextureBase(
-        texture: InternalTexture,
-        width: number,
-        height: number,
-        buffers: ArrayBufferView[] | ArrayBufferView,
-        blockInfo: { width: number; height: number; bytesLength: number },
-        bytesInBlock: number,
-        bindTexture: (texture: HardwareTextureWrapper) => void,
-        finalizeTexture: (_texture: InternalTexture, _hardwareTexture: HardwareTextureWrapper) => void,
-        pushData: (
-            data: ArrayBufferView,
-            mipmapSize: {
-                width: number;
-                height: number;
-            },
-            faceIndex: number,
-            lod: number
-        ) => void,
-        pushDataBlock: (
-            data: ArrayBufferView,
-            block: {
-                xOffset: number;
-                yOffset: number;
-                width: number;
-                height: number;
-            },
-            faceIndex: number,
-            lod: number
-        ) => void,
-        faces?: number
-    ): Promise<void> {
-        return new Promise(async (resolve, reject) => {
-            if (!texture) {
-                return resolve();
-            }
-
-            if (!texture._hardwareTexture) {
-                return reject(new Error("The texture must have have hardware texture to append mipmaps."));
-            }
-
-            if (texture?._internalCompressedFormat === void 0) {
-                return reject(new Error("Internal compressed format in the texture required to append mipmaps."));
-            }
-
-            faces ??= 1;
-
-            const intdiv = (x: number, y: number) => {
-                return Math.floor((x + 0.5) / y);
-            };
-            const alignTo = (value: number, alignment: number) => {
-                return intdiv((value | 0) + alignment - 1, alignment) * alignment;
-            };
-
-            const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-
-            const newHardwareTexture = this._createHardwareTexture();
-            const oldHardwareTexture = texture._hardwareTexture;
-
-            const mipmapCount = Math.ceil(Math.log2(Math.max(width, height))) + 1;
-
-            const blockedLoading = { bytesInBlock, bytesLeft: bytesInBlock };
-
-            let buffOffset = 0;
-            for (let f = 0, i = 0; f < faces; f++) {
-                for (let m = 0; m < mipmapCount; m++, i++) {
-                    const mmWidth = (width + (1 << m) - 1) >> m;
-                    const mmHeight = (height + (1 << m) - 1) >> m;
-                    const blocksCountX = Math.ceil((mmWidth - 0.5) / blockInfo.width);
-                    const blocksCountY = Math.ceil((mmHeight - 0.5) / blockInfo.height);
-                    const bytesInBlockLine = blockInfo.bytesLength * blocksCountX;
-
-                    const dataSize = alignTo(bytesInBlockLine * blocksCountY, this._getUnpackAlignement());
-                    let data: Uint8Array;
-                    if (Array.isArray(buffers)) {
-                        const buff = buffers[i];
-                        data = new Uint8Array(buff.buffer, buff.byteOffset, buff.byteLength);
-                    } else {
-                        const buffLength = Math.ceil(mmWidth / blockInfo.width) * Math.ceil(mmHeight / blockInfo.height) * blockInfo.bytesLength;
-                        data = new Uint8Array(buffers.buffer, buffers.byteOffset + buffOffset, buffLength);
-                        buffOffset += buffLength;
-                    }
-
-                    if (blockedLoading.bytesLeft <= 0) {
-                        await delay(0);
-                    }
-                    bindTexture(newHardwareTexture);
-
-                    if (dataSize < blockedLoading.bytesLeft + blockedLoading.bytesInBlock * 0.3) {
-                        // If texture meets the quota - loading without block splitting
-                        await delay(0);
-                        bindTexture(newHardwareTexture);
-                        pushData(data, { width: mmWidth, height: mmHeight }, f, m);
-                        blockedLoading.bytesLeft -= dataSize;
-                    } else {
-                        // Otherwise - loading with block splitting
-                        pushData(new Uint8Array(dataSize), { width: mmWidth, height: mmHeight }, f, m); // for some reason it's faster to allocate a new empty buffer than to fill the existing one
-                        for (let loadedBlockLines = 0; ; ) {
-                            const canLoadBlockLines = Math.min(Math.max(intdiv(blockedLoading.bytesLeft, bytesInBlockLine), 1), blocksCountY - loadedBlockLines);
-                            const newLoadedBlockLines = loadedBlockLines + canLoadBlockLines;
-                            const loadedLines = Math.min(newLoadedBlockLines * blockInfo.height, mmHeight) - loadedBlockLines * blockInfo.height;
-                            pushDataBlock(
-                                data.subarray(loadedBlockLines * bytesInBlockLine, newLoadedBlockLines * bytesInBlockLine),
-                                { xOffset: 0, yOffset: loadedBlockLines * blockInfo.height, width: mmWidth, height: loadedLines },
-                                f,
-                                m
-                            );
-                            loadedBlockLines = newLoadedBlockLines;
-                            blockedLoading.bytesLeft -= canLoadBlockLines * bytesInBlockLine;
-                            if (loadedBlockLines < blocksCountY) {
-                                // Switching to frame rendering if not all blocks are loaded
-                                await delay(0);
-                                bindTexture(newHardwareTexture);
-                                blockedLoading.bytesLeft = blockedLoading.bytesInBlock;
-                            } else {
-                                // Stop loading when everything is loaded
-                                break;
-                            }
-                        }
-                    }
-                }
-            }
-            finalizeTexture(texture, newHardwareTexture);
-            texture.updateSize(width, height);
-            texture._hardwareTexture = newHardwareTexture;
-            texture.isReady = true;
-            texture.onLoadedObservable.notifyObservers(texture);
-            oldHardwareTexture.release();
-            resolve();
-        });
-    }
-
-    public abstract uploadMipmapsToTexture(texture: InternalTexture, width: number, height: number, buffers: ArrayBufferView[] | ArrayBufferView, faces?: number): Promise<void>;
-
     /**
      * @internal
      */
@@ -1221,6 +1110,23 @@ export abstract class AbstractEngine {
         data: ArrayBufferView,
         faceIndex: number,
         lod?: number
+    ): void;
+
+    /**
+     * @internal
+     */
+    public abstract _uploadCompressedBlockToTextureDirectly(
+        texture: InternalTexture,
+        hardwareTexture: HardwareTextureWrapper,
+        internalFormat: number,
+        isBlock: boolean,
+        width: number,
+        height: number,
+        xOffset: number,
+        yOffset: number,
+        data: ArrayBufferView,
+        faceIndex: number,
+        lod: number
     ): void;
 
     /**
@@ -1551,6 +1457,52 @@ export abstract class AbstractEngine {
         }
 
         return description;
+    }
+
+    public abstract asyncUpdateTexture(
+        texture: InternalTexture,
+        scene: ISceneLike,
+        data: ArrayBufferView,
+        bytesInBlock: number,
+        loader: IAsyncInternalTextureLoader
+    ): Promise<void>;
+
+    protected async _asyncUpdateTextureBase(
+        texture: InternalTexture,
+        scene: ISceneLike,
+        data: ArrayBufferView,
+        bytesInBlock: number,
+        loader: IAsyncInternalTextureLoader,
+        prepareTexture: PrepareTextureAsyncFunction
+    ): Promise<void> {
+        const hardwareTexture = this._createHardwareTexture();
+
+        if (texture.isCube) {
+            await loader.loadCubeData(data, texture, hardwareTexture, false, bytesInBlock, null, null);
+        } else {
+            await loader.loadData(
+                data,
+                texture,
+                hardwareTexture,
+                bytesInBlock,
+                (width: number, height: number, loadMipmap: boolean, isCompressed: boolean, done: () => Promise<void>) => {
+                    prepareTexture(
+                        texture,
+                        hardwareTexture,
+                        scene,
+                        { width, height },
+                        texture.invertY,
+                        !loadMipmap,
+                        isCompressed,
+                        () => {
+                            done();
+                            return false;
+                        },
+                        texture.samplingMode
+                    );
+                }
+            );
+        }
     }
 
     protected _createTextureBase(

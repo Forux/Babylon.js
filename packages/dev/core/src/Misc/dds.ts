@@ -10,6 +10,7 @@ import type { AbstractEngine } from "../Engines/abstractEngine";
 import { FromHalfFloat, ToHalfFloat } from "./textureTools";
 
 import "../Engines/AbstractEngine/abstractEngine.cubeTexture";
+import type { HardwareTextureWrapper } from "core/Materials/Textures/hardwareTextureWrapper";
 
 // Based on demo done by Brandon Jones - http://media.tojicode.com/webgl-samples/dds.html
 // All values and structures referenced from:
@@ -526,6 +527,575 @@ export class DDSTools {
         return byteArray;
     }
 
+    public static async UploadDDSLevelsAsync(
+        engine: AbstractEngine,
+        texture: InternalTexture,
+        hardwareTexture: HardwareTextureWrapper,
+        data: ArrayBufferView,
+        info: DDSInfo,
+        bytesInBlock: number,
+        loadMipmaps: boolean,
+        faces: number,
+        lodIndex = -1,
+        currentFace?: number,
+        destTypeMustBeFilterable = true
+    ): Promise<void> {
+        let sphericalPolynomialFaces: Nullable<Array<ArrayBufferView>> = null;
+        if (info.sphericalPolynomial) {
+            sphericalPolynomialFaces = [] as ArrayBufferView[];
+        }
+        // ensure support for all formats
+        const ext = !!engine.getCaps().s3tc || !!engine.getCaps().astc || !!engine.getCaps().bptc;
+
+        // TODO WEBGPU Once generateMipMaps is split into generateMipMaps + hasMipMaps in InternalTexture this line can be removed
+        texture.generateMipMaps = loadMipmaps;
+
+        const header = new Int32Array(data.buffer, data.byteOffset, headerLengthInt);
+        let fourCC: number,
+            width: number,
+            height: number,
+            dataLength: number = 0,
+            dataOffset: number;
+        let byteArray: Uint8Array, mipmapCount: number, mip: number;
+        let internalCompressedFormat = 0;
+        let blockBytes = 1;
+
+        if (header[off_magic] !== DDS_MAGIC) {
+            Logger.Error("Invalid magic number in DDS header");
+            return;
+        }
+
+        if (!info.isFourCC && !info.isRGB && !info.isLuminance) {
+            Logger.Error("Unsupported format, must contain a FourCC, RGB or LUMINANCE code");
+            return;
+        }
+
+        if (info.isCompressed && !ext) {
+            Logger.Error("Compressed textures are not supported on this platform.");
+            return;
+        }
+
+        let wBlockSize = 4;
+        let hBlockSize = 4;
+        let bpp = header[off_RGBbpp];
+        dataOffset = header[off_size] + 4;
+
+        let computeFormats = false;
+
+        if (info.isFourCC) {
+            fourCC = header[off_pfFourCC];
+            switch (fourCC) {
+                case FOURCC_DXT1:
+                    blockBytes = 8;
+                    internalCompressedFormat = Constants.TEXTUREFORMAT_COMPRESSED_RGBA_S3TC_DXT1;
+                    break;
+                case FOURCC_DXT3:
+                    blockBytes = 16;
+                    internalCompressedFormat = Constants.TEXTUREFORMAT_COMPRESSED_RGBA_S3TC_DXT3;
+                    break;
+                case FOURCC_DXT5:
+                    blockBytes = 16;
+                    internalCompressedFormat = Constants.TEXTUREFORMAT_COMPRESSED_RGBA_S3TC_DXT5;
+                    break;
+                case FOURCC_D3DFMT_R16G16B16A16F:
+                    computeFormats = true;
+                    bpp = 64;
+                    break;
+                case FOURCC_D3DFMT_R32G32B32A32F:
+                    computeFormats = true;
+                    bpp = 128;
+                    break;
+                case FOURCC_DX10: {
+                    // There is an additionnal header so dataOffset need to be changed
+                    dataOffset += 5 * 4; // 5 uints
+
+                    let supported = false;
+                    switch (info.dxgiFormat) {
+                        case DXGI_FORMAT_R16G16B16A16_FLOAT:
+                            computeFormats = true;
+                            bpp = 64;
+                            supported = true;
+                            break;
+                        case DXGI_FORMAT_R32G32B32A32_FLOAT:
+                            computeFormats = true;
+                            bpp = 128;
+                            supported = true;
+                            break;
+                        case DXGI_FORMAT_B8G8R8X8_UNORM:
+                            info.isRGB = true;
+                            info.isFourCC = false;
+                            bpp = 32;
+                            supported = true;
+                            break;
+
+                        //> VRNET
+                        /*
+public static readonly TEXTUREFORMAT_COMPRESSED_RGBA_ASTC_10x10_KHR = 37819;
+    public static readonly TEXTUREFORMAT_COMPRESSED_RGBA_ASTC_10x5_KHR = 37816;
+    public static readonly TEXTUREFORMAT_COMPRESSED_RGBA_ASTC_10x6_KHR = 37817;
+    public static readonly TEXTUREFORMAT_COMPRESSED_RGBA_ASTC_10x8_KHR = 37818;
+    public static readonly TEXTUREFORMAT_COMPRESSED_RGBA_ASTC_12x10_KHR = 37820;
+    public static readonly TEXTUREFORMAT_COMPRESSED_RGBA_ASTC_12x12_KHR = 37821;
+    public static readonly TEXTUREFORMAT_COMPRESSED_RGBA_ASTC_4x4_KHR = 37808;
+    public static readonly TEXTUREFORMAT_COMPRESSED_RGBA_ASTC_5x4_KHR = 37809;
+    public static readonly TEXTUREFORMAT_COMPRESSED_RGBA_ASTC_5x5_KHR = 37810;
+    public static readonly TEXTUREFORMAT_COMPRESSED_RGBA_ASTC_6x5_KHR = 37811;
+    public static readonly TEXTUREFORMAT_COMPRESSED_RGBA_ASTC_6x6_KHR = 37812;
+    public static readonly TEXTUREFORMAT_COMPRESSED_RGBA_ASTC_8x5_KHR = 37813;
+    public static readonly TEXTUREFORMAT_COMPRESSED_RGBA_ASTC_8x6_KHR = 37814;
+    public static readonly TEXTUREFORMAT_COMPRESSED_RGBA_ASTC_8x8_KHR = 37815;
+    public static readonly TEXTUREFORMAT_COMPRESSED_SRGB8_ALPHA8_ASTC_10x10_KHR = 37851;
+    public static readonly TEXTUREFORMAT_COMPRESSED_SRGB8_ALPHA8_ASTC_10x5_KHR = 37848;
+    public static readonly TEXTUREFORMAT_COMPRESSED_SRGB8_ALPHA8_ASTC_10x6_KHR = 37849;
+    public static readonly TEXTUREFORMAT_COMPRESSED_SRGB8_ALPHA8_ASTC_10x8_KHR = 37850;
+    public static readonly TEXTUREFORMAT_COMPRESSED_SRGB8_ALPHA8_ASTC_12x10_KHR = 37852;
+    public static readonly TEXTUREFORMAT_COMPRESSED_SRGB8_ALPHA8_ASTC_12x12_KHR = 37853;
+    public static readonly TEXTUREFORMAT_COMPRESSED_SRGB8_ALPHA8_ASTC_4x4_KHR = 37840;
+    public static readonly TEXTUREFORMAT_COMPRESSED_SRGB8_ALPHA8_ASTC_5x4_KHR = 37841;
+    public static readonly TEXTUREFORMAT_COMPRESSED_SRGB8_ALPHA8_ASTC_5x5_KHR = 37842;
+    public static readonly TEXTUREFORMAT_COMPRESSED_SRGB8_ALPHA8_ASTC_6x5_KHR = 37843;
+    public static readonly TEXTUREFORMAT_COMPRESSED_SRGB8_ALPHA8_ASTC_6x6_KHR = 37844;
+    public static readonly TEXTUREFORMAT_COMPRESSED_SRGB8_ALPHA8_ASTC_8x5_KHR = 37845;
+    public static readonly TEXTUREFORMAT_COMPRESSED_SRGB8_ALPHA8_ASTC_8x6_KHR = 37846;
+    public static readonly TEXTUREFORMAT_COMPRESSED_SRGB8_ALPHA8_ASTC_8x8_KHR = 37847;
+
+    
+const DXGI_FORMAT_ASTC_4X4_TYPELESS    = 133;
+const DXGI_FORMAT_ASTC_4X4_UNORM     = 134;
+const DXGI_FORMAT_ASTC_4X4_UNORM_SRGB    = 135;
+const DXGI_FORMAT_ASTC_5X4_TYPELESS    = 137;
+const DXGI_FORMAT_ASTC_5X4_UNORM     = 138;
+const DXGI_FORMAT_ASTC_5X4_UNORM_SRGB    = 139;
+const DXGI_FORMAT_ASTC_5X5_TYPELESS    = 141;
+const DXGI_FORMAT_ASTC_5X5_UNORM     = 142;
+const DXGI_FORMAT_ASTC_5X5_UNORM_SRGB    = 143;
+const DXGI_FORMAT_ASTC_6X5_TYPELESS    = 145;
+const DXGI_FORMAT_ASTC_6X5_UNORM     = 146;
+const DXGI_FORMAT_ASTC_6X5_UNORM_SRGB    = 147;
+const DXGI_FORMAT_ASTC_6X6_TYPELESS    = 149;
+const DXGI_FORMAT_ASTC_6X6_UNORM     = 150;
+const DXGI_FORMAT_ASTC_6X6_UNORM_SRGB    = 151;
+const DXGI_FORMAT_ASTC_8X5_TYPELESS    = 153;
+const DXGI_FORMAT_ASTC_8X5_UNORM     = 154;
+const DXGI_FORMAT_ASTC_8X5_UNORM_SRGB    = 155;
+const DXGI_FORMAT_ASTC_8X6_TYPELESS    = 157;
+const DXGI_FORMAT_ASTC_8X6_UNORM    = 158;
+const DXGI_FORMAT_ASTC_8X6_UNORM_SRGB   = 159;
+const DXGI_FORMAT_ASTC_8X8_TYPELESS    = 161;
+const DXGI_FORMAT_ASTC_8X8_UNORM    = 162;
+const DXGI_FORMAT_ASTC_8X8_UNORM_SRGB   = 163;
+const DXGI_FORMAT_ASTC_10X5_TYPELESS   = 165;
+const DXGI_FORMAT_ASTC_10X5_UNORM    = 166;
+const DXGI_FORMAT_ASTC_10X5_UNORM_SRGB   = 167;
+const DXGI_FORMAT_ASTC_10X6_TYPELESS   = 169;
+const DXGI_FORMAT_ASTC_10X6_UNORM    = 170;
+const DXGI_FORMAT_ASTC_10X6_UNORM_SRGB   = 171;
+const DXGI_FORMAT_ASTC_10X8_TYPELESS   = 173;
+const DXGI_FORMAT_ASTC_10X8_UNORM    = 174;
+const DXGI_FORMAT_ASTC_10X8_UNORM_SRGB   = 175;
+const DXGI_FORMAT_ASTC_10X10_TYPELESS   = 177;
+const DXGI_FORMAT_ASTC_10X10_UNORM    = 178;
+const DXGI_FORMAT_ASTC_10X10_UNORM_SRGB   = 179;
+const DXGI_FORMAT_ASTC_12X10_TYPELESS   = 181;
+const DXGI_FORMAT_ASTC_12X10_UNORM    = 182;
+const DXGI_FORMAT_ASTC_12X10_UNORM_SRGB   = 183;
+const DXGI_FORMAT_ASTC_12X12_TYPELESS   = 185;
+const DXGI_FORMAT_ASTC_12X12_UNORM    = 186;
+const DXGI_FORMAT_ASTC_12X12_UNORM_SRGB   = 187;
+*/
+                        case DXGI_FORMAT_ASTC_6X6_TYPELESS:
+                        case DXGI_FORMAT_ASTC_6X6_UNORM:
+                            wBlockSize = 6;
+                            hBlockSize = 6;
+                            supported = true;
+                            blockBytes = 16;
+                            internalCompressedFormat = Constants.TEXTUREFORMAT_COMPRESSED_RGBA_ASTC_6x6_KHR;
+                            break;
+                        case DXGI_FORMAT_ASTC_4X4_TYPELESS:
+                        case DXGI_FORMAT_ASTC_4X4_UNORM:
+                            supported = true;
+                            blockBytes = 16;
+                            internalCompressedFormat = Constants.TEXTUREFORMAT_COMPRESSED_RGBA_ASTC_4x4_KHR;
+                            break;
+                        case DXGI_FORMAT_ASTC_5X4_TYPELESS:
+                        case DXGI_FORMAT_ASTC_5X4_UNORM:
+                            wBlockSize = 5;
+                            hBlockSize = 4;
+                            supported = true;
+                            blockBytes = 16;
+                            internalCompressedFormat = Constants.TEXTUREFORMAT_COMPRESSED_RGBA_ASTC_5x4_KHR;
+                            break;
+                        case DXGI_FORMAT_ASTC_5X5_TYPELESS:
+                        case DXGI_FORMAT_ASTC_5X5_UNORM:
+                            wBlockSize = 5;
+                            hBlockSize = 5;
+                            supported = true;
+                            blockBytes = 16;
+                            internalCompressedFormat = Constants.TEXTUREFORMAT_COMPRESSED_RGBA_ASTC_5x5_KHR;
+                            break;
+                        case DXGI_FORMAT_ASTC_6X5_TYPELESS:
+                        case DXGI_FORMAT_ASTC_6X5_UNORM:
+                            wBlockSize = 6;
+                            hBlockSize = 5;
+                            supported = true;
+                            blockBytes = 16;
+                            internalCompressedFormat = Constants.TEXTUREFORMAT_COMPRESSED_RGBA_ASTC_6x5_KHR;
+                            break;
+                        case DXGI_FORMAT_ASTC_8X5_TYPELESS:
+                        case DXGI_FORMAT_ASTC_8X5_UNORM:
+                            wBlockSize = 8;
+                            hBlockSize = 5;
+                            supported = true;
+                            blockBytes = 16;
+                            internalCompressedFormat = Constants.TEXTUREFORMAT_COMPRESSED_RGBA_ASTC_8x5_KHR;
+                            break;
+                        case DXGI_FORMAT_ASTC_8X6_TYPELESS:
+                        case DXGI_FORMAT_ASTC_8X6_UNORM:
+                            wBlockSize = 8;
+                            hBlockSize = 6;
+                            supported = true;
+                            blockBytes = 16;
+                            internalCompressedFormat = Constants.TEXTUREFORMAT_COMPRESSED_RGBA_ASTC_8x6_KHR;
+                            break;
+                        case DXGI_FORMAT_ASTC_8X8_TYPELESS:
+                        case DXGI_FORMAT_ASTC_8X8_UNORM:
+                            wBlockSize = 8;
+                            hBlockSize = 8;
+                            supported = true;
+                            blockBytes = 16;
+                            internalCompressedFormat = Constants.TEXTUREFORMAT_COMPRESSED_RGBA_ASTC_8x8_KHR;
+                            break;
+                        case DXGI_FORMAT_ASTC_10X5_TYPELESS:
+                        case DXGI_FORMAT_ASTC_10X5_UNORM:
+                            wBlockSize = 10;
+                            hBlockSize = 5;
+                            supported = true;
+                            blockBytes = 16;
+                            internalCompressedFormat = Constants.TEXTUREFORMAT_COMPRESSED_RGBA_ASTC_10x5_KHR;
+                            break;
+                        case DXGI_FORMAT_ASTC_10X6_TYPELESS:
+                        case DXGI_FORMAT_ASTC_10X6_UNORM:
+                            wBlockSize = 10;
+                            hBlockSize = 6;
+                            supported = true;
+                            blockBytes = 16;
+                            internalCompressedFormat = Constants.TEXTUREFORMAT_COMPRESSED_RGBA_ASTC_10x6_KHR;
+                            break;
+                        case DXGI_FORMAT_ASTC_10X8_TYPELESS:
+                        case DXGI_FORMAT_ASTC_10X8_UNORM:
+                            wBlockSize = 10;
+                            hBlockSize = 8;
+                            supported = true;
+                            blockBytes = 16;
+                            internalCompressedFormat = Constants.TEXTUREFORMAT_COMPRESSED_RGBA_ASTC_10x8_KHR;
+                            break;
+                        case DXGI_FORMAT_ASTC_10X10_TYPELESS:
+                        case DXGI_FORMAT_ASTC_10X10_UNORM:
+                            wBlockSize = 10;
+                            hBlockSize = 10;
+                            supported = true;
+                            blockBytes = 16;
+                            internalCompressedFormat = Constants.TEXTUREFORMAT_COMPRESSED_RGBA_ASTC_10x10_KHR;
+                            break;
+                        case DXGI_FORMAT_ASTC_12X10_TYPELESS:
+                        case DXGI_FORMAT_ASTC_12X10_UNORM:
+                            wBlockSize = 12;
+                            hBlockSize = 10;
+                            supported = true;
+                            blockBytes = 16;
+                            internalCompressedFormat = Constants.TEXTUREFORMAT_COMPRESSED_RGBA_ASTC_12x10_KHR;
+                            break;
+                        case DXGI_FORMAT_ASTC_12X12_TYPELESS:
+                        case DXGI_FORMAT_ASTC_12X12_UNORM:
+                            wBlockSize = 12;
+                            hBlockSize = 12;
+                            supported = true;
+                            blockBytes = 16;
+                            internalCompressedFormat = Constants.TEXTUREFORMAT_COMPRESSED_RGBA_ASTC_12x12_KHR;
+                            break;
+                        case DXGI_FORMAT_BC7_UNORM:
+                            supported = true;
+                            blockBytes = 16;
+                            internalCompressedFormat = Constants.TEXTUREFORMAT_COMPRESSED_RGBA_BPTC_UNORM_EXT;
+                            break;
+                        case DXGI_FORMAT_BC7_UNORM_SRGB:
+                            supported = true;
+                            blockBytes = 16;
+                            internalCompressedFormat = Constants.TEXTUREFORMAT_COMPRESSED_SRGB_ALPHA_BPTC_UNORM_EXT;
+                            break;
+                        case DXGI_FORMAT_BC6H_UF16:
+                            supported = true;
+                            blockBytes = 16;
+                            internalCompressedFormat = Constants.TEXTUREFORMAT_COMPRESSED_RGB_BPTC_UNSIGNED_FLOAT_EXT;
+                            break;
+                        case DXGI_FORMAT_BC6H_SF16:
+                            supported = true;
+                            blockBytes = 16;
+                            internalCompressedFormat = Constants.TEXTUREFORMAT_COMPRESSED_RGB_BPTC_SIGNED_FLOAT_EXT;
+                            break;
+                        //< VRNET
+                    }
+
+                    if (supported) {
+                        break;
+                    }
+                }
+                // eslint-disable-next-line no-fallthrough
+                default:
+                    Logger.Error(["Unsupported FourCC code:", Int32ToFourCC(fourCC)]);
+                    return;
+            }
+        }
+
+        const rOffset = DDSTools._ExtractLongWordOrder(header[off_RMask]);
+        const gOffset = DDSTools._ExtractLongWordOrder(header[off_GMask]);
+        const bOffset = DDSTools._ExtractLongWordOrder(header[off_BMask]);
+        const aOffset = DDSTools._ExtractLongWordOrder(header[off_AMask]);
+
+        if (computeFormats) {
+            internalCompressedFormat = engine._getRGBABufferInternalSizedFormat(info.textureType);
+        }
+
+        mipmapCount = 1;
+        if (header[off_flags] & DDSD_MIPMAPCOUNT && loadMipmaps !== false) {
+            mipmapCount = Math.max(1, header[off_mipmapCount]);
+        }
+
+        const startFace = currentFace || 0;
+        const caps = engine.getCaps();
+        const unpackAlignment = engine._getUnpackAlignement();
+
+        const blockedLoading = { bytesInBlock, bytesLeft: bytesInBlock };
+
+        const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+        for (let face = startFace; face < faces; face++) {
+            width = header[off_width];
+            height = header[off_height];
+
+            for (mip = 0; mip < mipmapCount; ++mip) {
+                if (lodIndex === -1 || lodIndex === mip) {
+                    // In case of fixed LOD, if the lod has just been uploaded, early exit.
+                    const i = lodIndex === -1 ? mip : 0;
+
+                    if (!info.isCompressed && info.isFourCC) {
+                        texture.format = Constants.TEXTUREFORMAT_RGBA;
+                        dataLength = width * height * 4;
+                        let floatArray: Nullable<ArrayBufferView> = null;
+
+                        if (engine._badOS || engine._badDesktopOS || (!caps.textureHalfFloat && !caps.textureFloat)) {
+                            // Required because iOS has many issues with float and half float generation
+                            if (bpp === 128) {
+                                floatArray = DDSTools._GetFloatAsUIntRGBAArrayBuffer(width, height, data.byteOffset + dataOffset, dataLength, data.buffer, i);
+                                if (sphericalPolynomialFaces && i == 0) {
+                                    sphericalPolynomialFaces.push(DDSTools._GetFloatRGBAArrayBuffer(width, height, data.byteOffset + dataOffset, dataLength, data.buffer, i));
+                                }
+                            } else if (bpp === 64) {
+                                floatArray = DDSTools._GetHalfFloatAsUIntRGBAArrayBuffer(width, height, data.byteOffset + dataOffset, dataLength, data.buffer, i);
+                                if (sphericalPolynomialFaces && i == 0) {
+                                    sphericalPolynomialFaces.push(
+                                        DDSTools._GetHalfFloatAsFloatRGBAArrayBuffer(width, height, data.byteOffset + dataOffset, dataLength, data.buffer, i)
+                                    );
+                                }
+                            }
+
+                            texture.type = Constants.TEXTURETYPE_UNSIGNED_INT;
+                        } else {
+                            const floatAvailable = caps.textureFloat && ((destTypeMustBeFilterable && caps.textureFloatLinearFiltering) || !destTypeMustBeFilterable);
+                            const halfFloatAvailable = caps.textureHalfFloat && ((destTypeMustBeFilterable && caps.textureHalfFloatLinearFiltering) || !destTypeMustBeFilterable);
+
+                            const destType =
+                                (bpp === 128 || (bpp === 64 && !halfFloatAvailable)) && floatAvailable
+                                    ? Constants.TEXTURETYPE_FLOAT
+                                    : (bpp === 64 || (bpp === 128 && !floatAvailable)) && halfFloatAvailable
+                                      ? Constants.TEXTURETYPE_HALF_FLOAT
+                                      : Constants.TEXTURETYPE_UNSIGNED_BYTE;
+
+                            let dataGetter: (width: number, height: number, dataOffset: number, dataLength: number, arrayBuffer: ArrayBuffer, lod: number) => ArrayBufferView;
+                            let dataGetterPolynomial: Nullable<
+                                (width: number, height: number, dataOffset: number, dataLength: number, arrayBuffer: ArrayBuffer, lod: number) => ArrayBufferView
+                            > = null;
+
+                            switch (bpp) {
+                                case 128: {
+                                    switch (destType) {
+                                        case Constants.TEXTURETYPE_FLOAT:
+                                            dataGetter = DDSTools._GetFloatRGBAArrayBuffer;
+                                            dataGetterPolynomial = null;
+                                            break;
+                                        case Constants.TEXTURETYPE_HALF_FLOAT:
+                                            dataGetter = DDSTools._GetFloatAsHalfFloatRGBAArrayBuffer;
+                                            dataGetterPolynomial = DDSTools._GetFloatRGBAArrayBuffer;
+                                            break;
+                                        case Constants.TEXTURETYPE_UNSIGNED_BYTE:
+                                            dataGetter = DDSTools._GetFloatAsUIntRGBAArrayBuffer;
+                                            dataGetterPolynomial = DDSTools._GetFloatRGBAArrayBuffer;
+                                            break;
+                                    }
+                                    break;
+                                }
+                                default: {
+                                    // 64 bpp
+                                    switch (destType) {
+                                        case Constants.TEXTURETYPE_FLOAT:
+                                            dataGetter = DDSTools._GetHalfFloatAsFloatRGBAArrayBuffer;
+                                            dataGetterPolynomial = null;
+                                            break;
+                                        case Constants.TEXTURETYPE_HALF_FLOAT:
+                                            dataGetter = DDSTools._GetHalfFloatRGBAArrayBuffer;
+                                            dataGetterPolynomial = DDSTools._GetHalfFloatAsFloatRGBAArrayBuffer;
+                                            break;
+                                        case Constants.TEXTURETYPE_UNSIGNED_BYTE:
+                                            dataGetter = DDSTools._GetHalfFloatAsUIntRGBAArrayBuffer;
+                                            dataGetterPolynomial = DDSTools._GetHalfFloatAsFloatRGBAArrayBuffer;
+                                            break;
+                                    }
+                                    break;
+                                }
+                            }
+
+                            texture.type = destType;
+
+                            floatArray = dataGetter(width, height, data.byteOffset + dataOffset, dataLength, data.buffer, i);
+
+                            if (sphericalPolynomialFaces && i == 0) {
+                                sphericalPolynomialFaces.push(
+                                    dataGetterPolynomial ? dataGetterPolynomial(width, height, data.byteOffset + dataOffset, dataLength, data.buffer, i) : floatArray
+                                );
+                            }
+                        }
+
+                        if (floatArray) {
+                            engine._uploadDataToTextureDirectly(texture, floatArray, face, i);
+                        }
+                    } else if (info.isRGB) {
+                        texture.type = Constants.TEXTURETYPE_UNSIGNED_INT;
+                        if (bpp === 24) {
+                            texture.format = Constants.TEXTUREFORMAT_RGB;
+                            dataLength = width * height * 3;
+                            byteArray = DDSTools._GetRGBArrayBuffer(width, height, data.byteOffset + dataOffset, dataLength, data.buffer, rOffset, gOffset, bOffset);
+                            engine._uploadDataToTextureDirectly(texture, byteArray, face, i);
+                        } else {
+                            // 32
+                            texture.format = Constants.TEXTUREFORMAT_RGBA;
+                            dataLength = width * height * 4;
+                            byteArray = DDSTools._GetRGBAArrayBuffer(width, height, data.byteOffset + dataOffset, dataLength, data.buffer, rOffset, gOffset, bOffset, aOffset);
+                            engine._uploadDataToTextureDirectly(texture, byteArray, face, i);
+                        }
+                    } else if (info.isLuminance) {
+                        const unpaddedRowSize = width;
+                        const paddedRowSize = Math.floor((width + unpackAlignment - 1) / unpackAlignment) * unpackAlignment;
+                        dataLength = paddedRowSize * (height - 1) + unpaddedRowSize;
+
+                        byteArray = DDSTools._GetLuminanceArrayBuffer(width, height, data.byteOffset + dataOffset, dataLength, data.buffer);
+                        texture.format = Constants.TEXTUREFORMAT_LUMINANCE;
+                        texture.type = Constants.TEXTURETYPE_UNSIGNED_INT;
+
+                        engine._uploadDataToTextureDirectly(texture, byteArray, face, i);
+                    } else {
+                        const blocksCountX = Math.ceil(width / wBlockSize);
+                        const blocksCountY = Math.ceil(height / hBlockSize);
+                        const bytesInBlockLine = blockBytes * blocksCountX;
+
+                        dataLength = blocksCountX * blocksCountY * blockBytes;
+
+                        if (blockedLoading.bytesLeft <= 0) {
+                            await delay(0);
+                            blockedLoading.bytesLeft = blockedLoading.bytesInBlock;
+                        }
+
+                        byteArray = new Uint8Array(data.buffer, data.byteOffset + dataOffset, dataLength);
+
+                        texture.type = Constants.TEXTURETYPE_UNSIGNED_INT;
+
+                        if (dataLength < blockedLoading.bytesLeft + blockedLoading.bytesInBlock * 0.3) {
+                            // If texture meets the quota - loading without block splitting
+                            await delay(0);
+                            engine._uploadCompressedBlockToTextureDirectly(texture, hardwareTexture, internalCompressedFormat, false, width, height, 0, 0, byteArray, face, i);
+                            blockedLoading.bytesLeft -= dataLength;
+                        } else {
+                            // Otherwise - loading with block splitting
+                            engine._uploadCompressedBlockToTextureDirectly(
+                                texture,
+                                hardwareTexture,
+                                internalCompressedFormat,
+                                false,
+                                width,
+                                height,
+                                0,
+                                0,
+                                new Uint8Array(dataLength),
+                                face,
+                                i
+                            );
+                            for (let loadedBlockLines = 0; ; ) {
+                                const canLoadBlockLines = Math.min(Math.max(Math.floor(blockedLoading.bytesLeft / bytesInBlockLine), 1), blocksCountY - loadedBlockLines);
+                                const newLoadedBlockLines = loadedBlockLines + canLoadBlockLines;
+                                const loadedLines = Math.min(newLoadedBlockLines * hBlockSize, height) - loadedBlockLines * hBlockSize;
+                                engine._uploadCompressedBlockToTextureDirectly(
+                                    texture,
+                                    hardwareTexture,
+                                    internalCompressedFormat,
+                                    true,
+                                    width,
+                                    loadedLines,
+                                    0,
+                                    loadedBlockLines * hBlockSize,
+                                    new DataView(
+                                        byteArray.buffer.slice(
+                                            byteArray.byteOffset + loadedBlockLines * bytesInBlockLine,
+                                            byteArray.byteOffset + newLoadedBlockLines * bytesInBlockLine
+                                        )
+                                    ),
+                                    face,
+                                    i
+                                );
+
+                                loadedBlockLines = newLoadedBlockLines;
+                                blockedLoading.bytesLeft -= canLoadBlockLines * bytesInBlockLine;
+                                if (loadedBlockLines < blocksCountY) {
+                                    // Switching to frame rendering if not all blocks are loaded
+                                    await delay(0);
+                                    blockedLoading.bytesLeft = blockedLoading.bytesInBlock;
+                                } else {
+                                    // Stop loading when everything is loaded
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                }
+                dataOffset += bpp ? width * height * (bpp / 8) : dataLength;
+                width *= 0.5;
+                height *= 0.5;
+
+                width = Math.max(1.0, width);
+                height = Math.max(1.0, height);
+            }
+
+            if (currentFace !== undefined) {
+                // Loading a single face
+                break;
+            }
+        }
+        if (sphericalPolynomialFaces && sphericalPolynomialFaces.length > 0) {
+            info.sphericalPolynomial = CubeMapToSphericalPolynomialTools.ConvertCubeMapToSphericalPolynomial({
+                size: header[off_width],
+                right: sphericalPolynomialFaces[0],
+                left: sphericalPolynomialFaces[1],
+                up: sphericalPolynomialFaces[2],
+                down: sphericalPolynomialFaces[3],
+                front: sphericalPolynomialFaces[4],
+                back: sphericalPolynomialFaces[5],
+                format: Constants.TEXTUREFORMAT_RGBA,
+                type: Constants.TEXTURETYPE_FLOAT,
+                gammaSpace: false,
+            });
+        } else {
+            info.sphericalPolynomial = undefined;
+        }
+    }
+
     /**
      * Uploads DDS Levels to a Babylon Texture
      * @internal
@@ -856,10 +1426,6 @@ const DXGI_FORMAT_ASTC_12X12_UNORM_SRGB   = 187;
         if (computeFormats) {
             internalCompressedFormat = engine._getRGBABufferInternalSizedFormat(info.textureType);
         }
-
-        // > VRNET
-        texture._internalCompressedFormat = internalCompressedFormat;
-        // < VRNET
 
         mipmapCount = 1;
         if (header[off_flags] & DDSD_MIPMAPCOUNT && loadMipmaps !== false) {

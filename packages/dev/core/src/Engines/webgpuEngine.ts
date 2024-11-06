@@ -95,6 +95,7 @@ import "./WebGPU/Extensions/engine.cubeTexture";
 import "./WebGPU/Extensions/engine.renderTarget";
 import "./WebGPU/Extensions/engine.renderTargetTexture";
 import "./WebGPU/Extensions/engine.renderTargetCube";
+import type { IAsyncInternalTextureLoader } from "core/Materials/Textures/Loaders/asyncInternalTextureLoader";
 
 const viewDescriptorSwapChainAntialiasing: GPUTextureViewDescriptor = {
     label: `TextureView_SwapChain_ResolveTarget`,
@@ -2789,8 +2790,8 @@ export class WebGPUEngine extends ThinWebGPUEngine {
         }
     }
 
-    public override uploadMipmapsToTexture(texture: InternalTexture, width: number, height: number, buffers: ArrayBufferView[] | ArrayBufferView, faces?: number): Promise<void> {
-        throw new Error("Method not implemented.");
+    public asyncUpdateTexture(texture: InternalTexture, scene: ISceneLike, data: ArrayBufferView, bytesInBlock: number, loader: IAsyncInternalTextureLoader): Promise<void> {
+        return Promise.reject(new Error("Method not implemented."));
     }
 
     /**
@@ -2815,6 +2816,34 @@ export class WebGPUEngine extends ThinWebGPUEngine {
         const data = new Uint8Array(imageData.buffer, imageData.byteOffset, imageData.byteLength);
 
         this._textureHelper.updateTexture(data, texture, width, height, texture.depth, gpuTextureWrapper.format, faceIndex, lod, false, false, 0, 0);
+    }
+
+    /**
+     * @internal
+     */
+    public _uploadCompressedBlockToTextureDirectly(
+        texture: InternalTexture,
+        hardwareTexture: HardwareTextureWrapper,
+        internalFormat: number,
+        _isBlock: boolean,
+        width: number,
+        height: number,
+        xOffset: number,
+        yOffset: number,
+        imageData: ArrayBufferView,
+        faceIndex: number,
+        lod: number
+    ) {
+        let gpuTextureWrapper = texture._hardwareTexture as WebGPUHardwareTexture;
+
+        if (!texture._hardwareTexture?.underlyingResource) {
+            texture.format = internalFormat;
+            gpuTextureWrapper = this._textureHelper.createGPUTextureForInternalTexture(texture, width, height);
+        }
+
+        const data = new Uint8Array(imageData.buffer, imageData.byteOffset, imageData.byteLength);
+
+        this._textureHelper.updateTexture(data, texture, width, height, texture.depth, gpuTextureWrapper.format, faceIndex, lod, false, false, xOffset, yOffset);
     }
 
     /**

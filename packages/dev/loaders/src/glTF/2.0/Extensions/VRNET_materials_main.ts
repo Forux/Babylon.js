@@ -13,6 +13,7 @@ import type { IMaterialExtension, ITextureInfo as ITextureInfoBase } from "babyl
 import { BaseTexture } from "core/Materials/Textures/baseTexture";
 import { Deferred } from "core/Misc/deferred";
 import { Observable } from "core/Misc/observable";
+import { registerGLTFExtension, unregisterGLTFExtension } from "../glTFLoaderExtensionRegistry";
 
 /**
  * adding needed property
@@ -262,4 +263,5 @@ export class VRNET_materials_main implements IGLTFLoaderExtension {
     }
 }
 
-GLTFLoader.RegisterExtension(NAME, (loader) => new VRNET_materials_main(loader));
+unregisterGLTFExtension(NAME);
+registerGLTFExtension(NAME, true, (loader) => new VRNET_materials_main(loader));

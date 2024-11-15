@@ -11,6 +11,7 @@ import type { IGLTFLoaderExtension } from "../glTFLoaderExtension";
 import { GLTFLoader } from "../glTFLoader";
 import { Deferred } from "core/Misc/deferred";
 import { Observable } from "core/Misc/observable";
+import { registerGLTFExtension, unregisterGLTFExtension } from "../glTFLoaderExtensionRegistry";
 
 /**
  * @internal
@@ -188,4 +189,5 @@ export class VRNET_nodes_main implements IGLTFLoaderExtension {
     }
 }
 
-GLTFLoader.RegisterExtension(NAME, (loader) => new VRNET_nodes_main(loader));
+unregisterGLTFExtension(NAME);
+registerGLTFExtension(NAME, true, (loader) => new VRNET_nodes_main(loader));

@@ -308,10 +308,6 @@ export class CSG2 implements IDisposable {
             throw new Error("Error while creating the CSG: " + e.message);
         }
 
-        if (returnValue._manifold.genus() < 0) {
-            throw new Error("Incorrect volume detected. Make sure you are not using a double sided geometry");
-        }
-
         return returnValue;
     }
 
@@ -459,7 +455,7 @@ export function IsCSG2Ready() {
  */
 export async function InitializeCSG2Async(options?: Partial<ICSG2Options>) {
     const localOptions = {
-        manifoldUrl: "https://unpkg.com/manifold-3d@2.5.1",
+        manifoldUrl: "https://unpkg.com/manifold-3d@3.0.0",
         ...options,
     };
 

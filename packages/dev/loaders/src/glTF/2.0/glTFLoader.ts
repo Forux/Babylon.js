@@ -958,7 +958,9 @@ export class GLTFLoader implements IGLTFLoader {
                 this._loadMeshPrimitiveAsync(`${context}/primitives/${primitive.index}`, name, node, mesh, primitive, (babylonMesh) => {
                     node._babylonTransformNode = babylonMesh;
                     node._primitiveBabylonMeshes = [babylonMesh];
-                    node.extras = primitiveExtras;
+                    // >> VRNET
+                    babylonMesh.extras = primitiveExtras;
+                    // << VRNET
                 })
             );
         } else {

@@ -943,14 +943,22 @@ export class GLTFLoader implements IGLTFLoader {
 
         this.logOpen(`${context} ${mesh.name || ""}`);
 
+        // >> VRNET
+        const meshExtras = mesh.extras;
+        // << VRNET
+
         const name = node.name || `node${node.index}`;
 
         if (primitives.length === 1) {
             const primitive = mesh.primitives[0];
+            // >> VRNET
+            const primitiveExtras = primitive.extras || meshExtras;
+            // << VRNET
             promises.push(
                 this._loadMeshPrimitiveAsync(`${context}/primitives/${primitive.index}`, name, node, mesh, primitive, (babylonMesh) => {
                     node._babylonTransformNode = babylonMesh;
                     node._primitiveBabylonMeshes = [babylonMesh];
+                    node.extras = primitiveExtras;
                 })
             );
         } else {
@@ -960,10 +968,16 @@ export class GLTFLoader implements IGLTFLoader {
             this._babylonScene._blockEntityCollection = false;
             node._primitiveBabylonMeshes = [];
             for (const primitive of primitives) {
+                // >> VRNET
+                const primitiveExtras = primitive.extras || meshExtras;
+                // << VRNET
                 promises.push(
                     this._loadMeshPrimitiveAsync(`${context}/primitives/${primitive.index}`, `${name}_primitive${primitive.index}`, node, mesh, primitive, (babylonMesh) => {
                         babylonMesh.parent = node._babylonTransformNode!;
                         node._primitiveBabylonMeshes!.push(babylonMesh);
+                        // >> VRNET
+                        babylonMesh.extras = primitiveExtras;
+                        // << VRNET
                     })
                 );
             }

@@ -184,6 +184,13 @@ export class TransformNode extends Node {
      */
     public onAfterWorldMatrixUpdateObservable = new Observable<TransformNode>();
 
+    // >> VRNET
+    /** @internal
+     * Data obtained from data container, like glTF, or placed by user
+     */
+    public extras?: any;
+    // << VRNET
+
     constructor(name: string, scene: Nullable<Scene> = null, isPure = true) {
         super(name, scene, false);
 

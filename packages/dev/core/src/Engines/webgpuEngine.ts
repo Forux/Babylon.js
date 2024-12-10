@@ -2801,7 +2801,14 @@ export class WebGPUEngine extends ThinWebGPUEngine {
         }
     }
 
-    public asyncUpdateTexture(texture: InternalTexture, scene: ISceneLike, data: ArrayBufferView, bytesInBlock: number, loader: IAsyncInternalTextureLoader): Promise<void> {
+    public asyncUpdateTexture(
+        url: string,
+        texture: BaseTexture,
+        scene: ISceneLike,
+        data: ArrayBufferView,
+        bytesInBlock: number,
+        loader: IAsyncInternalTextureLoader
+    ): Promise<void> {
         return Promise.reject(new Error("Method not implemented."));
     }
 
@@ -2834,7 +2841,6 @@ export class WebGPUEngine extends ThinWebGPUEngine {
      */
     public _uploadCompressedBlockToTextureDirectly(
         texture: InternalTexture,
-        hardwareTexture: HardwareTextureWrapper,
         internalFormat: number,
         _isBlock: boolean,
         width: number,

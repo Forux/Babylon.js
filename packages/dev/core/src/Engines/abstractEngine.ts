@@ -53,6 +53,8 @@ import { EngineFunctionContext, _loadFile } from "./abstractEngine.functions";
 import type { Material } from "core/Materials/material";
 import { _GetCompatibleTextureLoader } from "core/Materials/Textures/Loaders/textureLoaderManager";
 import type { IAsyncInternalTextureLoader } from "core/Materials/Textures/Loaders/asyncInternalTextureLoader";
+import type { BaseTexture } from "core/Materials/Textures/baseTexture";
+import { Tools } from "core/Misc/tools";
 
 /**
  * Defines the interface used by objects working like Scene
@@ -184,11 +186,11 @@ export type PrepareTextureProcessFunction = (
 export type PrepareTextureProcessAsyncFunction = (
     width: number,
     height: number,
-    img: { width: number; height: number },
+    img: HTMLImageElement | ImageBitmap | { width: number; height: number },
+    extension: string,
     texture: InternalTexture,
-    hardwareTexture: HardwareTextureWrapper,
     continuationCallback: () => void
-) => boolean;
+) => Promise<boolean>;
 
 export type PrepareTextureFunction = (
     texture: InternalTexture,
@@ -204,15 +206,15 @@ export type PrepareTextureFunction = (
 
 export type PrepareTextureAsyncFunction = (
     texture: InternalTexture,
-    hardwareTexture: HardwareTextureWrapper,
-    scene: ISceneLike,
-    img: { width: number; height: number },
+    extension: string,
+    scene: Nullable<ISceneLike>,
+    img: HTMLImageElement | ImageBitmap | { width: number; height: number },
     invertY: boolean,
     noMipmap: boolean,
     isCompressed: boolean,
     processFunction: PrepareTextureProcessAsyncFunction,
     samplingMode: number
-) => void;
+) => Promise<void>;
 
 /**
  * The parent class for specialized engines (WebGL, WebGPU)
@@ -1117,7 +1119,6 @@ export abstract class AbstractEngine {
      */
     public abstract _uploadCompressedBlockToTextureDirectly(
         texture: InternalTexture,
-        hardwareTexture: HardwareTextureWrapper,
         internalFormat: number,
         isBlock: boolean,
         width: number,
@@ -1473,7 +1474,8 @@ export abstract class AbstractEngine {
     }
 
     public abstract asyncUpdateTexture(
-        texture: InternalTexture,
+        url: string,
+        texture: BaseTexture,
         scene: ISceneLike,
         data: ArrayBufferView,
         bytesInBlock: number,
@@ -1481,41 +1483,81 @@ export abstract class AbstractEngine {
     ): Promise<void>;
 
     protected async _asyncUpdateTextureBase(
-        texture: InternalTexture,
-        scene: ISceneLike,
+        url: string,
+        texture: BaseTexture,
+        scene: Scene,
         data: ArrayBufferView,
         bytesInBlock: number,
         loader: IAsyncInternalTextureLoader,
         prepareTexture: PrepareTextureAsyncFunction
     ): Promise<void> {
-        const hardwareTexture = this._createHardwareTexture();
+        const cacheTexture = texture.isCube
+            ? texture._getFromCache(url, texture.noMipmap, undefined, undefined, (texture as any)._useSRGBBuffer, texture.isCube)
+            : texture._getFromCache(url, texture.noMipmap, texture.samplingMode, (texture as Texture)._invertY, (texture as Texture)._useSRGBBuffer, texture.isCube);
+
+        const replaceOldTexture = (internalTexture: InternalTexture) => {
+            const oldTexture = texture._texture;
+            texture._texture = internalTexture;
+            if (oldTexture && oldTexture !== internalTexture) {
+                internalTexture.isReady = true;
+                Tools.SetImmediate(() => {
+                    oldTexture.dispose();
+                    scene.markAllMaterialsAsDirty(Constants.MATERIAL_TextureDirtyFlag, (mat) => mat.hasTexture(texture));
+                });
+            }
+        };
+
+        if (cacheTexture) {
+            replaceOldTexture(cacheTexture);
+            return Promise.resolve();
+        }
+
+        const newInternalTexture = new InternalTexture(this, InternalTextureSource.Url);
+        newInternalTexture.isCube = texture.isCube;
+        newInternalTexture.generateMipMaps = !texture.noMipmap;
+        newInternalTexture._lodGenerationScale = texture.lodGenerationScale;
+        newInternalTexture._lodGenerationOffset = texture.lodGenerationOffset;
+        newInternalTexture._useSRGBBuffer = !!texture._texture?._useSRGBBuffer;
+        newInternalTexture.label = texture._texture?.label ?? "";
+        newInternalTexture._extension = texture._texture?._extension ?? "";
+        newInternalTexture._sphericalPolynomial = texture.sphericalPolynomial;
+        newInternalTexture.samplingMode = texture.samplingMode;
+        newInternalTexture.url = url;
+
+        if (scene) {
+            scene.addPendingData(newInternalTexture);
+        }
 
         if (texture.isCube) {
-            await loader.loadCubeData(data, texture, hardwareTexture, false, bytesInBlock, null, null);
+            this._bindTextureDirectly(Constants.TEXTURE_CUBE_MAP, newInternalTexture, true);
+            await loader.loadCubeData(data, newInternalTexture, false, bytesInBlock, null, null);
         } else {
             await loader.loadData(
                 data,
-                texture,
-                hardwareTexture,
+                newInternalTexture,
                 bytesInBlock,
                 (width: number, height: number, loadMipmap: boolean, isCompressed: boolean, done: () => Promise<void>) => {
-                    prepareTexture(
-                        texture,
-                        hardwareTexture,
+                    return prepareTexture(
+                        newInternalTexture,
+                        newInternalTexture._extension,
                         scene,
                         { width, height },
-                        texture.invertY,
+                        (texture as Texture).invertY,
                         !loadMipmap,
                         isCompressed,
-                        () => {
-                            done();
+                        async () => {
+                            await done();
                             return false;
                         },
-                        texture.samplingMode
+                        newInternalTexture.samplingMode
                     );
                 }
             );
         }
+
+        this._internalTexturesCache.push(newInternalTexture);
+        replaceOldTexture(newInternalTexture);
+        return Promise.resolve();
     }
 
     protected _createTextureBase(

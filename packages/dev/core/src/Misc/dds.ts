@@ -10,7 +10,7 @@ import type { AbstractEngine } from "../Engines/abstractEngine";
 import { FromHalfFloat, ToHalfFloat } from "./textureTools";
 
 import "../Engines/AbstractEngine/abstractEngine.cubeTexture";
-import type { HardwareTextureWrapper } from "core/Materials/Textures/hardwareTextureWrapper";
+import { TimingTools } from "./timingTools";
 
 // Based on demo done by Brandon Jones - http://media.tojicode.com/webgl-samples/dds.html
 // All values and structures referenced from:
@@ -530,7 +530,6 @@ export class DDSTools {
     public static async UploadDDSLevelsAsync(
         engine: AbstractEngine,
         texture: InternalTexture,
-        hardwareTexture: HardwareTextureWrapper,
         data: ArrayBufferView,
         info: DDSInfo,
         bytesInBlock: number,
@@ -866,8 +865,7 @@ const DXGI_FORMAT_ASTC_12X12_UNORM_SRGB   = 187;
         const unpackAlignment = engine._getUnpackAlignement();
 
         const blockedLoading = { bytesInBlock, bytesLeft: bytesInBlock };
-
-        const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+        const delay = () => new Promise<void>((resolve) => TimingTools.SetImmediate(resolve));
 
         for (let face = startFace; face < faces; face++) {
             width = header[off_width];
@@ -969,7 +967,7 @@ const DXGI_FORMAT_ASTC_12X12_UNORM_SRGB   = 187;
                             engine._uploadDataToTextureDirectly(texture, floatArray, face, i);
                         }
                     } else if (info.isRGB) {
-                        texture.type = Constants.TEXTURETYPE_UNSIGNED_INT;
+                        texture.type = Constants.TEXTURETYPE_UNSIGNED_BYTE;
                         if (bpp === 24) {
                             texture.format = Constants.TEXTUREFORMAT_RGB;
                             dataLength = width * height * 3;
@@ -989,7 +987,7 @@ const DXGI_FORMAT_ASTC_12X12_UNORM_SRGB   = 187;
 
                         byteArray = DDSTools._GetLuminanceArrayBuffer(width, height, data.byteOffset + dataOffset, dataLength, data.buffer);
                         texture.format = Constants.TEXTUREFORMAT_LUMINANCE;
-                        texture.type = Constants.TEXTURETYPE_UNSIGNED_INT;
+                        texture.type = Constants.TEXTURETYPE_UNSIGNED_BYTE;
 
                         engine._uploadDataToTextureDirectly(texture, byteArray, face, i);
                     } else {
@@ -1000,41 +998,27 @@ const DXGI_FORMAT_ASTC_12X12_UNORM_SRGB   = 187;
                         dataLength = blocksCountX * blocksCountY * blockBytes;
 
                         if (blockedLoading.bytesLeft <= 0) {
-                            await delay(0);
+                            await delay();
                             blockedLoading.bytesLeft = blockedLoading.bytesInBlock;
                         }
 
                         byteArray = new Uint8Array(data.buffer, data.byteOffset + dataOffset, dataLength);
 
-                        texture.type = Constants.TEXTURETYPE_UNSIGNED_INT;
+                        texture.type = Constants.TEXTURETYPE_UNSIGNED_BYTE;
 
                         if (dataLength < blockedLoading.bytesLeft + blockedLoading.bytesInBlock * 0.3) {
                             // If texture meets the quota - loading without block splitting
-                            await delay(0);
-                            engine._uploadCompressedBlockToTextureDirectly(texture, hardwareTexture, internalCompressedFormat, false, width, height, 0, 0, byteArray, face, i);
+                            engine._uploadCompressedBlockToTextureDirectly(texture, internalCompressedFormat, false, width, height, 0, 0, byteArray, face, i);
                             blockedLoading.bytesLeft -= dataLength;
                         } else {
                             // Otherwise - loading with block splitting
-                            engine._uploadCompressedBlockToTextureDirectly(
-                                texture,
-                                hardwareTexture,
-                                internalCompressedFormat,
-                                false,
-                                width,
-                                height,
-                                0,
-                                0,
-                                new Uint8Array(dataLength),
-                                face,
-                                i
-                            );
+                            engine._uploadCompressedBlockToTextureDirectly(texture, internalCompressedFormat, false, width, height, 0, 0, new Uint8Array(dataLength), face, i);
                             for (let loadedBlockLines = 0; ; ) {
                                 const canLoadBlockLines = Math.min(Math.max(Math.floor(blockedLoading.bytesLeft / bytesInBlockLine), 1), blocksCountY - loadedBlockLines);
                                 const newLoadedBlockLines = loadedBlockLines + canLoadBlockLines;
                                 const loadedLines = Math.min(newLoadedBlockLines * hBlockSize, height) - loadedBlockLines * hBlockSize;
                                 engine._uploadCompressedBlockToTextureDirectly(
                                     texture,
-                                    hardwareTexture,
                                     internalCompressedFormat,
                                     true,
                                     width,
@@ -1055,7 +1039,7 @@ const DXGI_FORMAT_ASTC_12X12_UNORM_SRGB   = 187;
                                 blockedLoading.bytesLeft -= canLoadBlockLines * bytesInBlockLine;
                                 if (loadedBlockLines < blocksCountY) {
                                     // Switching to frame rendering if not all blocks are loaded
-                                    await delay(0);
+                                    await delay();
                                     blockedLoading.bytesLeft = blockedLoading.bytesInBlock;
                                 } else {
                                     // Stop loading when everything is loaded

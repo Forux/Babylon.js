@@ -1,5 +1,4 @@
 import type { Nullable } from "../../../types";
-import type { HardwareTextureWrapper } from "../hardwareTextureWrapper";
 import type { InternalTexture } from "../internalTexture";
 
 /**
@@ -25,7 +24,6 @@ export interface IAsyncInternalTextureLoader {
     loadCubeData(
         data: ArrayBufferView | ArrayBufferView[],
         texture: InternalTexture,
-        hardwareTexture: HardwareTextureWrapper,
         createPolynomials: boolean,
         bytesInBlock: number,
         onLoad: Nullable<(data?: any) => void>,
@@ -45,9 +43,8 @@ export interface IAsyncInternalTextureLoader {
     loadData(
         data: ArrayBufferView,
         texture: InternalTexture,
-        hardwareTexture: HardwareTextureWrapper,
         bytesInBlock: number,
-        callback: (width: number, height: number, loadMipmap: boolean, isCompressed: boolean, done: () => Promise<void>, loadFailed?: boolean) => void,
+        callback: (width: number, height: number, loadMipmap: boolean, isCompressed: boolean, done: () => Promise<void>, loadFailed?: boolean) => Promise<void>,
         options?: any
     ): Promise<void>;
 }

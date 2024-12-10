@@ -60,6 +60,8 @@ import { Effect } from "../Materials/effect";
 import { _ConcatenateShader, _getGlobalDefines } from "./abstractEngine.functions";
 import { resetCachedPipeline } from "core/Materials/effect.functions";
 import type { IAsyncInternalTextureLoader } from "core/Materials/Textures/Loaders/asyncInternalTextureLoader";
+import type { BaseTexture } from "core/Materials/Textures/baseTexture";
+import type { Scene } from "core/scene";
 
 /**
  * Keeps track of all the buffer info used in engine.
@@ -3045,10 +3047,28 @@ export class ThinEngine extends AbstractEngine {
         return useSRGBBuffer && this._caps.supportSRGBBuffers && (this.webGLVersion > 1 || noMipmap);
     }
 
-    public asyncUpdateTexture(texture: InternalTexture, scene: ISceneLike, data: ArrayBufferView, bytesInBlock: number, loader: IAsyncInternalTextureLoader): Promise<void> {
-        return this._asyncUpdateTextureBase(texture, scene, data, bytesInBlock, loader, (...args: Parameters<PrepareTextureAsyncFunction>) =>
-            this._prepareWebGLAsyncTexture(...args, texture.format)
-        );
+    /**
+     * Asynchronously updates a texture.
+     * @param url Url of the internal texture to compare in cache.
+     * @param texture The internal texture to update asynchronously (passing blocks of data per frame).
+     * @param scene The scene the texture belongs to.
+     * @param data The data to use for the texture.
+     * @param bytesInBlock The max number of bytes in a block of data passed per frame (with small margin to pass small textures in one pass).
+     * @param loader The async loader to use for loading image from corresponding file format.
+     * @returns A promise that resolves when the texture is updated.
+     */
+    public asyncUpdateTexture(url: string, texture: BaseTexture, scene: Scene, data: ArrayBufferView, bytesInBlock: number, loader: IAsyncInternalTextureLoader): Promise<void> {
+        return this._asyncUpdateTextureBase(url, texture, scene, data, bytesInBlock, loader, async (...args: Parameters<PrepareTextureAsyncFunction>) => {
+            await this._prepareWebGLAsyncTexture(...args, texture._texture?.format ?? Constants.TEXTUREFORMAT_RGBA);
+            const newTexture = args[0];
+            this._bindTextureDirectly(this._gl.TEXTURE_2D, newTexture, true);
+            const anisotropicFilteringLevel = newTexture.anisotropicFilteringLevel;
+            if (anisotropicFilteringLevel !== null) {
+                newTexture.anisotropicFilteringLevel = null;
+                this._setAnisotropicLevel(this._gl.TEXTURE_2D, newTexture, anisotropicFilteringLevel);
+            }
+            this._bindTextureDirectly(this._gl.TEXTURE_2D, null);
+        });
     }
 
     /**
@@ -3373,7 +3393,6 @@ export class ThinEngine extends AbstractEngine {
      */
     public _uploadCompressedBlockToTextureDirectly(
         texture: InternalTexture,
-        hardwareTexture: HardwareTextureWrapper,
         internalFormat: number,
         isBlock: boolean,
         width: number,
@@ -3446,7 +3465,8 @@ export class ThinEngine extends AbstractEngine {
             }
         }
 
-        gl.bindTexture(texture.isCube ? gl.TEXTURE_CUBE_MAP : gl.TEXTURE_2D, hardwareTexture?.underlyingResource ?? null);
+        const targetForBinding = texture.isCube ? gl.TEXTURE_CUBE_MAP : gl.TEXTURE_2D;
+        this._bindTextureDirectly(targetForBinding, texture, true);
         if (isBlock) {
             gl.compressedTexSubImage2D(target, lod, xOffset, yOffset, width, height, internalFormat, <DataView>data);
         } else {
@@ -3577,18 +3597,18 @@ export class ThinEngine extends AbstractEngine {
         texture.onLoadedObservable.clear();
     }
 
-    private _prepareWebGLAsyncTexture(
+    private async _prepareWebGLAsyncTexture(
         texture: InternalTexture,
-        hardwareTexture: HardwareTextureWrapper,
-        scene: ISceneLike,
-        img: { width: number; height: number },
+        extension: string,
+        scene: Nullable<ISceneLike>,
+        img: HTMLImageElement | ImageBitmap | { width: number; height: number },
         invertY: boolean,
         noMipmap: boolean,
         isCompressed: boolean,
         processFunction: PrepareTextureProcessAsyncFunction,
         samplingMode: number,
         format: Nullable<number>
-    ): void {
+    ): Promise<void> {
         const maxTextureSize = this.getCaps().maxTextureSize;
         const potWidth = Math.min(maxTextureSize, this.needPOTTextures ? GetExponentOfTwo(img.width, maxTextureSize) : img.width);
         const potHeight = Math.min(maxTextureSize, this.needPOTTextures ? GetExponentOfTwo(img.height, maxTextureSize) : img.height);
@@ -3598,7 +3618,15 @@ export class ThinEngine extends AbstractEngine {
             return;
         }
 
-        gl.bindTexture(gl.TEXTURE_2D, hardwareTexture.underlyingResource);
+        if (!texture._hardwareTexture) {
+            if (scene) {
+                scene.removePendingData(texture);
+            }
+
+            return;
+        }
+
+        this._bindTextureDirectly(gl.TEXTURE_2D, texture, true);
         this._unpackFlipY(invertY === undefined ? true : invertY ? true : false);
 
         texture.baseWidth = img.width;
@@ -3607,10 +3635,12 @@ export class ThinEngine extends AbstractEngine {
         texture.height = potHeight;
         texture.isReady = true;
         texture.type = texture.type !== -1 ? texture.type : Constants.TEXTURETYPE_UNSIGNED_BYTE;
-        texture.format = texture.format !== -1 ? texture.format : (format ?? Constants.TEXTUREFORMAT_RGBA);
+        texture.format =
+            texture.format !== -1 ? texture.format : (format ?? (extension === ".jpg" && !texture._useSRGBBuffer ? Constants.TEXTUREFORMAT_RGB : Constants.TEXTUREFORMAT_RGBA));
 
         if (
-            processFunction(potWidth, potHeight, img, texture, hardwareTexture, () => {
+            await processFunction(potWidth, potHeight, img, extension, texture, () => {
+                this._bindTextureDirectly(gl.TEXTURE_2D, texture, true);
                 this._prepareWebGLTextureContinuation(texture, scene, noMipmap, isCompressed, samplingMode);
             })
         ) {
@@ -3618,6 +3648,7 @@ export class ThinEngine extends AbstractEngine {
             return;
         }
 
+        this._bindTextureDirectly(gl.TEXTURE_2D, texture, true);
         this._prepareWebGLTextureContinuation(texture, scene, noMipmap, isCompressed, samplingMode);
     }
 

@@ -54,7 +54,7 @@ import type { Material } from "core/Materials/material";
 import { _GetCompatibleTextureLoader } from "core/Materials/Textures/Loaders/textureLoaderManager";
 import type { IAsyncInternalTextureLoader } from "core/Materials/Textures/Loaders/asyncInternalTextureLoader";
 import type { BaseTexture } from "core/Materials/Textures/baseTexture";
-import { Tools } from "core/Misc/tools";
+import { TimingTools } from "core/Misc/timingTools";
 
 /**
  * Defines the interface used by objects working like Scene
@@ -1500,7 +1500,7 @@ export abstract class AbstractEngine {
             texture._texture = internalTexture;
             if (oldTexture && oldTexture !== internalTexture) {
                 internalTexture.isReady = true;
-                Tools.SetImmediate(() => {
+                TimingTools.SetImmediate(() => {
                     oldTexture.dispose();
                     scene.markAllMaterialsAsDirty(Constants.MATERIAL_TextureDirtyFlag, (mat) => mat.hasTexture(texture));
                 });

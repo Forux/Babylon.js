@@ -25,7 +25,7 @@ import { Tools } from "../Misc/tools";
 import { WebGPUTextureHelper } from "./WebGPU/webgpuTextureHelper";
 import { WebGPUTextureManager } from "./WebGPU/webgpuTextureManager";
 import { AbstractEngine } from "./abstractEngine";
-import type { ISceneLike, AbstractEngineOptions } from "./abstractEngine";
+import type { ISceneLike, AbstractEngineOptions, PrepareTextureProcessAsyncFunction, PrepareTextureAsyncFunction } from "./abstractEngine";
 import { WebGPUBufferManager } from "./WebGPU/webgpuBufferManager";
 import type { HardwareTextureWrapper } from "../Materials/Textures/hardwareTextureWrapper";
 import { WebGPUHardwareTexture } from "./WebGPU/webgpuHardwareTexture";
@@ -2801,6 +2801,71 @@ export class WebGPUEngine extends ThinWebGPUEngine {
         }
     }
 
+    private async _prepareWebGPUAsyncTexture(
+        texture: InternalTexture,
+        extension: string,
+        scene: Nullable<ISceneLike>,
+        img: HTMLImageElement | ImageBitmap | { width: number; height: number },
+        invertY: boolean,
+        noMipmap: boolean,
+        isCompressed: boolean,
+        processFunction: PrepareTextureProcessAsyncFunction,
+        samplingMode: number,
+        format: Nullable<number>
+    ): Promise<void> {
+        const imageBitmap = img as ImageBitmap | { width: number; height: number }; // we will never get an HTMLImageElement in WebGPU
+
+        texture.baseWidth = imageBitmap.width;
+        texture.baseHeight = imageBitmap.height;
+        texture.width = imageBitmap.width;
+        texture.height = imageBitmap.height;
+        texture.format = texture.format !== -1 ? texture.format : (format ?? Constants.TEXTUREFORMAT_RGBA);
+        texture.type = texture.type !== -1 ? texture.type : Constants.TEXTURETYPE_UNSIGNED_BYTE;
+        texture._creationFlags = 0;
+
+        const continuationCallback = async () => {
+            if (!texture._hardwareTexture?.underlyingResource) {
+                const gpuTextureWrapper = this._textureHelper.createGPUTextureForInternalTexture(texture, imageBitmap.width, imageBitmap.height);
+
+                if (WebGPUTextureHelper.IsImageBitmap(imageBitmap)) {
+                    this._textureHelper.updateTexture(
+                        imageBitmap,
+                        texture,
+                        imageBitmap.width,
+                        imageBitmap.height,
+                        texture.depth,
+                        gpuTextureWrapper.format,
+                        0,
+                        0,
+                        invertY,
+                        false,
+                        0,
+                        0
+                    );
+                    if (!noMipmap && !isCompressed) {
+                        this._generateMipmaps(texture, this._uploadEncoder);
+                    }
+                }
+            } else if (!noMipmap && !isCompressed) {
+                this._generateMipmaps(texture, this._uploadEncoder);
+            }
+
+            if (scene) {
+                scene.removePendingData(texture);
+            }
+
+            texture.isReady = true;
+            texture.onLoadedObservable.notifyObservers(texture);
+            texture.onLoadedObservable.clear();
+        };
+
+        const processResult = await processFunction(texture.width, texture.height, imageBitmap, extension, texture, continuationCallback);
+
+        if (!processResult) {
+            await continuationCallback();
+        }
+    }
+
     public asyncUpdateTexture(
         url: string,
         texture: BaseTexture,
@@ -2809,7 +2874,9 @@ export class WebGPUEngine extends ThinWebGPUEngine {
         bytesInBlock: number,
         loader: IAsyncInternalTextureLoader
     ): Promise<void> {
-        return Promise.reject(new Error("Method not implemented."));
+        return this._asyncUpdateTextureBase(url, texture, scene as Scene, data, bytesInBlock, loader, async (...args: Parameters<PrepareTextureAsyncFunction>) => {
+            await this._prepareWebGPUAsyncTexture(...args, texture._texture?.format ?? Constants.TEXTUREFORMAT_RGBA);
+        });
     }
 
     /**

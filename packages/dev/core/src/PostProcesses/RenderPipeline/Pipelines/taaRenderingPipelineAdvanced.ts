@@ -233,6 +233,7 @@ export class TAARenderingPipelineAdvanced extends PostProcessRenderPipeline {
     private _pingpong = 0;
     private _hs: Halton2DSequence;
     private _forcedUpdate = true;
+    private _historyIsEmpty = true;
 
     /**
      * Returns true if TAA is supported by the running hardware
@@ -352,6 +353,8 @@ export class TAARenderingPipelineAdvanced extends PostProcessRenderPipeline {
 
         this._ping?.dispose();
         this._pong?.dispose();
+
+        this._historyIsEmpty = true;
 
         this._ping = engine.createRenderTargetTexture(
             { width, height },
@@ -477,10 +480,14 @@ export class TAARenderingPipelineAdvanced extends PostProcessRenderPipeline {
     }
 
     private _createTAAPostProcess(): void {
+        let samplers = ["textureSampler", "historySampler", "depthSampler"];
+        if (this._isObjectBased) {
+            samplers.push("velocitySampler");
+        }
         this._taaPostProcess = new PostProcess("TAA", "taa", {
-            uniforms: ["factor", "cameraMoved", "errorFactor", "inverseView", "projection"],
+            uniforms: ["factor", "cameraMoved", "errorFactor", "inverseView", "projection", "historyIsEmpty"],
             //> VRNET
-            samplers: ["textureSampler", "historySampler", "velocitySampler", "depthSampler"],
+            samplers: samplers,
             //< VRNET
             size: 1.0,
             engine: this._scene.getEngine(),
@@ -554,8 +561,10 @@ export class TAARenderingPipelineAdvanced extends PostProcessRenderPipeline {
             effect.setFloat("factor", this.factor);
             effect.setFloat("errorFactor", this._aabbErrorFactor);
             effect.setBool("cameraMoved", this.isCameraMoved());
+            effect.setBool("historyIsEmpty", this._historyIsEmpty);
 
             this._forcedUpdate = false;
+            this._historyIsEmpty = false;
         });
     }
 

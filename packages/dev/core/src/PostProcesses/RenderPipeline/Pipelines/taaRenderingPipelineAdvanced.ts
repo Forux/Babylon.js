@@ -21,7 +21,9 @@ import type { PrePassEffectConfiguration } from "../../../Rendering/prePassEffec
 
 import "../postProcessRenderPipelineManagerSceneComponent";
 
-import "../../../Shaders/taa.fragment";
+import "../../../Shaders/taaAdvanced.fragment";
+import "../../../Shaders/casSharpen.fragment";
+
 //> VRNET
 class TAAConfiguration implements PrePassEffectConfiguration {
     /**
@@ -32,7 +34,7 @@ class TAAConfiguration implements PrePassEffectConfiguration {
     /**
      * Name of the configuration
      */
-    public name = "Taa";
+    public name = "TaaAdvanced";
 
     /**
      * Textures that should be present in the MRT for this effect to work
@@ -54,11 +56,11 @@ export class TAARenderingPipelineAdvanced extends PostProcessRenderPipeline {
      * The pass PostProcess effect id in the pipeline
      */
     public TAAPassEffect: string = "TAAPassEffect";
+
+    public SharpenEffect: string = "SharpenEffect";
+    private _sharpenPostProcess: Nullable<PostProcess>;
+
     //> VRNET
-    /**
-     * Number of samples already done via post process, for example after camera stop moving
-     */
-    private _doneSamples = 0;
 
     private get _prePassRenderer(): Nullable<PrePassRenderer> {
         return this._scene.prePassRenderer;
@@ -72,6 +74,21 @@ export class TAARenderingPipelineAdvanced extends PostProcessRenderPipeline {
         this._doneSamples = 0;
     }
 
+    /**
+     * Amount of sharpness done after TAA, better not to do more then 1.0
+     */
+    private _sharpnes = 1;
+    public get sharpnes(): number {
+        return this._sharpnes;
+    }
+    public set sharpnes(value: number) {
+        this._sharpnes = value;
+    }
+
+    /**
+     * Number of samples already done via post process, for example after camera stop moving
+     */
+    private _doneSamples = 0;
     /**
      * Number of samples already done via post process, for example after camera stop moving
      */
@@ -454,6 +471,18 @@ export class TAARenderingPipelineAdvanced extends PostProcessRenderPipeline {
             )
         );
 
+        this._createSharpenPostProcess();
+        this.addEffect(
+            new PostProcessRenderEffect(
+                engine,
+                this.SharpenEffect,
+                () => {
+                    return this._sharpenPostProcess;
+                },
+                true
+            )
+        );
+
         if (this._cameras !== null) {
             this._scene.postProcessRenderPipelineManager.attachCamerasToRenderPipeline(this._name, this._cameras);
         }
@@ -471,12 +500,14 @@ export class TAARenderingPipelineAdvanced extends PostProcessRenderPipeline {
 
             this._taaPostProcess?.dispose(camera);
             this._passPostProcess?.dispose(camera);
+            this._sharpenPostProcess?.dispose(camera);
 
             camera.getProjectionMatrix(true); // recompute the projection matrix
         }
 
         this._taaPostProcess = null;
         this._passPostProcess = null;
+        this._sharpenPostProcess = null;
     }
 
     private _createTAAPostProcess(): void {
@@ -484,7 +515,7 @@ export class TAARenderingPipelineAdvanced extends PostProcessRenderPipeline {
         if (this._isObjectBased) {
             samplers.push("velocitySampler");
         }
-        this._taaPostProcess = new PostProcess("TAA", "taa", {
+        this._taaPostProcess = new PostProcess("TaaAdvanced", "taaAdvanced", {
             uniforms: ["factor", "cameraMoved", "errorFactor", "inverseView", "projection", "historyIsEmpty"],
             //> VRNET
             samplers: samplers,
@@ -575,6 +606,21 @@ export class TAARenderingPipelineAdvanced extends PostProcessRenderPipeline {
         this._passPostProcess.inputTexture = this._ping;
         this._passPostProcess.autoClear = false;
     }
+
+    private _createSharpenPostProcess(): void {
+        this._sharpenPostProcess = new PostProcess("CasSharpen", "casSharpen", {
+            uniforms: ["intensity"],
+            samplers: ["textureSampler"],
+            size: 1.0,
+            engine: this._scene.getEngine(),
+            textureType: this._textureType,
+        });
+    
+        this._sharpenPostProcess.onApplyObservable.add((effect: Effect) => {
+            // Set your uniforms here
+            effect.setFloat("intensity", this._sharpnes); // Adjust as needed
+        });
+    }    
 
     /**
      * Serializes the rendering pipeline (Used when exporting)

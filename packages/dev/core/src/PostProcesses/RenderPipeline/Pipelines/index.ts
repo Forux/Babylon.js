@@ -21,5 +21,8 @@ export * from "../../../ShadersWGSL/screenSpaceReflection2.fragment";
 export * from "../../../ShadersWGSL/screenSpaceReflection2Blur.fragment";
 export * from "../../../ShadersWGSL/screenSpaceReflection2BlurCombiner.fragment";
 
+
+import "../../../Shaders/taaAdvanced.fragment";
+import "../../../Shaders/casSharpen.fragment";
 import "../../../Shaders/taa.fragment";
 import "../../../ShadersWGSL/taa.fragment";

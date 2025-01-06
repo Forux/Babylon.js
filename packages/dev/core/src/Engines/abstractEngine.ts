@@ -1555,6 +1555,10 @@ export abstract class AbstractEngine {
             );
         }
 
+        // it could happen in prepareTexture
+        // but it also could not
+        scene.removePendingData(newInternalTexture);
+
         this._internalTexturesCache.push(newInternalTexture);
         replaceOldTexture(newInternalTexture);
         return Promise.resolve();

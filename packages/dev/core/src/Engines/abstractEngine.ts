@@ -1524,9 +1524,9 @@ export abstract class AbstractEngine {
         newInternalTexture.samplingMode = texture.samplingMode;
         newInternalTexture.url = url;
 
-        if (scene) {
-            scene.addPendingData(newInternalTexture);
-        }
+        // if (scene) {
+        //     scene.addPendingData(newInternalTexture);
+        // }
 
         if (texture.isCube) {
             this._bindTextureDirectly(Constants.TEXTURE_CUBE_MAP, newInternalTexture, true);
@@ -1557,7 +1557,7 @@ export abstract class AbstractEngine {
 
         // it could happen in prepareTexture
         // but it also could not
-        scene.removePendingData(newInternalTexture);
+        // scene.removePendingData(newInternalTexture);
 
         this._internalTexturesCache.push(newInternalTexture);
         replaceOldTexture(newInternalTexture);

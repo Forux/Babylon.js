@@ -1528,9 +1528,13 @@ export abstract class AbstractEngine {
         //     scene.addPendingData(newInternalTexture);
         // }
 
-        if (texture.isCube) {
+        if (newInternalTexture.isCube) {
             this._bindTextureDirectly(Constants.TEXTURE_CUBE_MAP, newInternalTexture, true);
             await loader.loadCubeData(data, newInternalTexture, false, bytesInBlock, null, null);
+            // loadCubeData forces TriLinear mode
+            if (texture.samplingMode !== newInternalTexture.samplingMode) {
+                this.updateTextureSamplingMode(texture.samplingMode, newInternalTexture);
+            }
         } else {
             await loader.loadData(
                 data,
@@ -1549,7 +1553,7 @@ export abstract class AbstractEngine {
                             await done();
                             return false;
                         },
-                        newInternalTexture.samplingMode
+                        texture.samplingMode
                     );
                 }
             );

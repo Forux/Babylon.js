@@ -164,27 +164,31 @@ export class VRNET_materials_main implements IGLTFLoaderExtension {
                                 onError: () => deferred.reject(),
                                 prefiltered: false,
                             };
-                            cubeT.texture = new CubeTexture(this._loader["_rootUrl"] + probI.reflectionMapTexture, this._loader.babylonScene, cubeTextureOptions);
+                            const cubeTexture = new CubeTexture(this._loader["_rootUrl"] + probI.reflectionMapTexture, this._loader.babylonScene, cubeTextureOptions);
+                            cubeT.texture = cubeTexture;
+                            (cubeTexture["_buffer"] as any) = data as ArrayBuffer;
                             cubeT.loadObservable.notifyObservers(cubeT.texture);
-                            cubeT.texture.isRGBD = probI.isRGBD ? true : false;
-                            cubeT.texture.name = (probI.reflectionMapTexture.split("/").pop() || probI.reflectionMapTexture) + `|ReflectionMap|${babylonMaterial.name}`;
+                            cubeTexture.isRGBD = probI.isRGBD ? true : false;
+                            cubeTexture.name = (probI.reflectionMapTexture.split("/").pop() || probI.reflectionMapTexture) + `|ReflectionMap|${babylonMaterial.name}`;
                             if (probI.level) {
-                                cubeT.texture.level = probI.level;
+                                cubeTexture.level = probI.level;
                             }
                             if (probI.boundingBoxSize) {
-                                cubeT.texture.boundingBoxSize = Vector3.FromArray(probI.boundingBoxSize);
+                                cubeTexture.boundingBoxSize = Vector3.FromArray(probI.boundingBoxSize);
                             }
                             if (probI.boundingBoxPosition) {
-                                cubeT.texture.boundingBoxPosition = Vector3.FromArray(probI.boundingBoxPosition);
+                                cubeTexture.boundingBoxPosition = Vector3.FromArray(probI.boundingBoxPosition);
                             }
                             if (probI.boundingBoxOffset) {
-                                cubeT.texture.boundingBoxOffset = Vector3.FromArray(probI.boundingBoxOffset);
+                                cubeTexture.boundingBoxOffset = Vector3.FromArray(probI.boundingBoxOffset);
                             }
-                            if (probI.reflectionSphericalPolynomial) {
-                                cubeT.texture.sphericalPolynomial = SphericalPolynomial.FromArray(probI.reflectionSphericalPolynomial);
-                            }
-                            cubeT.texture.gammaSpace = probI.prefiltered ? false : true;
-                            babylonMaterial.reflectionTexture = cubeT.texture;
+                            cubeTexture._texture?.onLoadedObservable.addOnce(() => {
+                                if (probI.reflectionSphericalPolynomial) {
+                                    cubeTexture.sphericalPolynomial = SphericalPolynomial.FromArray(probI.reflectionSphericalPolynomial);
+                                }
+                            });
+                            cubeTexture.gammaSpace = probI.prefiltered ? false : true;
+                            babylonMaterial.reflectionTexture = cubeTexture;
                         },
                         true,
                         () => deferred.reject()

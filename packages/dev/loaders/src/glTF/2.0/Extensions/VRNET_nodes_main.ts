@@ -145,28 +145,30 @@ export class VRNET_nodes_main implements IGLTFLoaderExtension {
                 this._loader.babylonScene,
                 textureUrl,
                 (data) => {
-                    skyboxT.texture = new CubeTexture(textureUrl, this._loader.babylonScene, {
+                    const skyboxTexture = new CubeTexture(textureUrl, this._loader.babylonScene, {
                         noMipmap: false,
                         buffer: new Uint8Array(data as ArrayBuffer),
                         onLoad: () => deferred.resolve(),
                         onError: () => deferred.reject(),
                         prefiltered: false,
                     });
+                    skyboxT.texture = skyboxTexture;
+                    (skyboxTexture["_buffer"] as any) = data as ArrayBuffer;
                     if (skyboxInfo.isRGBD) {
-                        skyboxT.texture.isRGBD = true;
+                        skyboxTexture.isRGBD = true;
                     }
-                    skyboxT.texture.coordinatesMode = Texture.SKYBOX_MODE;
+                    skyboxTexture.coordinatesMode = Texture.SKYBOX_MODE;
                     if (isEnvironmentTexture) {
-                        this._loader.babylonScene.environmentTexture = skyboxT.texture;
+                        this._loader.babylonScene.environmentTexture = skyboxTexture;
                     }
-                    if (skyboxInfo.sphericalPolynomial) {
-                        skyboxT.texture.sphericalPolynomial = SphericalPolynomial.FromArray(skyboxInfo.sphericalPolynomial);
-                    }
+                    skyboxTexture._texture?.onLoadedObservable.addOnce(() => {
+                        skyboxTexture.sphericalPolynomial = SphericalPolynomial.FromArray(skyboxInfo.sphericalPolynomial);
+                    });
                     if (skyboxInfo.exposure !== undefined) {
-                        skyboxT.texture.level = skyboxInfo.exposure;
+                        skyboxTexture.level = skyboxInfo.exposure;
                     }
-                    skyboxT.texture.gammaSpace = true;
-                    material.reflectionTexture = skyboxT.texture;
+                    skyboxTexture.gammaSpace = true;
+                    material.reflectionTexture = skyboxTexture;
                 },
                 true,
                 () => deferred.reject()

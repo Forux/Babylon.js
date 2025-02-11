@@ -52,9 +52,6 @@ import { Observable } from "../Misc/observable";
 import { EngineFunctionContext, _loadFile } from "./abstractEngine.functions";
 import type { Material } from "core/Materials/material";
 import { _GetCompatibleTextureLoader } from "core/Materials/Textures/Loaders/textureLoaderManager";
-import type { IAsyncInternalTextureLoader } from "core/Materials/Textures/Loaders/asyncInternalTextureLoader";
-import type { BaseTexture } from "core/Materials/Textures/baseTexture";
-import { TimingTools } from "core/Misc/timingTools";
 
 /**
  * Defines the interface used by objects working like Scene
@@ -1117,22 +1114,6 @@ export abstract class AbstractEngine {
     /**
      * @internal
      */
-    public abstract _uploadCompressedBlockToTextureDirectly(
-        texture: InternalTexture,
-        internalFormat: number,
-        isBlock: boolean,
-        width: number,
-        height: number,
-        xOffset: number,
-        yOffset: number,
-        data: ArrayBufferView,
-        faceIndex: number,
-        lod: number
-    ): void;
-
-    /**
-     * @internal
-     */
     public abstract _bindTextureDirectly(target: number, texture: Nullable<InternalTexture>, forTextureDataUpdate?: boolean, force?: boolean): boolean;
 
     /**
@@ -1471,101 +1452,6 @@ export abstract class AbstractEngine {
         }
 
         return description;
-    }
-
-    public abstract asyncUpdateTexture(
-        url: string,
-        texture: BaseTexture,
-        scene: ISceneLike,
-        data: ArrayBufferView,
-        bytesInBlock: number,
-        loader: IAsyncInternalTextureLoader
-    ): Promise<void>;
-
-    protected async _asyncUpdateTextureBase(
-        url: string,
-        texture: BaseTexture,
-        scene: Scene,
-        data: ArrayBufferView,
-        bytesInBlock: number,
-        loader: IAsyncInternalTextureLoader,
-        prepareTexture: PrepareTextureAsyncFunction
-    ): Promise<void> {
-        const cacheTexture = texture.isCube
-            ? texture._getFromCache(url, texture.noMipmap, undefined, undefined, (texture as any)._useSRGBBuffer, texture.isCube)
-            : texture._getFromCache(url, texture.noMipmap, texture.samplingMode, (texture as Texture)._invertY, (texture as Texture)._useSRGBBuffer, texture.isCube);
-
-        const replaceOldTexture = (internalTexture: InternalTexture) => {
-            const oldTexture = texture._texture;
-            texture._texture = internalTexture;
-            if (oldTexture && oldTexture !== internalTexture) {
-                internalTexture.isReady = true;
-                TimingTools.SetImmediate(() => {
-                    oldTexture.dispose();
-                    scene.markAllMaterialsAsDirty(Constants.MATERIAL_TextureDirtyFlag, (mat) => mat.hasTexture(texture));
-                });
-            }
-        };
-
-        if (cacheTexture) {
-            replaceOldTexture(cacheTexture);
-            return Promise.resolve();
-        }
-
-        const newInternalTexture = new InternalTexture(this, InternalTextureSource.Url);
-        newInternalTexture.isCube = texture.isCube;
-        newInternalTexture.generateMipMaps = !texture.noMipmap;
-        newInternalTexture._lodGenerationScale = texture.lodGenerationScale;
-        newInternalTexture._lodGenerationOffset = texture.lodGenerationOffset;
-        newInternalTexture._useSRGBBuffer = !!texture._texture?._useSRGBBuffer;
-        newInternalTexture.label = texture._texture?.label ?? "";
-        newInternalTexture._extension = texture._texture?._extension ?? "";
-        newInternalTexture._sphericalPolynomial = texture.sphericalPolynomial;
-        newInternalTexture.samplingMode = texture.samplingMode;
-        newInternalTexture.url = url;
-
-        // if (scene) {
-        //     scene.addPendingData(newInternalTexture);
-        // }
-
-        if (newInternalTexture.isCube) {
-            this._bindTextureDirectly(Constants.TEXTURE_CUBE_MAP, newInternalTexture, true);
-            await loader.loadCubeData(data, newInternalTexture, false, bytesInBlock, null, null);
-            // loadCubeData forces TriLinear mode
-            if (texture.samplingMode !== newInternalTexture.samplingMode) {
-                this.updateTextureSamplingMode(texture.samplingMode, newInternalTexture);
-            }
-        } else {
-            await loader.loadData(
-                data,
-                newInternalTexture,
-                bytesInBlock,
-                (width: number, height: number, loadMipmap: boolean, isCompressed: boolean, done: () => Promise<void>) => {
-                    return prepareTexture(
-                        newInternalTexture,
-                        newInternalTexture._extension,
-                        scene,
-                        { width, height },
-                        (texture as Texture).invertY,
-                        !loadMipmap,
-                        isCompressed,
-                        async () => {
-                            await done();
-                            return false;
-                        },
-                        texture.samplingMode
-                    );
-                }
-            );
-        }
-
-        // it could happen in prepareTexture
-        // but it also could not
-        // scene.removePendingData(newInternalTexture);
-
-        this._internalTexturesCache.push(newInternalTexture);
-        replaceOldTexture(newInternalTexture);
-        return Promise.resolve();
     }
 
     protected _createTextureBase(

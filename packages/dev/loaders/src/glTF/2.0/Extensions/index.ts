@@ -1,8 +1,10 @@
+export * from "./objectModelMapping";
 export * from "./EXT_lights_image_based";
 export * from "./EXT_mesh_gpu_instancing";
 export * from "./EXT_meshopt_compression";
 export * from "./EXT_texture_webp";
 export * from "./EXT_texture_avif";
+export * from "./EXT_lights_ies";
 export * from "./KHR_draco_mesh_compression";
 export * from "./KHR_lights_punctual";
 export * from "./KHR_materials_pbrSpecularGlossiness";
@@ -30,4 +32,8 @@ export * from "./MSFT_minecraftMesh";
 export * from "./MSFT_sRGBFactors";
 export * from "./KHR_interactivity";
 export * from "./KHR_node_visibility";
+export * from "./KHR_node_selectability";
+export * from "./KHR_node_hoverability";
 export * from "./ExtrasAsMetadata";
+// eslint-disable-next-line import/no-internal-modules
+export * from "./KHR_interactivity/index";

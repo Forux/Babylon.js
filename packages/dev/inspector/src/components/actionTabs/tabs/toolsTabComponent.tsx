@@ -70,7 +70,11 @@ export class ToolsTabComponent extends PaneComponent {
     private _reflectorHostname: string = "localhost";
     private _reflectorPort: number = 1234;
     private _reflector: Reflector;
-    private _envOptions = { imageTypeIndex: 0, imageQuality: 0.8 };
+    private _envOptions = {
+        imageTypeIndex: 0,
+        imageQuality: 0.8,
+        iblDiffuse: false,
+    };
 
     constructor(props: IPaneComponentProps) {
         super(props);
@@ -166,7 +170,7 @@ export class ToolsTabComponent extends PaneComponent {
         const engine = scene.getEngine();
 
         this._previousRenderingScale = engine.getHardwareScalingLevel();
-        engine.setHardwareScalingLevel(engine.getRenderWidth() / this._gifOptions.width ?? 1);
+        engine.setHardwareScalingLevel(engine.getRenderWidth() / this._gifOptions.width || 1);
 
         const intervalId = setInterval(() => {
             if (!this._gifRecorder) {
@@ -283,17 +287,17 @@ export class ToolsTabComponent extends PaneComponent {
             return true;
         };
 
-        GLTF2Export.GLBAsync(scene, "scene", { shouldExportNode: (node) => shouldExport(node) }).then(
-            (glb: GLTFData) => {
+        GLTF2Export.GLBAsync(scene, "scene", { shouldExportNode: (node) => shouldExport(node) })
+            .then((glb: GLTFData) => {
                 this._isExportingGltf = false;
                 this.forceUpdate();
                 glb.downloadFiles();
-            },
-            () => {
+            })
+            .catch((reason) => {
+                Logger.Error(`Failed to export GLB: ${reason}`);
                 this._isExportingGltf = false;
                 this.forceUpdate();
-            }
-        );
+            });
     }
 
     exportBabylon() {
@@ -306,10 +310,15 @@ export class ToolsTabComponent extends PaneComponent {
     }
 
     createEnvTexture() {
+        if (!this.props.scene.environmentTexture) {
+            return;
+        }
+
         const scene = this.props.scene;
         EnvironmentTextureTools.CreateEnvTextureAsync(scene.environmentTexture as CubeTexture, {
             imageType: envExportImageTypes[this._envOptions.imageTypeIndex].imageType,
             imageQuality: this._envOptions.imageQuality,
+            disableIrradianceTexture: !this._envOptions.iblDiffuse,
         })
             .then((buffer: ArrayBuffer) => {
                 const blob = new Blob([buffer], { type: "octet/stream" });
@@ -446,6 +455,17 @@ export class ToolsTabComponent extends PaneComponent {
                     {!scene.getEngine().premultipliedAlpha && scene.environmentTexture && scene.environmentTexture._prefiltered && scene.activeCamera && (
                         <>
                             <ButtonLineComponent label="Generate .env texture" onClick={() => this.createEnvTexture()} />
+                            {scene.environmentTexture.irradianceTexture && (
+                                <CheckBoxLineComponent
+                                    label="Diffuse Texture"
+                                    target={this._envOptions}
+                                    propertyName="iblDiffuse"
+                                    onSelect={(value) => {
+                                        this._envOptions.iblDiffuse = value;
+                                        this.forceUpdate();
+                                    }}
+                                />
+                            )}
                             <OptionsLine
                                 label="Image type"
                                 options={envExportImageTypes}

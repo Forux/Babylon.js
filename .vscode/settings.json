@@ -1,5 +1,5 @@
 {
-    "cSpell.words": ["babylonjs"],
+    "cSpell.words": ["babylonjs", "Pickable"],
     "files.exclude": {
         "**/node_modules": true,
         "**/dist": false,
@@ -33,5 +33,6 @@
     "[css]": {
         "editor.defaultFormatter": "esbenp.prettier-vscode"
     },
-    "editor.formatOnSave": true
+    "editor.formatOnSave": true,
+    "jest.runMode": "on-demand"
 }

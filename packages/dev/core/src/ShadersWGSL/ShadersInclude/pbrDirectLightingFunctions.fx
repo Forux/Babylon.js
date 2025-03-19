@@ -47,18 +47,21 @@ fn computeProjectionTextureDiffuseLighting(projectionLightTexture: texture_2d<f3
 }
 
 #ifdef SS_TRANSLUCENCY
-    fn computeDiffuseAndTransmittedLighting(info: preLightingInfo, lightColor: vec3f, transmittance: vec3f) -> vec3f {
+    fn computeDiffuseAndTransmittedLighting(info: preLightingInfo, lightColor: vec3f, transmittance: vec3f, transmittanceIntensity: f32, surfaceAlbedo: vec3f) -> vec3f {
+        var transmittanceNdotL = vec3f(0.0);
         var NdotL: f32 = absEps(info.NdotLUnclamped);
+        if (info.NdotLUnclamped < 0.0) {
+            // Use wrap lighting to simulate SSS.
+            var wrapNdotL: f32 = computeWrappedDiffuseNdotL(NdotL, 0.02);
 
-        // Use wrap lighting to simulate SSS.
-        var wrapNdotL: f32 = computeWrappedDiffuseNdotL(NdotL, 0.02);
-
-        // Remap transmittance from tr to 1. if ndotl is negative.
-        var trAdapt: f32 = step(0., info.NdotLUnclamped);
-        var transmittanceNdotL: vec3f = mix(transmittance * wrapNdotL,  vec3f(wrapNdotL), trAdapt);
+            // Remap transmittance from tr to 1. if ndotl is negative.
+            var trAdapt: f32 = step(0., info.NdotLUnclamped);
+            transmittanceNdotL = mix(transmittance * wrapNdotL,  vec3f(wrapNdotL), trAdapt);
+        }
 
         var diffuseTerm: f32 = diffuseBRDF_Burley(NdotL, info.NdotV, info.VdotH, info.roughness);
-        return diffuseTerm * transmittanceNdotL * info.attenuation * lightColor;
+        // Note: we use a Lambert BRDF for the transmitted term.
+        return (transmittanceNdotL / PI + (1.0 - transmittanceIntensity) * diffuseTerm * surfaceAlbedo * info.NdotL) * info.attenuation * lightColor;
     }
 #endif
 
@@ -161,5 +164,16 @@ fn computeProjectionTextureDiffuseLighting(projectionLightTexture: texture_2d<f3
 
         var sheenTerm: f32 = fresnel * distribution * visibility;
         return sheenTerm * info.attenuation * info.NdotL * lightColor;
+    }
+#endif
+
+#if defined(AREALIGHTUSED) && defined(AREALIGHTSUPPORTED)
+    fn computeAreaDiffuseLighting(info: preLightingInfo, lightColor: vec3f) -> vec3f {
+        return info.areaLightDiffuse * lightColor;
+    }
+
+    fn computeAreaSpecularLighting(info: preLightingInfo, specularColor: vec3f) -> vec3f {
+        var fresnel:vec3f  = ( specularColor * info.areaLightFresnel.x + ( vec3f( 1.0 ) - specularColor ) * info.areaLightFresnel.y );
+	    return specularColor * fresnel * info.areaLightSpecular;
     }
 #endif

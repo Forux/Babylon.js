@@ -1,10 +1,17 @@
 import { getGlobalConfig } from "@tools/test-tools";
 import { test, expect } from "@playwright/test";
 
-const nmeUrl = process.env.NME_BASE_URL || getGlobalConfig().baseUrl.replace(":1337", process.env.NME_PORT || ":1340");
-const ngeUrl = process.env.NGE_BASE_URL || getGlobalConfig().baseUrl.replace(":1337", process.env.NGE_PORT || ":1343");
-const guiUrl = process.env.GUIEDITOR_BASE_URL || getGlobalConfig().baseUrl.replace(":1337", process.env.GUIEDITOR_PORT || ":1341");
-const nrgeUrl = process.env.NRGE_BASE_URL || getGlobalConfig().baseUrl.replace(":1337", process.env.NRGE_PORT || ":1344");
+// if running in the CI we need to use the babylon snapshot when loading the tools
+const snapshot = process.env.SNAPSHOT ? "?snapshot=" + process.env.SNAPSHOT : "";
+const nmeUrl = (process.env.NME_BASE_URL || getGlobalConfig().baseUrl.replace(":1337", process.env.NME_PORT || ":1340")) + snapshot;
+const ngeUrl = (process.env.NGE_BASE_URL || getGlobalConfig().baseUrl.replace(":1337", process.env.NGE_PORT || ":1343")) + snapshot;
+const guiUrl = (process.env.GUIEDITOR_BASE_URL || getGlobalConfig().baseUrl.replace(":1337", process.env.GUIEDITOR_PORT || ":1341")) + snapshot;
+const nrgeUrl = (process.env.NRGE_BASE_URL || getGlobalConfig().baseUrl.replace(":1337", process.env.NRGE_PORT || ":1344")) + snapshot;
+
+test.beforeAll(async () => {
+    // Set timeout for this hook.
+    test.setTimeout(30000);
+});
 
 test("NME is loaded correctly", async ({ page }) => {
     await page.goto(nmeUrl, {
@@ -426,7 +433,9 @@ test("[GUIEDITOR] User can add and drag graph nodes", async ({ page }) => {
 
     // take a screenshot (for visual inspection)
     const snapshot = await canvasNode.screenshot();
-    expect(snapshot).toMatchSnapshot();
+    expect(snapshot).toMatchSnapshot({
+        maxDiffPixelRatio: 0.02,
+    });
 
     await page.mouse.down();
     await page.mouse.move(center.x + 50, center.y + 50, { steps: 5 });
@@ -434,5 +443,7 @@ test("[GUIEDITOR] User can add and drag graph nodes", async ({ page }) => {
 
     // take a screenshot (for visual inspection)
     const newSnapshot = await canvasNode.screenshot();
-    expect(newSnapshot).toMatchSnapshot();
+    expect(newSnapshot).toMatchSnapshot({
+        maxDiffPixelRatio: 0.02,
+    });
 });

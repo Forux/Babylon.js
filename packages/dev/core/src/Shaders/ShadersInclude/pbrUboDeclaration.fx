@@ -24,6 +24,7 @@ layout(std140, column_major) uniform;
 
 uniform Material {
     vec2 vAlbedoInfos;
+    vec2 vBaseWeightInfos;
     vec4 vAmbientInfos;
     vec2 vOpacityInfos;
     vec2 vEmissiveInfos;
@@ -37,6 +38,7 @@ uniform Material {
     vec3 vReflectionSize;
     vec3 vBumpInfos;
     mat4 albedoMatrix;
+    mat4 baseWeightMatrix;
     mat4 ambientMatrix;
     mat4 opacityMatrix;
     mat4 emissiveMatrix;
@@ -48,6 +50,7 @@ uniform Material {
     mat4 reflectionMatrix;
     vec3 vReflectionColor;
     vec4 vAlbedoColor;
+    float baseWeight;
     vec4 vLightingIntensity;
     vec3 vReflectionMicrosurfaceInfos;
     float pointSize;

@@ -1,17 +1,31 @@
-// eslint-disable-next-line import/no-internal-modules
-import type { FrameGraph, FrameGraphTextureHandle, Scene, Camera, FrameGraphObjectList, FrameGraphRenderContext, ObjectRendererOptions } from "core/index";
+import type {
+    FrameGraph,
+    FrameGraphTextureHandle,
+    Scene,
+    Camera,
+    FrameGraphObjectList,
+    FrameGraphRenderContext,
+    ObjectRendererOptions,
+    Light,
+    Nullable,
+    Observer,
+    FrameGraphShadowGeneratorTask,
+    FrameGraphRenderPass,
+    // eslint-disable-next-line import/no-internal-modules
+} from "core/index";
 import { backbufferColorTextureHandle, backbufferDepthStencilTextureHandle } from "../../frameGraphTypes";
 import { FrameGraphTask } from "../../frameGraphTask";
 import { ObjectRenderer } from "../../../Rendering/objectRenderer";
+import { FrameGraphCascadedShadowGeneratorTask } from "./csmShadowGeneratorTask";
 
 /**
  * Task used to render objects to a texture.
  */
 export class FrameGraphObjectRendererTask extends FrameGraphTask {
     /**
-     * The destination texture where the objects will be rendered.
+     * The target texture where the objects will be rendered.
      */
-    public destinationTexture: FrameGraphTextureHandle;
+    public targetTexture: FrameGraphTextureHandle;
 
     /**
      * The depth attachment texture where the objects will be rendered (optional).
@@ -19,9 +33,9 @@ export class FrameGraphObjectRendererTask extends FrameGraphTask {
     public depthTexture?: FrameGraphTextureHandle;
 
     /**
-     * The dependencies of the task (optional).
+     * The shadow generators used to render the objects (optional).
      */
-    public dependencies?: FrameGraphTextureHandle[] = [];
+    public shadowGenerators?: FrameGraphShadowGeneratorTask[] = [];
 
     private _camera: Camera;
 
@@ -53,8 +67,13 @@ export class FrameGraphObjectRendererTask extends FrameGraphTask {
     public depthWrite = true;
 
     /**
+     * If shadows should be disabled (default is false).
+     */
+    public disableShadows = false;
+
+    /**
      * The output texture.
-     * This texture will point to the same texture than the destinationTexture property if it is set.
+     * This texture will point to the same texture than the targetTexture property if it is set.
      * Note, however, that the handle itself will be different!
      */
     public readonly outputTexture: FrameGraphTextureHandle;
@@ -65,11 +84,6 @@ export class FrameGraphObjectRendererTask extends FrameGraphTask {
      * Note, however, that the handle itself will be different!
      */
     public readonly outputDepthTexture: FrameGraphTextureHandle;
-
-    protected readonly _scene: Scene;
-    protected readonly _renderer: ObjectRenderer;
-    protected _textureWidth: number;
-    protected _textureHeight: number;
 
     /**
      * The object renderer used to render the objects.
@@ -89,25 +103,37 @@ export class FrameGraphObjectRendererTask extends FrameGraphTask {
         }
     }
 
+    protected readonly _scene: Scene;
+    protected readonly _renderer: ObjectRenderer;
+    protected _textureWidth: number;
+    protected _textureHeight: number;
+    protected _onBeforeRenderObservable: Nullable<Observer<number>> = null;
+    protected _onAfterRenderObservable: Nullable<Observer<number>> = null;
+    protected _externalObjectRenderer = false;
+
     /**
      * Constructs a new object renderer task.
      * @param name The name of the task.
      * @param frameGraph The frame graph the task belongs to.
      * @param scene The scene the frame graph is associated with.
      * @param options The options of the object renderer.
+     * @param existingObjectRenderer An existing object renderer to use (optional). If provided, the options parameter will be ignored.
      */
-    constructor(name: string, frameGraph: FrameGraph, scene: Scene, options?: ObjectRendererOptions) {
+    constructor(name: string, frameGraph: FrameGraph, scene: Scene, options?: ObjectRendererOptions, existingObjectRenderer?: ObjectRenderer) {
         super(name, frameGraph);
 
         this._scene = scene;
-        this._renderer = new ObjectRenderer(name, scene, options);
+        this._externalObjectRenderer = !!existingObjectRenderer;
+        this._renderer = existingObjectRenderer ?? new ObjectRenderer(name, scene, options);
         this.name = name;
 
-        this._renderer.onBeforeRenderingManagerRenderObservable.add(() => {
-            if (!this._renderer.options.doNotChangeAspectRatio) {
-                scene.updateTransformMatrix(true);
-            }
-        });
+        if (!this._externalObjectRenderer) {
+            this._renderer.onBeforeRenderingManagerRenderObservable.add(() => {
+                if (!this._renderer.options.doNotChangeAspectRatio) {
+                    scene.updateTransformMatrix(true);
+                }
+            });
+        }
 
         this.outputTexture = this._frameGraph.textureManager.createDanglingHandle();
         this.outputDepthTexture = this._frameGraph.textureManager.createDanglingHandle();
@@ -117,24 +143,28 @@ export class FrameGraphObjectRendererTask extends FrameGraphTask {
         return this._renderer.isReadyForRendering(this._textureWidth, this._textureHeight);
     }
 
-    public record(skipCreationOfDisabledPasses = false, additionalExecute?: (context: FrameGraphRenderContext) => void) {
-        if (this.destinationTexture === undefined || this.objectList === undefined) {
-            throw new Error(`FrameGraphObjectRendererTask ${this.name}: destinationTexture and objectList are required`);
+    public record(skipCreationOfDisabledPasses = false, additionalExecute?: (context: FrameGraphRenderContext) => void): FrameGraphRenderPass {
+        if (this.targetTexture === undefined || this.objectList === undefined) {
+            throw new Error(`FrameGraphObjectRendererTask ${this.name}: targetTexture and objectList are required`);
         }
 
-        const outputTextureDescription = this._frameGraph.textureManager.getTextureDescription(this.destinationTexture);
+        // Make sure the renderList / particleSystemList are set when FrameGraphObjectRendererTask.isReady() is called!
+        this._renderer.renderList = this.objectList.meshes;
+        this._renderer.particleSystemList = this.objectList.particleSystems;
+
+        const outputTextureDescription = this._frameGraph.textureManager.getTextureDescription(this.targetTexture);
 
         let depthEnabled = false;
 
         if (this.depthTexture !== undefined) {
-            if (this.depthTexture === backbufferDepthStencilTextureHandle && this.destinationTexture !== backbufferColorTextureHandle) {
+            if (this.depthTexture === backbufferDepthStencilTextureHandle && this.targetTexture !== backbufferColorTextureHandle) {
                 throw new Error(
                     `FrameGraphObjectRendererTask ${this.name}: the back buffer color texture is the only color texture allowed when the depth is the back buffer depth/stencil`
                 );
             }
-            if (this.depthTexture !== backbufferDepthStencilTextureHandle && this.destinationTexture === backbufferColorTextureHandle) {
+            if (this.depthTexture !== backbufferDepthStencilTextureHandle && this.targetTexture === backbufferColorTextureHandle) {
                 throw new Error(
-                    `FrameGraphObjectRendererTask ${this.name}: the back buffer depth/stencil texture is the only depth texture allowed when the destination is the back buffer color`
+                    `FrameGraphObjectRendererTask ${this.name}: the back buffer depth/stencil texture is the only depth texture allowed when the target is the back buffer color`
                 );
             }
 
@@ -146,7 +176,7 @@ export class FrameGraphObjectRendererTask extends FrameGraphTask {
             depthEnabled = true;
         }
 
-        this._frameGraph.textureManager.resolveDanglingHandle(this.outputTexture, this.destinationTexture);
+        this._frameGraph.textureManager.resolveDanglingHandle(this.outputTexture, this.targetTexture);
         if (this.depthTexture !== undefined) {
             this._frameGraph.textureManager.resolveDanglingHandle(this.outputDepthTexture, this.depthTexture);
         }
@@ -154,9 +184,11 @@ export class FrameGraphObjectRendererTask extends FrameGraphTask {
         this._textureWidth = outputTextureDescription.size.width;
         this._textureHeight = outputTextureDescription.size.height;
 
+        this._setLightsForShadow();
+
         const pass = this._frameGraph.addRenderPass(this.name);
 
-        pass.setRenderTarget(this.destinationTexture);
+        pass.setRenderTarget(this.targetTexture);
         pass.setRenderTargetDepth(this.depthTexture);
         pass.setExecuteFunc((context) => {
             this._renderer.renderList = this.objectList.meshes;
@@ -168,29 +200,60 @@ export class FrameGraphObjectRendererTask extends FrameGraphTask {
             additionalExecute?.(context);
         });
 
-        if (this.dependencies !== undefined) {
-            for (const handle of this.dependencies) {
-                pass.useTexture(handle);
-            }
-        }
-
         if (!skipCreationOfDisabledPasses) {
             const passDisabled = this._frameGraph.addRenderPass(this.name + "_disabled", true);
 
-            passDisabled.setRenderTarget(this.destinationTexture);
+            passDisabled.setRenderTarget(this.targetTexture);
             passDisabled.setRenderTargetDepth(this.depthTexture);
             passDisabled.setExecuteFunc((_context) => {});
-
-            if (this.dependencies !== undefined) {
-                for (const handle of this.dependencies) {
-                    passDisabled.useTexture(handle);
-                }
-            }
         }
+
+        return pass;
     }
 
     public override dispose(): void {
-        this._renderer.dispose();
+        this._renderer.onBeforeRenderObservable.remove(this._onBeforeRenderObservable);
+        this._renderer.onAfterRenderObservable.remove(this._onAfterRenderObservable);
+        if (!this._externalObjectRenderer) {
+            this._renderer.dispose();
+        }
         super.dispose();
+    }
+
+    protected _setLightsForShadow() {
+        const lightsForShadow: Set<Light> = new Set();
+        const shadowEnabled: Map<Light, boolean> = new Map();
+
+        if (this.shadowGenerators) {
+            for (const shadowGeneratorTask of this.shadowGenerators) {
+                const shadowGenerator = shadowGeneratorTask.shadowGenerator;
+                const light = shadowGenerator.getLight();
+                if (light.isEnabled() && light.shadowEnabled) {
+                    lightsForShadow.add(light);
+                    if (FrameGraphCascadedShadowGeneratorTask.IsCascadedShadowGenerator(shadowGeneratorTask)) {
+                        light._shadowGenerators!.set(shadowGeneratorTask.camera, shadowGenerator);
+                    } else {
+                        light._shadowGenerators!.set(null, shadowGenerator);
+                    }
+                }
+            }
+        }
+
+        this._renderer.onBeforeRenderObservable.remove(this._onBeforeRenderObservable);
+        this._onBeforeRenderObservable = this._renderer.onBeforeRenderObservable.add(() => {
+            for (let i = 0; i < this._scene.lights.length; i++) {
+                const light = this._scene.lights[i];
+                shadowEnabled.set(light, light.shadowEnabled);
+                light.shadowEnabled = !this.disableShadows && lightsForShadow.has(light);
+            }
+        });
+
+        this._renderer.onAfterRenderObservable.remove(this._onAfterRenderObservable);
+        this._onAfterRenderObservable = this._renderer.onAfterRenderObservable.add(() => {
+            for (let i = 0; i < this._scene.lights.length; i++) {
+                const light = this._scene.lights[i];
+                light.shadowEnabled = shadowEnabled.get(light)!;
+            }
+        });
     }
 }

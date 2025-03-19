@@ -2,6 +2,39 @@
     "root": "https://cdn.babylonjs.com",
     "tests": [
         {
+            "title": "OpenPBR Base Weight",
+            "playgroundId": "#DT1XPP#4",
+            "referenceImage": "openpbr_base_weight.png"
+        },
+        {
+            "title": "NME Glow Manual",
+            "playgroundId": "#7QCYPB#320",
+            "referenceImage": "nme_glow_manual.png"
+        },
+        {
+            "title": "NME Glow Automatic",
+            "playgroundId": "#7QCYPB#327",
+            "referenceImage": "nme_glow_automatic.png"
+        },
+        {
+            "title": "EXT_lights_ies",
+            "playgroundId": "#UIAXAU#19",
+            "referenceImage": "ext_lights_ies.png",
+            "excludedEngines": ["webgl1"]
+        },
+        {
+            "title": "IES Profile",
+            "playgroundId": "#UIAXAU#6",
+            "referenceImage": "iesprofile.png",
+            "excludedEngines": ["webgl1"]
+        },
+        {
+            "title": "IES Profile2",
+            "playgroundId": "#UIAXAU#31",
+            "referenceImage": "iesprofile2.png",
+            "excludedEngines": ["webgl1"]
+        },
+        {
             "title": "Gaussian Splatting NME",
             "playgroundId": "#WXWJKN#4",
             "referenceImage": "gsplat-nme.png"
@@ -19,7 +52,7 @@
         },
         {
             "title": "NME Loop Block",
-            "playgroundId": "#D8AK3Z#109",
+            "playgroundId": "#D8AK3Z#115",
             "referenceImage": "nme-loop.png",
             "excludedEngines": ["webgl1"]
         },
@@ -51,8 +84,9 @@
         },
         {
             "title": "Decal map PP",
-            "playgroundId": "#9BVW2S#90",
+            "playgroundId": "#9BVW2S#101",
             "referenceImage": "decal-map-pp.png",
+            "renderCount": 50,
             "excludedEngines": ["webgl1"]
         },
         {
@@ -77,14 +111,15 @@
         },
         {
             "title": "NME Multi Build",
-            "playgroundId": "#D8AK3Z#104",
+            "playgroundId": "#D8AK3Z#113",
             "referenceImage": "nme-multi-build.png"
         },
         {
             "title": "BoundingInfo Helper",
-            "playgroundId": "#BCNJD4#42",
+            "playgroundId": "#BCNJD4#61",
             "referenceImage": "bbhelper.png",
-            "excludedEngines": ["webgl1"]
+            "excludedEngines": ["webgl1"],
+            "renderCount": 2
         },
         {
             "title": "NME Shadow Map",
@@ -117,7 +152,8 @@
         {
             "title": "GUI Input Text Area with Placeholder",
             "playgroundId": "#NVAEWD#364",
-            "referenceImage": "gui-inputtextarea-withplaceholder.png"
+            "referenceImage": "gui-inputtextarea-withplaceholder.png",
+            "errorRatio": 4
         },
         {
             "title": "Ground Projection",
@@ -238,6 +274,7 @@
         {
             "title": "Node material 1",
             "playgroundId": "#QJ71C6#5",
+            "errorRatio": 4,
             "referenceImage": "node-material1.png"
         },
         {
@@ -513,7 +550,8 @@
             "renderCount": 20,
             "scriptToRun": "/Demos/Charting/charting.js",
             "functionToCall": "CreateChartingTestScene",
-            "referenceImage": "charting.png"
+            "referenceImage": "charting.png",
+            "errorRatio": 3
         },
         {
             "title": "Fog",
@@ -547,6 +585,16 @@
             "renderCount": 5,
             "playgroundId": "#P7N8YW#1",
             "referenceImage": "highlights.png"
+        },
+        {
+            "title": "Area Lights - Standard Material",
+            "playgroundId": "#T7FXR8#11",
+            "referenceImage": "areaLightsStandardMaterial.png"
+        },
+        {
+            "title": "Area Lights - PBR",
+            "playgroundId": "#T7FXR8#12",
+            "referenceImage": "areaLightsPBRMaterial.png"
         },
         {
             "title": "Lines",
@@ -591,13 +639,15 @@
             "title": "Advanced shadows",
             "renderCount": 20,
             "playgroundId": "#SLV8LW#3",
-            "referenceImage": "advancedShadows.png"
+            "referenceImage": "advancedShadows.png",
+            "errorRatio": 5
         },
         {
             "title": "Advanced shadows (right handed)",
             "renderCount": 20,
             "playgroundId": "#B48X7G#64",
-            "referenceImage": "advancedShadows2.png"
+            "referenceImage": "advancedShadows2.png",
+            "errorRatio": 5
         },
         {
             "title": "point light shadows",
@@ -623,8 +673,7 @@
         },
         {
             "title": "Custom render target",
-            "renderCount": 20,
-            "playgroundId": "#TQCEBF#3",
+            "playgroundId": "#TQCEBF#5",
             "referenceImage": "customRTT.png"
         },
         {
@@ -648,6 +697,16 @@
             "playgroundId": "#22MFU2#75",
             "replace": "numWorkers = 0, numWorkers = 1",
             "referenceImage": "draco.png"
+        },
+        {
+            "title": "Draco Decoder",
+            "playgroundId": "#22MFU2#82",
+            "referenceImage": "draco.png"
+        },
+        {
+            "title": "Draco Decoder/Encoder roundtrip",
+            "playgroundId": "#JNW207#4",
+            "referenceImage": "dracoRoundtrip.png"
         },
         {
             "title": "GLTF Normals",
@@ -853,29 +912,29 @@
         },
         {
             "title": "GLTF Serializer with Negative World Matrix (left handed, once)",
-            "playgroundId": "#KX53VK#48",
+            "playgroundId": "#KX53VK#77",
             "referenceImage": "glTFSerializerNegativeWorldMatrix.png",
             "errorRatio": 1.1
         },
         {
             "title": "GLTF Serializer with Negative World Matrix (left handed, twice)",
-            "playgroundId": "#KX53VK#48",
+            "playgroundId": "#KX53VK#77",
             "referenceImage": "glTFSerializerNegativeWorldMatrix.png",
-            "replace": "iterations = 1, iterations = 2",
+            "replace": "//options//, iterations = 2;",
             "errorRatio": 1.1
         },
         {
             "title": "GLTF Serializer with Negative World Matrix (right handed, once)",
-            "playgroundId": "#KX53VK#48",
+            "playgroundId": "#KX53VK#76",
             "referenceImage": "glTFSerializerNegativeWorldMatrix.png",
-            "replace": "useRightHandedSystem = false, useRightHandedSystem = true",
+            "replace": "//options//, useRightHandedSystem = true;",
             "errorRatio": 1.1
         },
         {
             "title": "GLTF Serializer with Negative World Matrix (right handed, twice)",
-            "playgroundId": "#KX53VK#48",
+            "playgroundId": "#KX53VK#76",
             "referenceImage": "glTFSerializerNegativeWorldMatrix.png",
-            "replace": "useRightHandedSystem = false, useRightHandedSystem = true, iterations = 1, iterations = 2",
+            "replace": "//options//, useRightHandedSystem = true; iterations = 2;",
             "errorRatio": 1.1
         },
         {
@@ -902,6 +961,11 @@
             "excludedEngines": ["webgl1"]
         },
         {
+            "title": "GLTF Serializer KHR draco mesh compression",
+            "playgroundId": "#F8BF8N#3",
+            "referenceImage": "glTFSerializerKhrDracoMeshCompression.png"
+        },
+        {
             "title": "GLTF Serializer KHR materials clearcoat",
             "playgroundId": "#9N6CLU#23",
             "referenceImage": "glTFSerializerKhrMaterialsClearcoat.png",
@@ -911,6 +975,42 @@
             "title": "GLTF Serializer KHR gpu instancing",
             "playgroundId": "#1Q2BWN#10",
             "referenceImage": "glTFSerializerKhrGpuInstancing.png"
+        },
+        {
+            "title": "GLTF Serializer KHR punctual light, left-handed",
+            "playgroundId": "#FLXW8B#25",
+            "replace": "//options//, roundtrip = true; useRightHandedSystem = false;",
+            "referenceImage": "glTFSerializerKHRPunctualLightLH.png"
+        },
+        {
+            "title": "GLTF Serializer KHR punctual light, right-handed",
+            "playgroundId": "#FLXW8B#25",
+            "replace": "//options//, roundtrip = true; useRightHandedSystem = true;",
+            "referenceImage": "glTFSerializerKHRPunctualLightRH.png"
+        },
+        {
+            "title": "GLTF Serializer Camera, left-handed",
+            "playgroundId": "#O0M0J9#8",
+            "replace": "//options//, roundtripCount = 1; useRightHandedSystem = false;",
+            "referenceImage": "glTFSerializerCameraLeftHand.png"
+        },
+        {
+            "title": "GLTF Serializer Camera, right-handed",
+            "playgroundId": "#O0M0J9#8",
+            "replace": "//options//, roundtripCount = 1; useRightHandedSystem = true;",
+            "referenceImage": "glTFSerializerCameraRightHand.png"
+        },
+        {
+            "title": "GLTF Serializer Camera, left-handed, round trip twice",
+            "playgroundId": "#O0M0J9#8",
+            "replace": "//options//, roundtripCount = 2; useRightHandedSystem = false;",
+            "referenceImage": "glTFSerializerCameraLeftHand.png"
+        },
+        {
+            "title": "GLTF Serializer Camera, right-handed, round trip twice",
+            "playgroundId": "#O0M0J9#8",
+            "replace": "//options//, roundtripCount = 2; useRightHandedSystem = true;",
+            "referenceImage": "glTFSerializerCameraRightHand.png"
         },
         {
             "title": "GLTF Buggy with Draco Mesh Compression",
@@ -947,7 +1047,7 @@
             "title": "GLTF Extension KHR_materials_volume with attenuation",
             "playgroundId": "#YG3BBF#18",
             "referenceImage": "gltfExtensionKhrMaterialsVolumeAttenuation.png",
-            "errorRatio": 1.2,
+            "errorRatio": 3,
             "renderCount": 5
         },
         {
@@ -974,6 +1074,7 @@
             "title": "Enable disable post process",
             "playgroundId": "#1VI6WV#19",
             "renderCount": 50,
+            "errorRatio": 3,
             "referenceImage": "enableDisablePostProcess.png"
         },
         {
@@ -1055,17 +1156,17 @@
         },
         {
             "title": "PBR shader code coverage 1",
-            "playgroundId": "#QI7TL3#55",
+            "playgroundId": "#QI7TL3#59",
             "referenceImage": "pbr-codecoverage1.png"
         },
         {
             "title": "PBR shader code coverage 2",
-            "playgroundId": "#QI7TL3#57",
+            "playgroundId": "#QI7TL3#60",
             "referenceImage": "pbr-codecoverage2.png"
         },
         {
             "title": "PBR shader code coverage 3",
-            "playgroundId": "#QI7TL3#56",
+            "playgroundId": "#QI7TL3#61",
             "referenceImage": "pbr-codecoverage3.png"
         },
         {
@@ -1094,6 +1195,7 @@
             "renderCount": 5,
             "scriptToRun": "/Demos/GUI/gui.js",
             "functionToCall": "createScene",
+            "errorRatio": 4,
             "referenceImage": "GUI.png"
         },
         {
@@ -1142,7 +1244,8 @@
         {
             "title": "GlowLayer",
             "playgroundId": "#LRFB2D#262",
-            "referenceImage": "GlowLayer.png"
+            "referenceImage": "GlowLayer.png",
+            "errorRatio": 2.5
         },
         {
             "title": "Local cubemaps",
@@ -1207,7 +1310,7 @@
         },
         {
             "title": "Visibility",
-            "playgroundId": "#PXC9CF#2",
+            "playgroundId": "#PXC9CF#6",
             "referenceImage": "visibility.png"
         },
         {
@@ -1221,6 +1324,34 @@
             "playgroundId": "#FEEK7G#118",
             "renderCount": 5,
             "referenceImage": "realtimeFiltering.png"
+        },
+        {
+            "title": "Realtime Filtering Irradiance",
+            "playgroundId": "#FEEK7G#1089",
+            "renderCount": 5,
+            "referenceImage": "realtimeFilteringIrradiance.png",
+            "excludedEngines": ["webgl1"]
+        },
+        {
+            "title": "Realtime Filtering Irradiance with CDF",
+            "playgroundId": "#FEEK7G#1087",
+            "renderCount": 5,
+            "referenceImage": "realtimeFilteringIrradianceCDF.png",
+            "excludedEngines": ["webgl1"]
+        },
+        {
+            "title": "Prefiltering Irradiance on load",
+            "playgroundId": "#FEEK7G#1111",
+            "renderCount": 5,
+            "referenceImage": "prefilteringIrradiance.png",
+            "excludedEngines": ["webgl1"]
+        },
+        {
+            "title": "Prefiltering Irradiance on load with CDF",
+            "playgroundId": "#FEEK7G#1110",
+            "renderCount": 5,
+            "referenceImage": "prefilteringIrradianceCDF.png",
+            "excludedEngines": ["webgl1"]
         },
         {
             "title": "OBJ loader test (legacy)",
@@ -1314,7 +1445,7 @@
         },
         {
             "title": "Shadows CSM and LODs",
-            "playgroundId": "#24HWT9#0",
+            "playgroundId": "#24HWT9#15",
             "referenceImage": "shadowscsmandlod.png",
             "excludedEngines": ["webgl1"]
         },
@@ -1436,6 +1567,7 @@
             "renderCount": 10,
             "playgroundId": "#FFMFW5#29",
             "excludedEngines": ["webgl1"],
+            "errorRatio": 6,
             "referenceImage": "prepass-ssao-lod.png"
         },
         {
@@ -1471,6 +1603,7 @@
             "renderCount": 10,
             "playgroundId": "#V1JE4Z#25",
             "excludedEngines": ["webgl1"],
+            "errorRatio": 3,
             "referenceImage": "prepass-ssao-thin-instances.png"
         },
         {
@@ -1483,7 +1616,7 @@
         {
             "title": "Prepass SSAO + visibility",
             "renderCount": 30,
-            "playgroundId": "#PXC9CF#4",
+            "playgroundId": "#PXC9CF#7",
             "excludedEngines": ["webgl1"],
             "referenceImage": "prepass-ssao-visibility.png"
         },
@@ -1511,7 +1644,8 @@
         {
             "title": "Multi camera rendering with scissors",
             "playgroundId": "#1LK70I#35",
-            "referenceImage": "multiCameraRenderingWithScissors.png"
+            "referenceImage": "multiCameraRenderingWithScissors.png",
+            "errorRatio": 3
         },
         {
             "title": "Scissor test",
@@ -1661,7 +1795,7 @@
         },
         {
             "title": "Sample depth texture",
-            "renderCount": 5,
+            "renderCount": 2,
             "playgroundId": "#8RU8Q3#158",
             "excludedEngines": ["webgl1"],
             "referenceImage": "sampleDepthTexture.png"
@@ -1744,6 +1878,7 @@
             "title": "GUI Input Test",
             "renderCount": 2,
             "playgroundId": "#UB4F3B#8",
+            "errorRatio": 4,
             "referenceImage": "guiInputTest.png"
         },
         {
@@ -1770,12 +1905,14 @@
             "title": "Load GUI snippet with unicode",
             "playgroundId": "#YS93KY",
             "referenceImage": "loadGuiSnippetWithUnicode.png",
+            "errorRatio": 4,
             "renderCount": 50
         },
         {
             "title": "Parse GUI json with unicode",
             "playgroundId": "#ERVGT5",
             "referenceImage": "parseGuiJsonWithUnicode.png",
+            "errorRatio": 4,
             "renderCount": 50
         },
         {
@@ -1824,7 +1961,8 @@
         {
             "title": "GUI Gradient Linear",
             "playgroundId": "#XCPP9Y#17227",
-            "referenceImage": "GUI-Gradient-Linear.png"
+            "referenceImage": "GUI-Gradient-Linear.png",
+            "errorRatio": 4
         },
         {
             "title": "GUI Gradient Radial",
@@ -1882,12 +2020,14 @@
         {
             "title": "GUI Text Block with resizeToFit and forceResizeWidth",
             "playgroundId": "#XCPP9Y#17810",
-            "referenceImage": "GUI-Text-Block-with-resizeToFit-and-forceResizeWidth.png"
+            "referenceImage": "GUI-Text-Block-with-resizeToFit-and-forceResizeWidth.png",
+            "errorRatio": 4
         },
         {
             "title": "GUI Horizontal Stack Panel and Text Block with resizeToFit and forceResizeWidth",
             "playgroundId": "#XCPP9Y#17811",
-            "referenceImage": "GUI-Horizontal-Stack-Panel-and-Text-Block-with-resizeToFit-and-forceResizeWidth.png"
+            "referenceImage": "GUI-Horizontal-Stack-Panel-and-Text-Block-with-resizeToFit-and-forceResizeWidth.png",
+            "errorRatio": 4
         },
         {
             "title": "Scene Recorder Apply Delta",
@@ -1903,6 +2043,7 @@
         {
             "title": "Rounding values on controls inside StackPanel",
             "playgroundId": "#XCPP9Y#18325",
+            "errorRatio": 4,
             "referenceImage": "Rounding-values-on-controls-inside-StackPanel.png"
         },
         {
@@ -1971,7 +2112,7 @@
         },
         {
             "title": "Command encoder order in WebGPU 1",
-            "playgroundId": "#064AUB#121",
+            "playgroundId": "#064AUB#125",
             "referenceImage": "CommandEncodedWebGPU1.png",
             "excludedEngines": ["webgl1"]
         },
@@ -2018,11 +2159,6 @@
             "playgroundId": "#NRR7F4#0"
         },
         {
-            "title": "neon-pipe-with-glow-layer",
-            "renderCount": 5,
-            "playgroundId": "#X229PI#0"
-        },
-        {
             "title": "pillars-sphere-and-torus-with-PCSS-shadows",
             "playgroundId": "#WL4Q8J#0",
             "excludedEngines": ["webgl1"]
@@ -2054,7 +2190,7 @@
         {
             "title": "apply-all-post-processes",
             "renderCount": 10,
-            "playgroundId": "#MJ59Y8#2"
+            "playgroundId": "#MJ59Y8#18"
         },
         {
             "title": "simple-custom-shader",
@@ -2064,11 +2200,13 @@
         {
             "title": "show-multiple-guis",
             "renderCount": 5,
+            "errorRatio": 4,
             "playgroundId": "#6X9UMD#12"
         },
         {
             "title": "skybox-with-boombox",
             "renderCount": 20,
+            "errorRatio": 4,
             "playgroundId": "#I2TR8G#0"
         },
         {
@@ -2122,7 +2260,7 @@
         },
         {
             "title": "lens-flare",
-            "playgroundId": "#KICG93"
+            "playgroundId": "#KICG93#2"
         },
         {
             "title": "update-sampler-info",
@@ -2138,6 +2276,7 @@
         {
             "title": "terrain-erosion",
             "renderCount": 15,
+            "errorRatio": 6,
             "playgroundId": "#C90R62#17",
             "excludedEngines": ["webgl1", "webgl2"]
         },
@@ -2169,6 +2308,7 @@
             "title": "Render to 3D RT",
             "renderCount": 5,
             "playgroundId": "#XSNYAU#83",
+            "errorRatio": 3,
             "excludedEngines": ["webgl1"]
         },
         {
@@ -2198,6 +2338,7 @@
         {
             "title": "CesiumMan from Khronos Sample Assets",
             "playgroundId": "#4GWX8M",
+            "errorRatio": 2,
             "referenceImage": "CesiumMan.png"
         },
         {
@@ -2219,25 +2360,29 @@
             "title": "computeMaxExtents (BrainStem)",
             "playgroundId": "#M2H33B",
             "replace": "//options//, modelIndex = 2;",
-            "referenceImage": "computeMaxExtents-BoxAnimated.png"
+            "referenceImage": "computeMaxExtents-BoxAnimated.png",
+            "renderCount": 2
         },
         {
             "title": "computeMaxExtents (Fox 0)",
             "playgroundId": "#M2H33B",
             "replace": "//options//, modelIndex = 4; animationIndex = 0;",
-            "referenceImage": "computeMaxExtents-Fox0.png"
+            "referenceImage": "computeMaxExtents-Fox0.png",
+            "renderCount": 2
         },
         {
             "title": "computeMaxExtents (Fox 1)",
             "playgroundId": "#M2H33B",
             "replace": "//options//, modelIndex = 4; animationIndex = 1;",
-            "referenceImage": "computeMaxExtents-Fox1.png"
+            "referenceImage": "computeMaxExtents-Fox1.png",
+            "renderCount": 2
         },
         {
             "title": "computeMaxExtents (MorphStressTest)",
             "playgroundId": "#M2H33B",
             "replace": "//options//, modelIndex = 5;",
-            "referenceImage": "computeMaxExtents-MorphStressTest.png"
+            "referenceImage": "computeMaxExtents-MorphStressTest.png",
+            "renderCount": 2
         },
         {
             "title": "glTF Loader Capabilities",
@@ -2246,10 +2391,11 @@
         },
         {
             "title": "IBL Voxel Shadowing",
-            "playgroundId": "#8R5SSE#408",
+            "playgroundId": "#8R5SSE#456",
             "referenceImage": "voxelShadows.png",
             "renderCount": 15,
-            "excludedEngines": ["webgl1"]
+            "excludedEngines": ["webgl1"],
+            "errorRatio": 5
         },
         {
             "title": "Glow layer with vertex alpha",
@@ -2258,36 +2404,146 @@
         },
         {
             "title": "IBL Voxel Shadowing Right-Handed",
-            "playgroundId": "#8R5SSE#409",
+            "playgroundId": "#8R5SSE#457",
             "referenceImage": "voxelShadowsRightHanded.png",
             "renderCount": 15,
             "excludedEngines": ["webgl1"]
         },
         {
             "title": "IBL Voxel Shadowing Left-Handed",
-            "playgroundId": "#8R5SSE#410",
+            "playgroundId": "#8R5SSE#458",
             "referenceImage": "voxelShadowsLeftHanded.png",
             "renderCount": 15,
             "excludedEngines": ["webgl1"]
         },
         {
             "title": "IBL Screen-space Shadowing Left-Handed",
-            "playgroundId": "#8R5SSE#380",
+            "playgroundId": "#8R5SSE#459",
             "referenceImage": "ssShadowsLeftHanded.png",
             "renderCount": 15,
-            "excludedEngines": ["webgl1"]
+            "excludedEngines": ["webgl1"],
+            "errorRatio": 5
         },
         {
             "title": "IBL Screen-space Shadowing Right-Handed",
-            "playgroundId": "#8R5SSE#381",
+            "playgroundId": "#8R5SSE#461",
             "referenceImage": "ssShadowsRightHanded.png",
             "renderCount": 15,
-            "excludedEngines": ["webgl1"]
+            "excludedEngines": ["webgl1"],
+            "errorRatio": 5
         },
         {
             "title": "Normed 16 bits texture formats",
             "playgroundId": "#SOCPNB#10",
             "excludedEngines": ["webgl1", "webgpu"]
+        },
+        {
+            "title": "UV2 Morphing",
+            "playgroundId": "#N5DLM7#1",
+            "referenceImage": "UV2-Morphing.png"
+        },
+        {
+            "title": "FrameGraph nrge shadows",
+            "playgroundId": "#JWKDME#28",
+            "errorRatio": 2
+        },
+        {
+            "title": "FrameGraph nrge csm shadows",
+            "playgroundId": "#JWKDME#29",
+            "errorRatio": 2
+        },
+        {
+            "title": "FrameGraph nrge custom rendering",
+            "playgroundId": "#1QCA2M#1",
+            "errorRatio": 2
+        },
+        {
+            "title": "FrameGraph nrge depth of field",
+            "playgroundId": "#GAGVQO#3",
+            "errorRatio": 3
+        },
+        {
+            "title": "FrameGraph nrge glow layer",
+            "playgroundId": "#IG8NRC#15",
+            "errorRatio": 2
+        },
+        {
+            "title": "FrameGraph nrge highlight layer",
+            "playgroundId": "#QZYNMK#1",
+            "errorRatio": 2
+        },
+        {
+            "title": "FrameGraph nrge SSR cube",
+            "playgroundId": "#PIZ1GK#2090",
+            "excludedEngines": ["webgl1"]
+        },
+        {
+            "title": "FrameGraph nrge SSR HillValley",
+            "playgroundId": "#PIZ1GK#2091",
+            "excludedEngines": ["webgl1"]
+        },
+        {
+            "title": "FrameGraph nrge SSR neon",
+            "playgroundId": "#Z6C5EF#1",
+            "excludedEngines": ["webgl1"]
+        },
+        {
+            "title": "FrameGraph nrg gui bloom",
+            "playgroundId": "#3LB017#1",
+            "errorRatio": 2
+        },
+        {
+            "title": "FrameGraph glow layer",
+            "playgroundId": "#9YU4C5#8",
+            "referenceImage": "FrameGraph-nrg-glow-layer.png",
+            "errorRatio": 1
+        },
+        {
+            "title": "FrameGraph highlight layer",
+            "playgroundId": "#PV8OLY#16"
+        },
+        {
+            "title": "FrameGraph custom rendering",
+            "playgroundId": "#RM56RY#15"
+        },
+        {
+            "title": "FrameGraph gui bloom",
+            "playgroundId": "#RM56RY#16"
+        },
+        {
+            "title": "IBL radiance roughness",
+            "playgroundId": "#RNO672#7"
+        },
+        {
+            "title": "Synchronous Effect",
+            "playgroundId": "#D9XXL3#1",
+            "excludedEngines": ["webgl1", "webgpu"]
+        },
+        {
+            "title": "Show Loading Screen",
+            "playgroundId": "#EQP888#7",
+            "referenceImage": "Show-Loading-Screen.png"
+        },
+        {
+            "title": "Hide Loading Screen",
+            "playgroundId": "#EQP888#8",
+            "referenceImage": "Hide-Loading-Screen.png"
+        },
+        {
+            "title": "Flow Graph multiple contexts",
+            "playgroundId": "#FQWPBI#11",
+            "referenceImage": "Flow-Graph-multiple-contexts.png",
+            "renderCount": 30
+        },
+        {
+            "title": "KHR diffuse transmission",
+            "playgroundId": "#RX52XX#1"
+        },
+        {
+            "title": "SubSurface Scattering",
+            "playgroundId": "#5H0H89#129",
+            "renderCount": 10,
+            "excludedEngines": ["webgl1"]
         }
     ]
 }

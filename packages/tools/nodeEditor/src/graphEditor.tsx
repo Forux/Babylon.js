@@ -133,10 +133,6 @@ export class GraphEditor extends React.Component<IGraphEditorProps, IGraphEditor
             (this.props.globalState as any)._previewManager = this._previewManager;
         }
 
-        if (navigator.userAgent.indexOf("Mobile") !== -1) {
-            ((this.props.globalState.hostDocument || document).querySelector(".blocker") as HTMLElement).style.visibility = "visible";
-        }
-
         this.props.globalState.onPopupClosedObservable.addOnce(() => {
             this.componentWillUnmount();
         });
@@ -147,10 +143,17 @@ export class GraphEditor extends React.Component<IGraphEditorProps, IGraphEditor
 
     override componentWillUnmount() {
         window.removeEventListener("wheel", this.onWheel);
+        const globalState = this.props.globalState;
 
-        if (this.props.globalState.hostDocument) {
-            this.props.globalState.hostDocument!.removeEventListener("keyup", this._onWidgetKeyUpPointer, false);
+        if (globalState.hostDocument) {
+            globalState.hostDocument!.removeEventListener("keyup", this._onWidgetKeyUpPointer, false);
         }
+
+        globalState.stateManager.onUpdateRequiredObservable.clear();
+        globalState.stateManager.onRebuildRequiredObservable.clear();
+        globalState.stateManager.onNodeMovedObservable.clear();
+        globalState.stateManager.onNewNodeCreatedObservable.clear();
+        globalState.onClearUndoStack.clear();
 
         if (this._historyStack) {
             this._historyStack.dispose();
@@ -657,14 +660,19 @@ export class GraphEditor extends React.Component<IGraphEditorProps, IGraphEditor
                     <Splitter size={8} minSize={250} initialSize={300} maxSize={500} controlledSide={ControlledSize.Second} />
 
                     {/* Property tab */}
-                    <div className="nme-right-panel">
+                    <SplitContainer className="nme-right-panel" direction={SplitDirection.Vertical}>
                         <PropertyTabComponent lockObject={this.props.globalState.lockObject} globalState={this.props.globalState} />
-                        {!this.state.showPreviewPopUp ? <PreviewMeshControlComponent globalState={this.props.globalState} togglePreviewAreaComponent={this.handlePopUp} /> : null}
-                        {!this.state.showPreviewPopUp ? <PreviewAreaComponent globalState={this.props.globalState} /> : null}
-                    </div>
+                        <Splitter size={8} minSize={200} initialSize={300} maxSize={500} controlledSide={ControlledSize.Second} />
+                        <div className="nme-preview-part">
+                            {!this.state.showPreviewPopUp ? (
+                                <PreviewMeshControlComponent globalState={this.props.globalState} togglePreviewAreaComponent={this.handlePopUp} />
+                            ) : null}
+                            {!this.state.showPreviewPopUp ? <PreviewAreaComponent globalState={this.props.globalState} /> : null}
+                        </div>
+                    </SplitContainer>
                 </SplitContainer>
                 <MessageDialog message={this.state.message} isError={this.state.isError} onClose={() => this.setState({ message: "" })} />
-                <div className="blocker">Node Material Editor runs only on desktop</div>
+                <div className="blocker">Node Material Editor needs a horizontal resolution of at least 900px</div>
                 <div className="wait-screen hidden">Processing...please wait</div>
             </Portal>
         );

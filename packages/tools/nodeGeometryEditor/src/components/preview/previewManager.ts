@@ -7,7 +7,6 @@ import { Matrix, Vector3 } from "core/Maths/math.vector";
 import { HemisphericLight } from "core/Lights/hemisphericLight";
 import { ArcRotateCamera } from "core/Cameras/arcRotateCamera";
 import { SceneLoader } from "core/Loading/sceneLoader";
-import type { AbstractMesh } from "core/Meshes/abstractMesh";
 import type { FramingBehavior } from "core/Behaviors/Cameras/framingBehavior";
 import { Color3 } from "core/Maths/math.color";
 import "core/Rendering/depthRendererSceneComponent";
@@ -27,12 +26,14 @@ import { AxesViewer } from "core/Debug/axesViewer";
 import { DynamicTexture } from "core/Materials/Textures/dynamicTexture";
 import { MeshBuilder } from "core/Meshes/meshBuilder";
 import { NormalMaterial } from "materials/normal/normalMaterial";
+import type { Mesh } from "core/Meshes/mesh";
 
 export class PreviewManager {
     private _nodeGeometry: NodeGeometry;
     private _onBuildObserver: Nullable<Observer<NodeGeometry>>;
 
     private _onFrameObserver: Nullable<Observer<void>>;
+    private _onAxisObserver: Nullable<Observer<void>>;
     private _onExportToGLBObserver: Nullable<Observer<void>>;
     private _onAnimationCommandActivatedObserver: Nullable<Observer<void>>;
     private _onUpdateRequiredObserver: Nullable<Observer<Nullable<NodeGeometryBlock>>>;
@@ -40,7 +41,7 @@ export class PreviewManager {
     private _onPreviewChangedObserver: Nullable<Observer<void>>;
     private _engine: Engine;
     private _scene: Scene;
-    private _mesh: Nullable<AbstractMesh>;
+    private _mesh: Nullable<Mesh>;
     private _camera: ArcRotateCamera;
     private _light: HemisphericLight;
     private _globalState: GlobalState;
@@ -51,6 +52,7 @@ export class PreviewManager {
     private _matVertexColor: StandardMaterial;
     private _matNormals: NormalMaterial;
     private _axis: AxesViewer;
+    private _toDelete: Array<Mesh> = [];
 
     public constructor(targetCanvas: HTMLCanvasElement, globalState: GlobalState) {
         this._nodeGeometry = globalState.nodeGeometry;
@@ -70,6 +72,12 @@ export class PreviewManager {
                 this._mesh!.material = currentMat;
                 glb.downloadFiles();
             });
+        });
+
+        let axisTopRight = true;
+
+        this._onAxisObserver = this._globalState.onAxis.add(() => {
+            axisTopRight = !axisTopRight;
         });
 
         this._onFrameObserver = this._globalState.onFrame.add(() => {
@@ -192,10 +200,15 @@ export class PreviewManager {
         zPlane.position.z = 1;
         zPlane.position.y = 0.3;
 
-        const targetPosition = new Vector3(3.5, 3.6, 13);
+        let targetPosition = new Vector3(3.5, 3.6, 13);
         const tempMat = Matrix.Identity();
 
         this._scene.onBeforeCameraRenderObservable.add(() => {
+            if (axisTopRight) {
+                targetPosition = new Vector3(3.5, 3.6, 13);
+            } else {
+                targetPosition = new Vector3(0, 0, 10);
+            }
             this._scene.getViewMatrix().invertToRef(tempMat);
             Vector3.TransformCoordinatesToRef(targetPosition, tempMat, dummy.position);
         });
@@ -261,9 +274,10 @@ export class PreviewManager {
 
     private _prepareScene() {
         // Update
-        const toDelete = this._mesh;
+        if (this._mesh) {
+            this._toDelete.push(this._mesh);
+        }
         this._updatePreview();
-        toDelete?.dispose();
 
         // Animations
         this._handleAnimations();
@@ -337,6 +351,10 @@ export class PreviewManager {
                 this._updateStandardMaterial();
                 this._setMaterial();
                 this._mesh.useVertexColors = true;
+                this._mesh.onMeshReadyObservable.addOnce(() => {
+                    this._toDelete.forEach((m) => m.dispose());
+                    this._toDelete.length = 0;
+                });
             }
 
             this._globalState.onIsLoadingChanged.notifyObservers(false);
@@ -348,6 +366,7 @@ export class PreviewManager {
 
     public dispose() {
         this._globalState.onFrame.remove(this._onFrameObserver);
+        this._onAxisObserver?.remove();
         this._nodeGeometry.onBuildObservable.remove(this._onBuildObserver);
         this._globalState.stateManager.onUpdateRequiredObservable.remove(this._onUpdateRequiredObserver);
         this._globalState.onPreviewModeChanged.remove(this._onPreviewChangedObserver);

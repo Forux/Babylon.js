@@ -77,6 +77,9 @@ import { GeometryInterceptorBlock } from "core/Meshes/Node/Blocks/geometryInterc
 import { LatticeBlock } from "core/Meshes/Node/Blocks/Set/latticeBlock";
 import { AggregatorBlock } from "core/Meshes/Node/Blocks/Set/aggregatorBlock";
 import { CleanGeometryBlock } from "core/Meshes/Node/Blocks/cleanGeometryBlock";
+import { PointListBlock } from "core/Meshes/Node/Blocks/Sources/pointListBlock";
+import { SubdivideBlock } from "core/Meshes/Node/Blocks/subdivideBlock";
+import { GeometryEaseBlock } from "core/Meshes/Node/Blocks/geometryEaseBlock";
 
 /**
  * Static class for BlockTools
@@ -84,6 +87,12 @@ import { CleanGeometryBlock } from "core/Meshes/Node/Blocks/cleanGeometryBlock";
 export class BlockTools {
     public static GetBlockFromString(data: string) {
         switch (data) {
+            case "EaseBlock":
+                return new GeometryEaseBlock("Ease");
+            case "SubdivideBlock":
+                return new SubdivideBlock("Subdivide");
+            case "PointListBlock":
+                return new PointListBlock("Point List");
             case "CleanGeometryBlock":
                 return new CleanGeometryBlock("Clean");
             case "AggregatorBlock":

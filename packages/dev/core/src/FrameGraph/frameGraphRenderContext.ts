@@ -11,6 +11,7 @@ import type {
     Scene,
     FrameGraphRenderTarget,
     InternalTexture,
+    UtilityLayerRenderer,
     // eslint-disable-next-line import/no-internal-modules
 } from "core/index";
 import { Constants } from "../Engines/constants";
@@ -29,8 +30,10 @@ export class FrameGraphRenderContext extends FrameGraphContext {
     private _debugMessageHasBeenPushed = false;
     private _renderTargetIsBound = true;
     private readonly _copyTexture: CopyTextureToTexture;
+    private _depthTest: boolean;
+    private _depthWrite: boolean;
 
-    private static _IsObjectRenderer(value: Layer | ObjectRenderer): value is ObjectRenderer {
+    private static _IsObjectRenderer(value: Layer | ObjectRenderer | UtilityLayerRenderer): value is ObjectRenderer {
         return (value as ObjectRenderer).initRender !== undefined;
     }
 
@@ -183,6 +186,22 @@ export class FrameGraphRenderContext extends FrameGraphContext {
     }
 
     /**
+     * Saves the current depth states (depth testing and depth writing)
+     */
+    public saveDepthStates(): void {
+        this._depthTest = this._engine.getDepthBuffer();
+        this._depthWrite = this._engine.getDepthWrite();
+    }
+
+    /**
+     * Restores the depth states saved by saveDepthStates
+     */
+    public restoreDepthStates(): void {
+        this._engine.setDepthBuffer(this._depthTest);
+        this._engine.setDepthWrite(this._depthWrite);
+    }
+
+    /**
      * Sets the depth states for the current render target
      * @param depthTest If true, depth testing is enabled
      * @param depthWrite If true, depth writing is enabled
@@ -244,16 +263,18 @@ export class FrameGraphRenderContext extends FrameGraphContext {
      * @param viewportWidth The width of the viewport (optional for Layer, but mandatory for ObjectRenderer)
      * @param viewportHeight The height of the viewport (optional for Layer, but mandatory for ObjectRenderer)
      */
-    public render(object: Layer | ObjectRenderer, viewportWidth?: number, viewportHeight?: number): void {
+    public render(object: Layer | ObjectRenderer | UtilityLayerRenderer, viewportWidth?: number, viewportHeight?: number): void {
         if (FrameGraphRenderContext._IsObjectRenderer(object)) {
             if (object.shouldRender()) {
                 this._scene.incrementRenderId();
                 this._scene.resetCachedMaterial();
 
+                this._applyRenderTarget();
+
                 object.prepareRenderList();
+
                 object.initRender(viewportWidth!, viewportHeight!);
 
-                this._applyRenderTarget();
                 object.render();
 
                 object.finishRender();
@@ -297,7 +318,8 @@ export class FrameGraphRenderContext extends FrameGraphContext {
         }
     }
 
-    private _applyRenderTarget() {
+    /** @internal */
+    public _applyRenderTarget() {
         if (this._renderTargetIsBound) {
             return;
         }

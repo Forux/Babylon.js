@@ -581,7 +581,7 @@ export class EffectWrapper {
         if (this.options.extraInitializationsAsync) {
             extraInitializationsAsync = async () => {
                 waitImportsLoaded?.();
-                await this.options.extraInitializationsAsync;
+                await this.options.extraInitializationsAsync();
             };
         } else {
             extraInitializationsAsync = waitImportsLoaded;
@@ -654,6 +654,6 @@ export class EffectWrapper {
             this._onContextRestoredObserver = null;
         }
         this.onEffectCreatedObservable.clear();
-        this.effect.dispose();
+        this._drawWrapper.dispose(true);
     }
 }

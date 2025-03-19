@@ -1,6 +1,6 @@
 import { Tools } from "../Misc/tools";
 import { Observable } from "../Misc/observable";
-import type { Nullable } from "../types";
+import type { DeepImmutable, Nullable } from "../types";
 import { Scene } from "../scene";
 import { EngineStore } from "../Engines/engineStore";
 import type { AbstractMesh } from "../Meshes/abstractMesh";
@@ -781,7 +781,7 @@ function _getFileInfo(rootUrl: string, sceneSource: SceneSource): Nullable<IFile
  * Adds a new plugin to the list of registered plugins
  * @param plugin defines the plugin to add
  */
-export function registerSceneLoaderPlugin(plugin: ISceneLoaderPlugin | ISceneLoaderPluginAsync | ISceneLoaderPluginFactory): void {
+export function RegisterSceneLoaderPlugin(plugin: ISceneLoaderPlugin | ISceneLoaderPluginAsync | ISceneLoaderPluginFactory): void {
     if (typeof plugin.extensions === "string") {
         const extension = plugin.extensions;
         registeredPlugins[extension.toLowerCase()] = {
@@ -798,6 +798,58 @@ export function registerSceneLoaderPlugin(plugin: ISceneLoaderPlugin | ISceneLoa
             };
         });
     }
+}
+
+/**
+ * Adds a new plugin to the list of registered plugins
+ * @deprecated Please use {@link RegisterSceneLoaderPlugin} instead.
+ * @param plugin defines the plugin to add
+ */
+export function registerSceneLoaderPlugin(plugin: ISceneLoaderPlugin | ISceneLoaderPluginAsync | ISceneLoaderPluginFactory): void {
+    RegisterSceneLoaderPlugin(plugin);
+}
+
+/**
+ * Gets metadata for all currently registered scene loader plugins.
+ * @returns An array where each entry has metadata for a single scene loader plugin.
+ */
+export function GetRegisteredSceneLoaderPluginMetadata(): DeepImmutable<
+    Array<
+        Pick<ISceneLoaderPluginMetadata, "name"> & {
+            /**
+             * The extensions supported by the plugin.
+             */
+            extensions: ({
+                /**
+                 * The file extension.
+                 */
+                extension: string;
+            } & ISceneLoaderPluginExtensions[string])[];
+        }
+    >
+> {
+    return Array.from(
+        Object.entries(registeredPlugins).reduce((pluginMap, [extension, extensionRegistration]) => {
+            let pluginMetadata = pluginMap.get(extensionRegistration.plugin.name);
+            if (!pluginMetadata) {
+                pluginMap.set(extensionRegistration.plugin.name, (pluginMetadata = []));
+            }
+            pluginMetadata.push({ extension, isBinary: extensionRegistration.isBinary, mimeType: extensionRegistration.mimeType });
+            return pluginMap;
+        }, new Map<string, ({ extension: string } & ISceneLoaderPluginExtensions[string])[]>())
+    ).map(([name, extensions]) => ({ name, extensions }));
+}
+
+/**
+ * Import meshes into a scene
+ * @param source a string that defines the name of the scene file, or starts with "data:" following by the stringified version of the scene, or a File object, or an ArrayBufferView
+ * @param scene the instance of BABYLON.Scene to append to
+ * @param options an object that configures aspects of how the scene is loaded
+ * @returns The loaded list of imported meshes, particle systems, skeletons, and animation groups
+ */
+export function ImportMeshAsync(source: SceneSource, scene: Scene, options?: ImportMeshOptions): Promise<ISceneLoaderAsyncResult> {
+    const { meshNames, rootUrl = "", onProgress, pluginExtension, name, pluginOptions } = options ?? {};
+    return importMeshAsyncCore(meshNames, rootUrl, source, scene, onProgress, pluginExtension, name, pluginOptions);
 }
 
 async function importMeshAsync(
@@ -928,35 +980,40 @@ function importMeshAsyncCore(
     pluginOptions?: PluginOptions
 ): Promise<ISceneLoaderAsyncResult> {
     return new Promise((resolve, reject) => {
-        importMeshAsync(
-            meshNames,
-            rootUrl,
-            sceneFilename,
-            scene,
-            (meshes, particleSystems, skeletons, animationGroups, transformNodes, geometries, lights, spriteManagers) => {
-                resolve({
-                    meshes: meshes,
-                    particleSystems: particleSystems,
-                    skeletons: skeletons,
-                    animationGroups: animationGroups,
-                    transformNodes: transformNodes,
-                    geometries: geometries,
-                    lights: lights,
-                    spriteManagers: spriteManagers,
-                });
-            },
-            onProgress,
-            (scene, message, exception) => {
-                reject(exception || new Error(message));
-            },
-            pluginExtension,
-            name,
-            pluginOptions
-        );
+        try {
+            importMeshAsync(
+                meshNames,
+                rootUrl,
+                sceneFilename,
+                scene,
+                (meshes, particleSystems, skeletons, animationGroups, transformNodes, geometries, lights, spriteManagers) => {
+                    resolve({
+                        meshes: meshes,
+                        particleSystems: particleSystems,
+                        skeletons: skeletons,
+                        animationGroups: animationGroups,
+                        transformNodes: transformNodes,
+                        geometries: geometries,
+                        lights: lights,
+                        spriteManagers: spriteManagers,
+                    });
+                },
+                onProgress,
+                (scene, message, exception) => {
+                    reject(exception || new Error(message));
+                },
+                pluginExtension,
+                name,
+                pluginOptions
+            ).catch(reject);
+        } catch (error) {
+            reject(error);
+        }
     });
 }
 
-function loadScene(
+// This is the core implementation of load scene
+async function loadSceneImplAsync(
     rootUrl: string,
     sceneFilename: SceneSource = "",
     engine: Nullable<AbstractEngine> = EngineStore.LastCreatedEngine,
@@ -966,29 +1023,41 @@ function loadScene(
     pluginExtension: Nullable<string> = null,
     name = "",
     pluginOptions: PluginOptions = {}
-): void {
+): Promise<void> {
     if (!engine) {
         Tools.Error("No engine available");
         return;
     }
 
-    appendAsync(rootUrl, sceneFilename, new Scene(engine), onSuccess, onProgress, onError, pluginExtension, name, pluginOptions);
+    await appendSceneImplAsync(rootUrl, sceneFilename, new Scene(engine), onSuccess, onProgress, onError, pluginExtension, name, pluginOptions);
 }
 
 /**
  * Load a scene
- * @experimental
+ * @param source a string that defines the name of the scene file, or starts with "data:" following by the stringified version of the scene, or a File object, or an ArrayBufferView
+ * @param engine is the instance of BABYLON.Engine to use to create the scene
+ * @param options an object that configures aspects of how the scene is loaded
+ * @returns The loaded scene
+ */
+export function LoadSceneAsync(source: SceneSource, engine: AbstractEngine, options?: LoadOptions): Promise<Scene> {
+    const { rootUrl = "", onProgress, pluginExtension, name, pluginOptions } = options ?? {};
+    return loadSceneSharedAsync(rootUrl, source, engine, onProgress, pluginExtension, name, pluginOptions);
+}
+
+/**
+ * Load a scene
+ * @deprecated Please use {@link LoadSceneAsync} instead.
  * @param source a string that defines the name of the scene file, or starts with "data:" following by the stringified version of the scene, or a File object, or an ArrayBufferView
  * @param engine is the instance of BABYLON.Engine to use to create the scene
  * @param options an object that configures aspects of how the scene is loaded
  * @returns The loaded scene
  */
 export function loadSceneAsync(source: SceneSource, engine: AbstractEngine, options?: LoadOptions): Promise<Scene> {
-    const { rootUrl = "", onProgress, pluginExtension, name, pluginOptions } = options ?? {};
-    return loadSceneAsyncCore(rootUrl, source, engine, onProgress, pluginExtension, name, pluginOptions);
+    return LoadSceneAsync(source, engine, options);
 }
 
-function loadSceneAsyncCore(
+// This function is shared between the new module level loadSceneAsync and the legacy SceneLoader.LoadAsync
+function loadSceneSharedAsync(
     rootUrl: string,
     sceneFilename?: SceneSource,
     engine?: Nullable<AbstractEngine>,
@@ -998,7 +1067,7 @@ function loadSceneAsyncCore(
     pluginOptions?: PluginOptions
 ): Promise<Scene> {
     return new Promise((resolve, reject) => {
-        loadScene(
+        loadSceneImplAsync(
             rootUrl,
             sceneFilename,
             engine,
@@ -1016,7 +1085,8 @@ function loadSceneAsyncCore(
     });
 }
 
-async function appendAsync(
+// This is the core implementation of append scene
+async function appendSceneImplAsync(
     rootUrl: string,
     sceneFilename: SceneSource = "",
     scene: Nullable<Scene> = EngineStore.LastCreatedScene,
@@ -1124,17 +1194,30 @@ async function appendAsync(
 
 /**
  * Append a scene
- * @experimental
  * @param source a string that defines the name of the scene file, or starts with "data:" following by the stringified version of the scene, or a File object, or an ArrayBufferView
  * @param scene is the instance of BABYLON.Scene to append to
  * @param options an object that configures aspects of how the scene is loaded
+ * @returns A promise that resolves when the scene is appended
  */
-export async function appendSceneAsync(source: SceneSource, scene: Scene, options?: LoadAssetContainerOptions): Promise<void> {
+export async function AppendSceneAsync(source: SceneSource, scene: Scene, options?: AppendOptions): Promise<void> {
     const { rootUrl = "", onProgress, pluginExtension, name, pluginOptions } = options ?? {};
-    await appendSceneAsyncCore(rootUrl, source, scene, onProgress, pluginExtension, name, pluginOptions);
+    await appendSceneSharedAsync(rootUrl, source, scene, onProgress, pluginExtension, name, pluginOptions);
 }
 
-function appendSceneAsyncCore(
+/**
+ * Append a scene
+ * @deprecated Please use {@link AppendSceneAsync} instead.
+ * @param source a string that defines the name of the scene file, or starts with "data:" following by the stringified version of the scene, or a File object, or an ArrayBufferView
+ * @param scene is the instance of BABYLON.Scene to append to
+ * @param options an object that configures aspects of how the scene is loaded
+ * @returns A promise that resolves when the scene is appended
+ */
+export function appendSceneAsync(source: SceneSource, scene: Scene, options?: AppendOptions): Promise<void> {
+    return AppendSceneAsync(source, scene, options);
+}
+
+// This function is shared between the new module level appendSceneAsync and the legacy SceneLoader.AppendAsync
+function appendSceneSharedAsync(
     rootUrl: string,
     sceneFilename?: SceneSource,
     scene?: Nullable<Scene>,
@@ -1144,25 +1227,30 @@ function appendSceneAsyncCore(
     pluginOptions?: PluginOptions
 ): Promise<Scene> {
     return new Promise((resolve, reject) => {
-        appendAsync(
-            rootUrl,
-            sceneFilename,
-            scene,
-            (scene) => {
-                resolve(scene);
-            },
-            onProgress,
-            (scene, message, exception) => {
-                reject(exception || new Error(message));
-            },
-            pluginExtension,
-            name,
-            pluginOptions
-        );
+        try {
+            appendSceneImplAsync(
+                rootUrl,
+                sceneFilename,
+                scene,
+                (scene) => {
+                    resolve(scene);
+                },
+                onProgress,
+                (scene, message, exception) => {
+                    reject(exception || new Error(message));
+                },
+                pluginExtension,
+                name,
+                pluginOptions
+            ).catch(reject);
+        } catch (error) {
+            reject(error);
+        }
     });
 }
 
-async function loadAssetContainerCoreAsync(
+// This is the core implementation of load asset container
+async function loadAssetContainerImplAsync(
     rootUrl: string,
     sceneFilename: SceneSource = "",
     scene: Nullable<Scene> = EngineStore.LastCreatedScene,
@@ -1265,18 +1353,30 @@ async function loadAssetContainerCoreAsync(
 
 /**
  * Load a scene into an asset container
- * @experimental
+ * @param source a string that defines the name of the scene file, or starts with "data:" following by the stringified version of the scene, or a File object, or an ArrayBufferView
+ * @param scene is the instance of Scene to append to
+ * @param options an object that configures aspects of how the scene is loaded
+ * @returns The loaded asset container
+ */
+export function LoadAssetContainerAsync(source: SceneSource, scene: Scene, options?: LoadAssetContainerOptions): Promise<AssetContainer> {
+    const { rootUrl = "", onProgress, pluginExtension, name, pluginOptions } = options ?? {};
+    return loadAssetContainerSharedAsync(rootUrl, source, scene, onProgress, pluginExtension, name, pluginOptions);
+}
+
+/**
+ * Load a scene into an asset container
+ * @deprecated Please use {@link LoadAssetContainerAsync} instead.
  * @param source a string that defines the name of the scene file, or starts with "data:" following by the stringified version of the scene, or a File object, or an ArrayBufferView
  * @param scene is the instance of Scene to append to
  * @param options an object that configures aspects of how the scene is loaded
  * @returns The loaded asset container
  */
 export function loadAssetContainerAsync(source: SceneSource, scene: Scene, options?: LoadAssetContainerOptions): Promise<AssetContainer> {
-    const { rootUrl = "", onProgress, pluginExtension, name, pluginOptions } = options ?? {};
-    return internalLoadAssetContainerAsync(rootUrl, source, scene, onProgress, pluginExtension, name, pluginOptions);
+    return LoadAssetContainerAsync(source, scene, options);
 }
 
-function internalLoadAssetContainerAsync(
+// This function is shared between the new module level loadAssetContainerAsync and the legacy SceneLoader.LoadAssetContainerAsync
+function loadAssetContainerSharedAsync(
     rootUrl: string,
     sceneFilename?: SceneSource,
     scene?: Nullable<Scene>,
@@ -1286,25 +1386,30 @@ function internalLoadAssetContainerAsync(
     pluginOptions?: PluginOptions
 ): Promise<AssetContainer> {
     return new Promise((resolve, reject) => {
-        loadAssetContainerCoreAsync(
-            rootUrl,
-            sceneFilename,
-            scene,
-            (assets) => {
-                resolve(assets);
-            },
-            onProgress,
-            (scene, message, exception) => {
-                reject(exception || new Error(message));
-            },
-            pluginExtension,
-            name,
-            pluginOptions
-        );
+        try {
+            loadAssetContainerImplAsync(
+                rootUrl,
+                sceneFilename,
+                scene,
+                (assets) => {
+                    resolve(assets);
+                },
+                onProgress,
+                (scene, message, exception) => {
+                    reject(exception || new Error(message));
+                },
+                pluginExtension,
+                name,
+                pluginOptions
+            ).catch(reject);
+        } catch (error) {
+            reject(error);
+        }
     });
 }
 
-function importAnimations(
+// This is the core implementation of import animations
+async function importAnimationsImplAsync(
     rootUrl: string,
     sceneFilename: SceneSource = "",
     scene: Nullable<Scene> = EngineStore.LastCreatedScene,
@@ -1317,7 +1422,7 @@ function importAnimations(
     pluginExtension: Nullable<string> = null,
     name = "",
     pluginOptions: PluginOptions = {}
-): void {
+): Promise<void> {
     if (!scene) {
         Logger.Error("No scene available to load animations to");
         return;
@@ -1379,22 +1484,35 @@ function importAnimations(
         }
     };
 
-    loadAssetContainerCoreAsync(rootUrl, sceneFilename, scene, onAssetContainerLoaded, onProgress, onError, pluginExtension, name, pluginOptions);
+    await loadAssetContainerImplAsync(rootUrl, sceneFilename, scene, onAssetContainerLoaded, onProgress, onError, pluginExtension, name, pluginOptions);
 }
 
 /**
  * Import animations from a file into a scene
- * @experimental
  * @param source a string that defines the name of the scene file, or starts with "data:" following by the stringified version of the scene, or a File object, or an ArrayBufferView
  * @param scene is the instance of BABYLON.Scene to append to
  * @param options an object that configures aspects of how the scene is loaded
+ * @returns A promise that resolves when the animations are imported
  */
-export async function importAnimationsAsync(source: SceneSource, scene: Scene, options?: ImportAnimationsOptions): Promise<void> {
+export async function ImportAnimationsAsync(source: SceneSource, scene: Scene, options?: ImportAnimationsOptions): Promise<void> {
     const { rootUrl = "", overwriteAnimations, animationGroupLoadingMode, targetConverter, onProgress, pluginExtension, name, pluginOptions } = options ?? {};
-    await importAnimationsAsyncCore(rootUrl, source, scene, overwriteAnimations, animationGroupLoadingMode, targetConverter, onProgress, pluginExtension, name, pluginOptions);
+    await importAnimationsSharedAsync(rootUrl, source, scene, overwriteAnimations, animationGroupLoadingMode, targetConverter, onProgress, pluginExtension, name, pluginOptions);
 }
 
-function importAnimationsAsyncCore(
+/**
+ * Import animations from a file into a scene
+ * @deprecated Please use {@link ImportAnimationsAsync} instead.
+ * @param source a string that defines the name of the scene file, or starts with "data:" following by the stringified version of the scene, or a File object, or an ArrayBufferView
+ * @param scene is the instance of BABYLON.Scene to append to
+ * @param options an object that configures aspects of how the scene is loaded
+ * @returns A promise that resolves when the animations are imported
+ */
+export function importAnimationsAsync(source: SceneSource, scene: Scene, options?: ImportAnimationsOptions): Promise<void> {
+    return ImportAnimationsAsync(source, scene, options);
+}
+
+// This function is shared between the new module level importAnimationsAsync and the legacy SceneLoader.ImportAnimationsAsync
+function importAnimationsSharedAsync(
     rootUrl: string,
     sceneFilename?: SceneSource,
     scene?: Nullable<Scene>,
@@ -1407,30 +1525,36 @@ function importAnimationsAsyncCore(
     pluginOptions?: PluginOptions
 ): Promise<Scene> {
     return new Promise((resolve, reject) => {
-        importAnimations(
-            rootUrl,
-            sceneFilename,
-            scene,
-            overwriteAnimations,
-            animationGroupLoadingMode,
-            targetConverter,
-            (scene) => {
-                resolve(scene);
-            },
-            onProgress,
-            (scene, message, exception) => {
-                reject(exception || new Error(message));
-            },
-            pluginExtension,
-            name,
-            pluginOptions
-        );
+        try {
+            importAnimationsImplAsync(
+                rootUrl,
+                sceneFilename,
+                scene,
+                overwriteAnimations,
+                animationGroupLoadingMode,
+                targetConverter,
+                (scene) => {
+                    resolve(scene);
+                },
+                onProgress,
+                (scene, message, exception) => {
+                    reject(exception || new Error(message));
+                },
+                pluginExtension,
+                name,
+                pluginOptions
+            ).catch(reject);
+        } catch (error) {
+            reject(error);
+        }
     });
 }
 
 /**
  * Class used to load scene from various file formats using registered plugins
  * @see https://doc.babylonjs.com/features/featuresDeepDive/importers/loadingFileTypes
+ * @deprecated The module level functions are more efficient for bundler tree shaking and allow plugin options to be passed through. Future improvements to scene loading will primarily be in the module level functions. The SceneLoader class will remain available, but it will be beneficial to prefer the module level functions.
+ * @see {@link ImportMeshAsync}, {@link LoadSceneAsync}, {@link AppendSceneAsync}, {@link ImportAnimationsAsync}, {@link LoadAssetContainerAsync}
  */
 export class SceneLoader {
     /**
@@ -1540,7 +1664,7 @@ export class SceneLoader {
      * @param plugin defines the plugin to add
      */
     public static RegisterPlugin(plugin: ISceneLoaderPlugin | ISceneLoaderPluginAsync | ISceneLoaderPluginFactory): void {
-        registerSceneLoaderPlugin(plugin);
+        RegisterSceneLoaderPlugin(plugin);
     }
 
     /**
@@ -1554,7 +1678,7 @@ export class SceneLoader {
      * @param onError a callback with the scene, a message, and possibly an exception when import fails
      * @param pluginExtension the extension used to determine the plugin
      * @param name defines the name of the file, if the data is binary
-     * @deprecated Please use ImportMeshAsync instead
+     * @deprecated Please use the module level {@link ImportMeshAsync} instead
      */
     public static ImportMesh(
         meshNames: string | readonly string[] | null | undefined,
@@ -1567,7 +1691,9 @@ export class SceneLoader {
         pluginExtension?: Nullable<string>,
         name?: string
     ): void {
-        importMeshAsync(meshNames, rootUrl, sceneFilename, scene, onSuccess, onProgress, onError, pluginExtension, name);
+        importMeshAsync(meshNames, rootUrl, sceneFilename, scene, onSuccess, onProgress, onError, pluginExtension, name).catch((error) =>
+            onError?.(EngineStore.LastCreatedScene!, error?.message, error)
+        );
     }
 
     /**
@@ -1580,6 +1706,7 @@ export class SceneLoader {
      * @param pluginExtension the extension used to determine the plugin
      * @param name defines the name of the file
      * @returns The loaded list of imported meshes, particle systems, skeletons, and animation groups
+     * @deprecated Please use the module level {@link ImportMeshAsync} instead
      */
     public static ImportMeshAsync(
         meshNames: string | readonly string[] | null | undefined,
@@ -1603,7 +1730,7 @@ export class SceneLoader {
      * @param onError a callback with the scene, a message, and possibly an exception when import fails
      * @param pluginExtension the extension used to determine the plugin
      * @param name defines the filename, if the data is binary
-     * @deprecated Please use LoadAsync instead
+     * @deprecated Please use the module level {@link LoadSceneAsync} instead
      */
     public static Load(
         rootUrl: string,
@@ -1615,7 +1742,9 @@ export class SceneLoader {
         pluginExtension?: Nullable<string>,
         name?: string
     ) {
-        loadScene(rootUrl, sceneFilename, engine, onSuccess, onProgress, onError, pluginExtension, name);
+        loadSceneImplAsync(rootUrl, sceneFilename, engine, onSuccess, onProgress, onError, pluginExtension, name).catch((error) =>
+            onError?.(EngineStore.LastCreatedScene!, error?.message, error)
+        );
     }
 
     /**
@@ -1627,6 +1756,7 @@ export class SceneLoader {
      * @param pluginExtension the extension used to determine the plugin
      * @param name defines the filename, if the data is binary
      * @returns The loaded scene
+     * @deprecated Please use the module level {@link LoadSceneAsync} instead
      */
     public static LoadAsync(
         rootUrl: string,
@@ -1636,7 +1766,7 @@ export class SceneLoader {
         pluginExtension?: Nullable<string>,
         name?: string
     ): Promise<Scene> {
-        return loadSceneAsyncCore(rootUrl, sceneFilename, engine, onProgress, pluginExtension, name);
+        return loadSceneSharedAsync(rootUrl, sceneFilename, engine, onProgress, pluginExtension, name);
     }
 
     /**
@@ -1649,7 +1779,7 @@ export class SceneLoader {
      * @param onError a callback with the scene, a message, and possibly an exception when import fails
      * @param pluginExtension the extension used to determine the plugin
      * @param name defines the name of the file, if the data is binary
-     * @deprecated Please use AppendAsync instead
+     * @deprecated Please use the module level {@link AppendSceneAsync} instead
      */
     public static Append(
         rootUrl: string,
@@ -1661,7 +1791,9 @@ export class SceneLoader {
         pluginExtension?: Nullable<string>,
         name?: string
     ) {
-        appendAsync(rootUrl, sceneFilename, scene, onSuccess, onProgress, onError, pluginExtension, name);
+        appendSceneImplAsync(rootUrl, sceneFilename, scene, onSuccess, onProgress, onError, pluginExtension, name).catch((error) =>
+            onError?.((scene ?? EngineStore.LastCreatedScene)!, error?.message, error)
+        );
     }
 
     /**
@@ -1673,6 +1805,7 @@ export class SceneLoader {
      * @param pluginExtension the extension used to determine the plugin
      * @param name defines the name of the file, if the data is binary
      * @returns The given scene
+     * @deprecated Please use the module level {@link AppendSceneAsync} instead
      */
     public static AppendAsync(
         rootUrl: string,
@@ -1682,7 +1815,7 @@ export class SceneLoader {
         pluginExtension?: Nullable<string>,
         name?: string
     ): Promise<Scene> {
-        return appendSceneAsyncCore(rootUrl, sceneFilename, scene, onProgress, pluginExtension, name);
+        return appendSceneSharedAsync(rootUrl, sceneFilename, scene, onProgress, pluginExtension, name);
     }
 
     /**
@@ -1695,7 +1828,7 @@ export class SceneLoader {
      * @param onError a callback with the scene, a message, and possibly an exception when import fails
      * @param pluginExtension the extension used to determine the plugin
      * @param name defines the filename, if the data is binary
-     * @deprecated Please use LoadAssetContainerAsync instead
+     * @deprecated Please use the module level {@link LoadAssetContainerAsync} instead
      */
     public static LoadAssetContainer(
         rootUrl: string,
@@ -1707,7 +1840,9 @@ export class SceneLoader {
         pluginExtension?: Nullable<string>,
         name?: string
     ) {
-        loadAssetContainerCoreAsync(rootUrl, sceneFilename, scene, onSuccess, onProgress, onError, pluginExtension, name);
+        loadAssetContainerImplAsync(rootUrl, sceneFilename, scene, onSuccess, onProgress, onError, pluginExtension, name).catch((error) =>
+            onError?.((scene ?? EngineStore.LastCreatedScene)!, error?.message, error)
+        );
     }
 
     /**
@@ -1719,6 +1854,7 @@ export class SceneLoader {
      * @param pluginExtension the extension used to determine the plugin
      * @param name defines the filename, if the data is binary
      * @returns The loaded asset container
+     * @deprecated Please use the module level {@link LoadAssetContainerAsync} instead
      */
     public static LoadAssetContainerAsync(
         rootUrl: string,
@@ -1728,7 +1864,7 @@ export class SceneLoader {
         pluginExtension?: Nullable<string>,
         name?: string
     ): Promise<AssetContainer> {
-        return internalLoadAssetContainerAsync(rootUrl, sceneFilename, scene, onProgress, pluginExtension, name);
+        return loadAssetContainerSharedAsync(rootUrl, sceneFilename, scene, onProgress, pluginExtension, name);
     }
 
     /**
@@ -1744,7 +1880,7 @@ export class SceneLoader {
      * @param onError a callback with the scene, a message, and possibly an exception when import fails
      * @param pluginExtension the extension used to determine the plugin
      * @param name defines the filename, if the data is binary
-     * @deprecated Please use ImportAnimationsAsync instead
+     * @deprecated Please use the module level {@link ImportAnimationsAsync} instead
      */
     public static ImportAnimations(
         rootUrl: string,
@@ -1759,7 +1895,19 @@ export class SceneLoader {
         pluginExtension?: Nullable<string>,
         name?: string
     ): void {
-        importAnimations(rootUrl, sceneFilename, scene, overwriteAnimations, animationGroupLoadingMode, targetConverter, onSuccess, onProgress, onError, pluginExtension, name);
+        importAnimationsImplAsync(
+            rootUrl,
+            sceneFilename,
+            scene,
+            overwriteAnimations,
+            animationGroupLoadingMode,
+            targetConverter,
+            onSuccess,
+            onProgress,
+            onError,
+            pluginExtension,
+            name
+        ).catch((error) => onError?.((scene ?? EngineStore.LastCreatedScene)!, error?.message, error));
     }
 
     /**
@@ -1776,6 +1924,7 @@ export class SceneLoader {
      * @param pluginExtension the extension used to determine the plugin
      * @param name defines the filename, if the data is binary
      * @returns the updated scene with imported animations
+     * @deprecated Please use the module level {@link ImportAnimationsAsync} instead
      */
     public static ImportAnimationsAsync(
         rootUrl: string,
@@ -1792,6 +1941,6 @@ export class SceneLoader {
         pluginExtension?: Nullable<string>,
         name?: string
     ): Promise<Scene> {
-        return importAnimationsAsyncCore(rootUrl, sceneFilename, scene, overwriteAnimations, animationGroupLoadingMode, targetConverter, onProgress, pluginExtension, name);
+        return importAnimationsSharedAsync(rootUrl, sceneFilename, scene, overwriteAnimations, animationGroupLoadingMode, targetConverter, onProgress, pluginExtension, name);
     }
 }

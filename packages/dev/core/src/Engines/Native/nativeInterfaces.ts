@@ -3,7 +3,7 @@ import type { DeviceType } from "../../DeviceInput/InputDevices/deviceEnums";
 import type { IDeviceInputSystem } from "../../DeviceInput/inputInterfaces";
 import type { InternalTexture } from "../../Materials/Textures/internalTexture";
 import type { Nullable } from "../../types";
-import type { ICanvas, IImage } from "../ICanvas";
+import type { ICanvas, IImage, IPath2D } from "../ICanvas";
 import type { NativeData, NativeDataStream } from "./nativeDataStream";
 
 export type NativeTexture = NativeData;
@@ -11,6 +11,12 @@ export type NativeFramebuffer = NativeData;
 export type NativeVertexArrayObject = NativeData;
 export type NativeProgram = NativeData;
 export type NativeUniform = NativeData;
+
+/** @internal */
+export type NativeFrameStats = {
+    /** @internal */
+    gpuTimeNs: number;
+};
 
 /** @internal */
 export interface INativeEngine {
@@ -97,6 +103,8 @@ export interface INativeEngine {
 
     setCommandDataStream(dataStream: NativeDataStream): void;
     submitCommands(): void;
+
+    populateFrameStats?(stats: NativeFrameStats): void;
 }
 
 /** @internal */
@@ -370,6 +378,12 @@ interface INativeImageConstructor {
 }
 
 /** @internal */
+interface INativePath2DConstructor {
+    prototype: IPath2D;
+    new (d?: string): IPath2D;
+}
+
+/** @internal */
 interface IDeviceInputSystemConstructor {
     prototype: IDeviceInputSystem;
     new (
@@ -406,6 +420,7 @@ export interface INative {
     Camera: INativeCameraConstructor;
     Canvas: INativeCanvasConstructor;
     Image: INativeImageConstructor;
+    Path2D: INativePath2DConstructor;
     XMLHttpRequest: any; // TODO: how to do this?
     DeviceInputSystem: IDeviceInputSystemConstructor;
     NativeDataStream: INativeDataStreamConstructor;

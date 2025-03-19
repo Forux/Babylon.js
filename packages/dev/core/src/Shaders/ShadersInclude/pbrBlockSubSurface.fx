@@ -180,6 +180,9 @@ struct subSurfaceOutParams
                 #if defined(REALTIME_FILTERING)
                     , in samplerCube reflectionSampler
                     , in vec2 vReflectionFilteringInfo
+                    #ifdef IBL_CDF_FILTERING
+                        , in sampler2D icdfSampler
+                    #endif
                 #endif
             #endif
             #ifdef USEIRRADIANCEMAP
@@ -459,7 +462,7 @@ struct subSurfaceOutParams
         #endif
 
         // In theory T = 1 - R.
-        refractionTransmittance *= 1.0 - outParams.specularEnvironmentReflectance;
+        refractionTransmittance *= 1.0 - max(outParams.specularEnvironmentReflectance.r, max(outParams.specularEnvironmentReflectance.g, outParams.specularEnvironmentReflectance.b));
 
         #if DEBUGMODE > 0
             outParams.refractionTransmittance = refractionTransmittance;
@@ -490,7 +493,11 @@ struct subSurfaceOutParams
 
         #if defined(USESPHERICALFROMREFLECTIONMAP)
             #if defined(REALTIME_FILTERING)
-                vec3 refractionIrradiance = irradiance(reflectionSampler, -irradianceVector, vReflectionFilteringInfo);
+                vec3 refractionIrradiance = irradiance(reflectionSampler, -irradianceVector, vReflectionFilteringInfo
+                #ifdef IBL_CDF_FILTERING
+                    , icdfSampler
+                #endif
+                );
             #else
                 vec3 refractionIrradiance = computeEnvironmentIrradiance(-irradianceVector);
             #endif

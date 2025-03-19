@@ -3,7 +3,7 @@ import type { GlobalState } from "../globalState";
 import { RuntimeMode } from "../globalState";
 import { Utilities } from "../tools/utilities";
 import { DownloadManager } from "../tools/downloadManager";
-import { Engine, EngineStore, WebGPUEngine } from "@dev/core";
+import { Engine, EngineStore, WebGPUEngine, LastCreatedAudioEngine } from "@dev/core";
 
 import type { Nullable, Scene } from "@dev/core";
 
@@ -25,6 +25,7 @@ export class RenderingComponent extends React.Component<IRenderingComponentProps
     private _downloadManager: DownloadManager;
     private _babylonToolkitWasLoaded = false;
     private _tmpErrorEvent?: ErrorEvent;
+    private _inspectorFallback: boolean = false;
 
     public constructor(props: IRenderingComponentProps) {
         super(props);
@@ -50,19 +51,30 @@ export class RenderingComponent extends React.Component<IRenderingComponentProps
             this._downloadManager.download(this._engine);
         });
 
-        this.props.globalState.onInspectorRequiredObservable.add((state) => {
+        this.props.globalState.onInspectorRequiredObservable.add(() => {
             if (!this._scene) {
                 return;
             }
 
-            if (state) {
+            // support for older versions
+            // openedPanes was not available until 7.44.0, so we need to fallback to the inspector's _OpenedPane property
+            if (this._scene.debugLayer.openedPanes === undefined) {
+                this._inspectorFallback = true;
+            }
+
+            // fallback?
+            if (this._inspectorFallback) {
+                const debugLayer: any = this._scene.debugLayer;
+                debugLayer.openedPanes = debugLayer.BJSINSPECTOR?.Inspector?._OpenedPane || 0;
+            }
+
+            if (this._scene.debugLayer.openedPanes === 0) {
                 this._scene.debugLayer.show({
                     embedMode: true,
                 });
             } else {
                 this._scene.debugLayer.hide();
             }
-            this.props.globalState.inspectorIsOpened = state;
         });
 
         this.props.globalState.onFullcreenRequiredObservable.add(() => {
@@ -121,6 +133,10 @@ export class RenderingComponent extends React.Component<IRenderingComponentProps
         try {
             while (EngineStore.Instances.length) {
                 EngineStore.Instances[0].dispose();
+            }
+            let audioEngine;
+            while ((audioEngine = LastCreatedAudioEngine())) {
+                audioEngine.dispose();
             }
         } catch (ex) {
             // just ignore
@@ -201,6 +217,12 @@ export class RenderingComponent extends React.Component<IRenderingComponentProps
                 havokInit = "globalThis.HK = await HavokPhysics();";
             }
 
+            let audioInit = "";
+            if (code.includes("BABYLON.Sound")) {
+                audioInit =
+                    "BABYLON.AbstractEngine.audioEngine = BABYLON.AbstractEngine.AudioEngineFactory(window.engine.getRenderingCanvas(), window.engine.getAudioContext(), window.engine.getAudioDestination());";
+            }
+
             const babylonToolkit =
                 !this._babylonToolkitWasLoaded &&
                 (code.includes("BABYLON.Toolkit.SceneManager.InitializePlayground") ||
@@ -262,7 +284,12 @@ export class RenderingComponent extends React.Component<IRenderingComponentProps
                         }
                     }
 
-                    window.engine = await asyncEngineCreation();`;
+                    window.engine = await asyncEngineCreation();
+                    
+                    const engineOptions = window.engine.getCreationOptions();
+                    if (engineOptions.audioEngine !== false) {
+                        ${audioInit}
+                    }`;
                 code += "\r\nif (!engine) throw 'engine should not be null.';";
 
                 globalObject.startRenderLoop = (engine: Engine, canvas: HTMLCanvasElement) => {
@@ -359,7 +386,7 @@ export class RenderingComponent extends React.Component<IRenderingComponentProps
             }
 
             if (this._engine.scenes[0] && displayInspector) {
-                this.props.globalState.onInspectorRequiredObservable.notifyObservers(true);
+                this.props.globalState.onInspectorRequiredObservable.notifyObservers();
             }
 
             if (checkCamera && this._engine.scenes[0].activeCamera == null) {
@@ -370,7 +397,7 @@ export class RenderingComponent extends React.Component<IRenderingComponentProps
             } else if (globalObject.scene.then) {
                 globalObject.scene.then(() => {
                     if (this._engine!.scenes[0] && displayInspector) {
-                        this.props.globalState.onInspectorRequiredObservable.notifyObservers(true);
+                        this.props.globalState.onInspectorRequiredObservable.notifyObservers();
                     }
                 });
             } else {

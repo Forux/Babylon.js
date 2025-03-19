@@ -44,12 +44,13 @@
 
     .nge-right-panel {
         height: 100%;
-        overflow-y: auto;
+        overflow: hidden;
     }
 
     #propertyTab {
         grid-row: 1;
         grid-column: 1;
+        overflow-y: auto;
     }
 
     .button {
@@ -75,6 +76,11 @@
             justify-content: stretch;
             text-align: center;
         }
+    }
+
+    .nge-preview-part {
+        display: grid;
+        grid-template-rows: 40px 1fr 40px;
     }
 
     #preview-mesh-bar {
@@ -269,14 +275,14 @@
         border-top: 1px solid rgb(85, 85, 85);
         width: 100%;
         display: grid;
+        grid-row: 2;
         grid-template-columns: 100%;
         grid-template-rows: 100%;
         outline: 0 !important;
         padding: 0 !important;
         user-select: none;
         overflow: hidden;
-        aspect-ratio: 1 / 1;
-        height: auto;
+        height: 100%;
 
         #preview-canvas {
             width: 100%;
@@ -308,29 +314,6 @@
         }
     }
 
-    .blocker {
-        visibility: hidden;
-        position: absolute;
-        width: calc(100% - 40px);
-        height: 100%;
-        top: 0;
-        left: 0;
-
-        background: rgba(20, 20, 20, 0.95);
-        font-family: "acumin-pro";
-        color: white;
-        font-size: 24px;
-
-        display: grid;
-        align-content: center;
-        justify-content: center;
-
-        user-select: none;
-
-        padding: 20px;
-        text-align: center;
-    }
-
     #log-console {
         grid-row: 2;
         grid-column: 3;
@@ -338,5 +321,33 @@
 
     .InputBlock {
         width: 250px;
+    }
+}
+
+.blocker {
+    position: absolute;
+    width: calc(100% - 40px);
+    height: 100%;
+    top: 0;
+    left: 0;
+
+    background: rgba(20, 20, 20, 0.95);
+    font-family: "acumin-pro";
+    color: white;
+    font-size: 24px;
+
+    display: none;
+    align-content: center;
+    justify-content: center;
+
+    user-select: none;
+
+    padding: 20px;
+    text-align: center;
+}
+
+@media screen and (max-width: 899px) {
+    .blocker {
+        display: grid;
     }
 }

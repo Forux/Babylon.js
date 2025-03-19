@@ -66,4 +66,6 @@ export * from "./colorConverterBlock";
 export * from "./loopBlock";
 export * from "./storageReadBlock";
 export * from "./storageWriteBlock";
+export * from "./matrixSplitterBlock";
 export * from "./GaussianSplatting/index";
+export * from "./debugBlock";

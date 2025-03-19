@@ -494,6 +494,11 @@ export class PostProcess {
     }
 
     /**
+     * An event triggered when the post-process is disposed
+     */
+    public readonly onDisposeObservable = new Observable<void>();
+
+    /**
      * The input texture for this post process and the output texture of the previous post process. When added to a pipeline the previous post process will
      * render it's output into this texture and this texture will be used as textureSampler in the fragment shader of this post process.
      */
@@ -541,6 +546,7 @@ export class PostProcess {
     }
 
     protected readonly _effectWrapper: EffectWrapper;
+    protected readonly _useExistingThinPostProcess: boolean;
 
     /**
      * Creates a new instance PostProcess
@@ -640,7 +646,7 @@ export class PostProcess {
             }
         }
 
-        const useExistingThinPostProcess = !!effectWrapper;
+        this._useExistingThinPostProcess = !!effectWrapper;
 
         this._effectWrapper =
             effectWrapper ??
@@ -700,7 +706,7 @@ export class PostProcess {
 
         this._indexParameters = indexParameters;
 
-        if (!useExistingThinPostProcess) {
+        if (!this._useExistingThinPostProcess) {
             this._webGPUReady = this._shaderLanguage === ShaderLanguage.WGSL;
 
             const importPromises: Array<Promise<any>> = [];
@@ -929,15 +935,15 @@ export class PostProcess {
     /**
      * Activates the post process by intializing the textures to be used when executed. Notifies onActivateObservable.
      * When this post process is used in a pipeline, this is call will bind the input texture of this post process to the output of the previous.
-     * @param camera The camera that will be used in the post process. This camera will be used when calling onActivateObservable.
+     * @param cameraOrScene The camera that will be used in the post process. This camera will be used when calling onActivateObservable. You can also pass the scene if no camera is available.
      * @param sourceTexture The source texture to be inspected to get the width and height if not specified in the post process constructor. (default: null)
      * @param forceDepthStencil If true, a depth and stencil buffer will be generated. (default: false)
      * @returns The render target wrapper that was bound to be written to.
      */
-    public activate(camera: Nullable<Camera>, sourceTexture: Nullable<InternalTexture> = null, forceDepthStencil?: boolean): RenderTargetWrapper {
-        camera = camera || this._camera;
+    public activate(cameraOrScene: Nullable<Camera> | Scene, sourceTexture: Nullable<InternalTexture> = null, forceDepthStencil?: boolean): RenderTargetWrapper {
+        const camera = cameraOrScene === null || (cameraOrScene as Camera).cameraRigMode !== undefined ? (cameraOrScene as Camera) || this._camera : null;
 
-        const scene = camera.getScene();
+        const scene = camera?.getScene() ?? (cameraOrScene as Scene);
         const engine = scene.getEngine();
         const maxSize = engine.getCaps().maxTextureSize;
 
@@ -1003,7 +1009,7 @@ export class PostProcess {
 
         this._engine._debugInsertMarker?.(`post process ${this.name} input`);
 
-        this.onActivateObservable.notifyObservers(camera);
+        this.onActivateObservable.notifyObservers(camera!);
 
         // Clear
         if (this.autoClear && (this.alphaMode === Constants.ALPHA_DISABLE || this.forceAutoClearInAlphaMode)) {
@@ -1129,6 +1135,10 @@ export class PostProcess {
     public dispose(camera?: Camera): void {
         camera = camera || this._camera;
 
+        if (!this._useExistingThinPostProcess) {
+            this._effectWrapper.dispose();
+        }
+
         this._disposeTextures();
 
         let index;
@@ -1151,6 +1161,8 @@ export class PostProcess {
         if (index !== -1) {
             this._engine.postProcesses.splice(index, 1);
         }
+
+        this.onDisposeObservable.notifyObservers();
 
         if (!camera) {
             return;

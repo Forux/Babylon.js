@@ -48,7 +48,7 @@ import {
     _CommonInit,
 } from "./engine.common";
 import { PerfCounter } from "../Misc/perfCounter";
-import "../Audio/audioEngine";
+import { _retryWithInterval } from "core/Misc/timingTools";
 
 /**
  * The engine class is responsible for interfacing with all lower-level APIs such as WebGL and Audio
@@ -375,12 +375,6 @@ export class Engine extends ThinEngine {
         this._features.supportRenderPasses = true;
 
         options = this._creationOptions;
-
-        if ((<any>canvasOrContext).getContext) {
-            const canvas = <HTMLCanvasElement>canvasOrContext;
-
-            this._sharedInit(canvas);
-        }
     }
 
     protected override _initGLContext(): void {
@@ -641,30 +635,8 @@ export class Engine extends ThinEngine {
         }
     }
 
-    public override _renderLoop(): void {
-        // Reset the frame handler before rendering a frame to determine if a new frame has been queued.
-        this._frameHandler = 0;
-
-        if (!this._contextWasLost) {
-            let shouldRender = true;
-            if (this.isDisposed || (!this.renderEvenInBackground && this._windowIsBackground)) {
-                shouldRender = false;
-            }
-
-            if (shouldRender) {
-                // Start new frame
-                this.beginFrame();
-
-                // Child canvases
-                if (!this._renderViews()) {
-                    // Main frame
-                    this._renderFrame();
-                }
-
-                // Present
-                this.endFrame();
-            }
-        }
+    public override _renderLoop(timestamp?: number): void {
+        this._processFrame(timestamp);
 
         // The first condition prevents queuing another frame if we no longer have active render loops (e.g., if
         // `stopRenderLoop` is called mid frame). The second condition prevents queuing another frame if one has
@@ -1008,27 +980,28 @@ export class Engine extends ThinEngine {
     private _clientWaitAsync(sync: WebGLSync, flags = 0, intervalms = 10): Promise<void> {
         const gl = <WebGL2RenderingContext>(this._gl as any);
         return new Promise((resolve, reject) => {
-            const check = () => {
-                const res = gl.clientWaitSync(sync, flags, 0);
-                if (res == gl.WAIT_FAILED) {
-                    reject();
-                    return;
-                }
-                if (res == gl.TIMEOUT_EXPIRED) {
-                    setTimeout(check, intervalms);
-                    return;
-                }
-                resolve();
-            };
-
-            check();
+            _retryWithInterval(
+                () => {
+                    const res = gl.clientWaitSync(sync, flags, 0);
+                    if (res == gl.WAIT_FAILED) {
+                        throw new Error("clientWaitSync failed");
+                    }
+                    if (res == gl.TIMEOUT_EXPIRED) {
+                        return false;
+                    }
+                    return true;
+                },
+                resolve,
+                reject,
+                intervalms
+            );
         });
     }
 
     /**
      * @internal
      */
-    public _readPixelsAsync(x: number, y: number, w: number, h: number, format: number, type: number, outputBuffer: ArrayBufferView) {
+    public _readPixelsAsync(x: number, y: number, w: number, h: number, format: number, type: number, outputBuffer: ArrayBufferView): Nullable<Promise<ArrayBufferView>> {
         if (this._webGLVersion < 2) {
             throw new Error("_readPixelsAsync only work on WebGL2+");
         }

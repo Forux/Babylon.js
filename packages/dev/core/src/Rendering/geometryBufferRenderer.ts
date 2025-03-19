@@ -21,7 +21,7 @@ import "../Shaders/geometry.fragment";
 import "../Shaders/geometry.vertex";
 import { MaterialFlags } from "../Materials/materialFlags";
 import { addClipPlaneUniforms, bindClipPlane, prepareStringDefinesForClipPlanes } from "../Materials/clipPlaneMaterialHelper";
-import { BindMorphTargetParameters, BindSceneUniformBuffer, PrepareAttributesForMorphTargetsInfluencers, PushAttributesForInstances } from "../Materials/materialHelper.functions";
+import { BindMorphTargetParameters, BindSceneUniformBuffer, PrepareDefinesAndAttributesForMorphTargets, PushAttributesForInstances } from "../Materials/materialHelper.functions";
 
 import "../Engines/Extensions/engine.multiRender";
 import { ShaderLanguage } from "core/Materials/shaderLanguage";
@@ -554,10 +554,14 @@ export class GeometryBufferRenderer {
         const attribs = [VertexBuffer.PositionKind, VertexBuffer.NormalKind];
         const mesh = subMesh.getMesh();
 
+        let uv1 = false;
+        let uv2 = false;
+        const color = false;
+
         if (material) {
             let needUv = false;
             // Alpha test
-            if (material.needAlphaTesting() && material.getAlphaTestTexture()) {
+            if (material.needAlphaTestingForMesh(mesh) && material.getAlphaTestTexture()) {
                 defines.push("#define ALPHATEST");
                 defines.push(`#define ALPHATEST_UV${material.getAlphaTestTexture().coordinatesIndex + 1}`);
                 needUv = true;
@@ -699,10 +703,12 @@ export class GeometryBufferRenderer {
                 if (mesh.isVerticesDataPresent(VertexBuffer.UVKind)) {
                     attribs.push(VertexBuffer.UVKind);
                     defines.push("#define UV1");
+                    uv1 = true;
                 }
                 if (mesh.isVerticesDataPresent(VertexBuffer.UV2Kind)) {
                     attribs.push(VertexBuffer.UV2Kind);
                     defines.push("#define UV2");
+                    uv2 = true;
                 }
             }
         }
@@ -777,19 +783,20 @@ export class GeometryBufferRenderer {
         }
 
         // Morph targets
-        const morphTargetManager = (mesh as Mesh).morphTargetManager;
-        let numMorphInfluencers = 0;
-        if (morphTargetManager) {
-            numMorphInfluencers = morphTargetManager.numMaxInfluencers || morphTargetManager.numInfluencers;
-            if (numMorphInfluencers > 0) {
-                defines.push("#define MORPHTARGETS");
-                defines.push("#define NUM_MORPH_INFLUENCERS " + numMorphInfluencers);
-                if (morphTargetManager.isUsingTextureForTargets) {
-                    defines.push("#define MORPHTARGETS_TEXTURE");
-                }
-                PrepareAttributesForMorphTargetsInfluencers(attribs, mesh, numMorphInfluencers);
-            }
-        }
+        const numMorphInfluencers = mesh.morphTargetManager
+            ? PrepareDefinesAndAttributesForMorphTargets(
+                  mesh.morphTargetManager,
+                  defines,
+                  attribs,
+                  mesh,
+                  true, // usePositionMorph
+                  true, // useNormalMorph
+                  false, // useTangentMorph
+                  uv1, // useUVMorph
+                  uv2, // useUV2Morph
+                  color // useColorMorph
+              )
+            : 0;
 
         // Instances
         if (useInstances) {
@@ -1094,7 +1101,7 @@ export class GeometryBufferRenderer {
                 material._preBind(drawWrapper, sideOrientation);
 
                 // Alpha test
-                if (material.needAlphaTesting()) {
+                if (material.needAlphaTestingForMesh(effectiveMesh)) {
                     const alphaTexture = material.getAlphaTestTexture();
                     if (alphaTexture) {
                         effect.setTexture("diffuseSampler", alphaTexture);

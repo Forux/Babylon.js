@@ -109,13 +109,15 @@ export class GeneralPropertyTabComponent extends React.Component<IPropertyCompon
                         onChange={() => this.props.stateManager.onUpdateRequiredObservable.notifyObservers(block)}
                         throttlePropertyChangedNotification={true}
                     />
-                    <CheckBoxLineComponent
-                        key={`checkBox-disabled`}
-                        label="Disabled"
-                        target={block}
-                        propertyName="disabled"
-                        onValueChanged={() => this.props.stateManager.onRebuildRequiredObservable.notifyObservers()}
-                    />
+                    {!block.isInput && (
+                        <CheckBoxLineComponent
+                            key={`checkBox-disabled`}
+                            label="Disabled"
+                            target={block}
+                            propertyName="disabled"
+                            onValueChanged={() => this.props.stateManager.onRebuildRequiredObservable.notifyObservers()}
+                        />
+                    )}
                 </LineContainerComponent>
             </>
         );
@@ -141,8 +143,8 @@ export class GenericPropertyTabComponent extends React.Component<IPropertyCompon
         const classes: string[] = [];
 
         let proto = Object.getPrototypeOf(block);
-        while (proto) {
-            classes.push(proto.constructor.name);
+        while (proto && proto.getClassName) {
+            classes.push(proto.getClassName());
             proto = Object.getPrototypeOf(proto);
         }
 

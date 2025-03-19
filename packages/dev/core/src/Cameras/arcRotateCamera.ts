@@ -28,6 +28,35 @@ Node.AddNodeConstructor("ArcRotateCamera", (name, scene) => {
 });
 
 /**
+ * Computes the alpha angle based on the source position and the target position.
+ * @param offset The directional offset between the source position and the target position
+ * @returns The alpha angle in radians
+ */
+export function ComputeAlpha(offset: Vector3): number {
+    // Default alpha to π/2 to handle the edge case where x and z are both zero (when looking along up axis)
+    let alpha = Math.PI / 2;
+    if (!(offset.x === 0 && offset.z === 0)) {
+        alpha = Math.acos(offset.x / Math.sqrt(Math.pow(offset.x, 2) + Math.pow(offset.z, 2)));
+    }
+
+    if (offset.z < 0) {
+        alpha = 2 * Math.PI - alpha;
+    }
+
+    return alpha;
+}
+
+/**
+ * Computes the beta angle based on the source position and the target position.
+ * @param verticalOffset The y value of the directional offset between the source position and the target position
+ * @param radius The distance between the source position and the target position
+ * @returns The beta angle in radians
+ */
+export function ComputeBeta(verticalOffset: number, radius: number): number {
+    return Math.acos(verticalOffset / radius);
+}
+
+/**
  * This represents an orbital type of camera.
  *
  * This camera always points towards a given target position and can be rotated around that target with the target as the centre of rotation. It can be controlled with cursors and mouse, or with touch events.
@@ -48,7 +77,7 @@ export class ArcRotateCamera extends TargetCamera {
     public beta: number;
 
     /**
-     * Defines the radius of the camera from it s target point.
+     * Defines the radius of the camera from its target point.
      */
     @serialize()
     public radius: number;
@@ -207,6 +236,13 @@ export class ArcRotateCamera extends TargetCamera {
      */
     @serialize()
     public upperRadiusLimit: Nullable<number> = null;
+
+    /**
+     * Minimum allowed vertical target position of the camera.
+     * Use this setting in combination with `upperRadiusLimit` to set a global limit for the Cameras vertical position.
+     */
+    @serialize()
+    public lowerTargetYLimit: number = -Infinity;
 
     /**
      * Defines the current inertia value used during panning of the camera along the X axis.
@@ -540,6 +576,8 @@ export class ArcRotateCamera extends TargetCamera {
     @serialize()
     public restoreStateInterpolationFactor = 0;
 
+    private _currentInterpolationFactor = 0;
+
     /** @internal */
     public override _viewMatrix = new Matrix();
     /** @internal */
@@ -807,7 +845,7 @@ export class ArcRotateCamera extends TargetCamera {
      */
     public override _restoreStateValues(): boolean {
         if (this.hasStateStored() && this.restoreStateInterpolationFactor > Epsilon && this.restoreStateInterpolationFactor < 1) {
-            this.interpolateTo(this._storedAlpha, this._storedBeta, this._storedRadius, this._storedTarget, this._storedTargetScreenOffset);
+            this.interpolateTo(this._storedAlpha, this._storedBeta, this._storedRadius, this._storedTarget, this._storedTargetScreenOffset, this.restoreStateInterpolationFactor);
             return true;
         }
         if (!super._restoreStateValues()) {
@@ -836,8 +874,16 @@ export class ArcRotateCamera extends TargetCamera {
      * @param radius Defines the goal radius.
      * @param target Defines the goal target.
      * @param targetScreenOffset Defines the goal target screen offset.
+     * @param interpolationFactor A value  between 0 and 1 that determines the speed of the interpolation.
      */
-    public interpolateTo(alpha = this.alpha, beta = this.beta, radius = this.radius, target = this.target, targetScreenOffset = this.targetScreenOffset): void {
+    public interpolateTo(
+        alpha = this.alpha,
+        beta = this.beta,
+        radius = this.radius,
+        target = this.target,
+        targetScreenOffset = this.targetScreenOffset,
+        interpolationFactor?: number
+    ): void {
         this._progressiveRestore = true;
         this.inertialAlphaOffset = 0;
         this.inertialBetaOffset = 0;
@@ -845,9 +891,18 @@ export class ArcRotateCamera extends TargetCamera {
         this.inertialPanningX = 0;
         this.inertialPanningY = 0;
 
+        if (interpolationFactor != null) {
+            this._currentInterpolationFactor = interpolationFactor;
+        } else if (this.restoreStateInterpolationFactor !== 0) {
+            this._currentInterpolationFactor = this.restoreStateInterpolationFactor;
+        } else {
+            this._currentInterpolationFactor = 0.1;
+        }
+
         alpha = Clamp(alpha, this.lowerAlphaLimit ?? -Infinity, this.upperAlphaLimit ?? Infinity);
         beta = Clamp(beta, this.lowerBetaLimit ?? -Infinity, this.upperBetaLimit ?? Infinity);
         radius = Clamp(radius, this.lowerRadiusLimit ?? -Infinity, this.upperRadiusLimit ?? Infinity);
+        target.y = Clamp(target.y, this.lowerTargetYLimit ?? -Infinity, Infinity);
 
         this._goalAlpha = alpha;
         this._goalBeta = beta;
@@ -961,7 +1016,7 @@ export class ArcRotateCamera extends TargetCamera {
         // progressive restore
         if (this._progressiveRestore) {
             const dt = this._scene.getEngine().getDeltaTime() / 1000;
-            const t = 1 - Math.pow(2, -dt / this.restoreStateInterpolationFactor);
+            const t = 1 - Math.pow(2, -dt / this._currentInterpolationFactor);
 
             // can't use tmp vector here because of assignment
             this.setTarget(Vector3.Lerp(this.getTarget(), this._goalTarget, t));
@@ -1111,6 +1166,8 @@ export class ArcRotateCamera extends TargetCamera {
             this.radius = this.upperRadiusLimit;
             this.inertialRadiusOffset = 0;
         }
+
+        this.target.y = Math.max(this.target.y, this.lowerTargetYLimit);
     }
 
     /**
@@ -1130,25 +1187,15 @@ export class ArcRotateCamera extends TargetCamera {
             this.radius = 0.0001; // Just to avoid division by zero
         }
 
-        // Alpha
+        // Alpha and Beta
         const previousAlpha = this.alpha;
-        if (this._computationVector.x === 0 && this._computationVector.z === 0) {
-            this.alpha = Math.PI / 2; // avoid division by zero when looking along up axis, and set to acos(0)
-        } else {
-            this.alpha = Math.acos(this._computationVector.x / Math.sqrt(Math.pow(this._computationVector.x, 2) + Math.pow(this._computationVector.z, 2)));
-        }
-
-        if (this._computationVector.z < 0) {
-            this.alpha = 2 * Math.PI - this.alpha;
-        }
+        this.alpha = ComputeAlpha(this._computationVector);
+        this.beta = ComputeBeta(this._computationVector.y, this.radius);
 
         // Calculate the number of revolutions between the new and old alpha values.
         const alphaCorrectionTurns = Math.round((previousAlpha - this.alpha) / (2.0 * Math.PI));
         // Adjust alpha so that its numerical representation is the closest one to the old value.
         this.alpha += alphaCorrectionTurns * 2.0 * Math.PI;
-
-        // Beta
-        this.beta = Math.acos(this._computationVector.y / this.radius);
 
         this._checkLimits();
     }

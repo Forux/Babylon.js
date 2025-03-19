@@ -27,11 +27,12 @@ export class NodeRenderGraphGenerateMipmapsBlock extends NodeRenderGraphBlock {
     public constructor(name: string, frameGraph: FrameGraph, scene: Scene) {
         super(name, frameGraph, scene);
 
-        this.registerInput("texture", NodeRenderGraphBlockConnectionPointTypes.Texture);
+        this.registerInput("target", NodeRenderGraphBlockConnectionPointTypes.AutoDetect);
+        this._addDependenciesInput();
         this.registerOutput("output", NodeRenderGraphBlockConnectionPointTypes.BasedOnInput);
 
-        this.texture.addAcceptedConnectionPointTypes(NodeRenderGraphBlockConnectionPointTypes.TextureAllButBackBuffer);
-        this.output._typeConnectionSource = this.texture;
+        this.target.addExcludedConnectionPointFromAllowedTypes(NodeRenderGraphBlockConnectionPointTypes.TextureAllButBackBuffer);
+        this.output._typeConnectionSource = this.target;
 
         this._frameGraphTask = new FrameGraphGenerateMipMapsTask(name, frameGraph);
     }
@@ -44,9 +45,9 @@ export class NodeRenderGraphGenerateMipmapsBlock extends NodeRenderGraphBlock {
         return "NodeRenderGraphGenerateMipmapsBlock";
     }
     /**
-     * Gets the texture input component
+     * Gets the target input component
      */
-    public get texture(): NodeRenderGraphConnectionPoint {
+    public get target(): NodeRenderGraphConnectionPoint {
         return this._inputs[0];
     }
 
@@ -60,14 +61,9 @@ export class NodeRenderGraphGenerateMipmapsBlock extends NodeRenderGraphBlock {
     protected override _buildBlock(state: NodeRenderGraphBuildState) {
         super._buildBlock(state);
 
-        this._frameGraphTask.name = this.name;
+        this._propagateInputValueToOutput(this.target, this.output);
 
-        this._propagateInputValueToOutput(this.texture, this.output);
-
-        const textureConnectedPoint = this.texture.connectedPoint;
-        if (textureConnectedPoint) {
-            this._frameGraphTask.destinationTexture = textureConnectedPoint.value as FrameGraphTextureHandle;
-        }
+        this._frameGraphTask.targetTexture = this.target.connectedPoint?.value as FrameGraphTextureHandle;
     }
 }
 

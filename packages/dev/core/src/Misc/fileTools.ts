@@ -172,7 +172,7 @@ export const SetCorsBehavior = (url: string | string[], element: { crossOrigin: 
 
 /**
  * Configuration used to load images
- * @see #DKMEZK#2
+ * @see https://playground.babylonjs.com/#DKMEZK#2
  */
 export const LoadImageConfiguration: {
     /**
@@ -196,6 +196,7 @@ export const LoadImageConfiguration: {
  * @param offlineProvider offline provider for caching
  * @param mimeType optional mime type
  * @param imageBitmapOptions
+ * @param engine the engine instance to use
  * @returns the HTMLImageElement of the loaded image
  * @internal
  */
@@ -205,9 +206,9 @@ export const LoadImage = (
     onError: (message?: string, exception?: any) => void,
     offlineProvider: Nullable<IOfflineProvider>,
     mimeType: string = "",
-    imageBitmapOptions?: ImageBitmapOptions
+    imageBitmapOptions?: ImageBitmapOptions,
+    engine = EngineStore.LastCreatedEngine
 ): Nullable<HTMLImageElement> => {
-    const engine = EngineStore.LastCreatedEngine;
     if (typeof HTMLImageElement === "undefined" && !engine?._features.forceBitmapOverHTMLImageElement) {
         onError("LoadImage is only supported in web or BabylonNative environments.");
         return null;
@@ -670,14 +671,21 @@ export const RequestFile = (
                     }
 
                     if ((request.status >= 200 && request.status < 300) || (request.status === 0 && (!IsWindowObjectExist() || IsFileURL()))) {
-                        try {
-                            if (onSuccess) {
-                                onSuccess(useArrayBuffer ? request.response : request.responseText, request);
+                        // It's possible for the request to have a success status code but null response if the underlying
+                        // underlying HTTP connection was closed prematurely. See _onHttpResponseClose in xhr2.js. In this
+                        // case we will throw an exception if we call the onSuccess handler because "data" will be null
+                        // and that then bypasses the retry strategy.
+                        const data = useArrayBuffer ? request.response : request.responseText;
+                        if (data !== null) {
+                            try {
+                                if (onSuccess) {
+                                    onSuccess(data, request);
+                                }
+                            } catch (e) {
+                                handleError(e);
                             }
-                        } catch (e) {
-                            handleError(e);
+                            return;
                         }
-                        return;
                     }
 
                     const retryStrategy = FileToolsOptions.DefaultRetryStrategy;

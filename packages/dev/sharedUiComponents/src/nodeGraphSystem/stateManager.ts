@@ -17,7 +17,6 @@ export class StateManager {
     hostDocument: Document;
     lockObject: any;
     modalIsDisplayed: boolean;
-
     historyStack: HistoryStack;
 
     onSearchBoxRequiredObservable = new Observable<{ x: number; y: number }>();
@@ -43,6 +42,8 @@ export class StateManager {
     isDebugConnectionAllowed: (nodeA: FrameNodePort | NodePort, nodeB: FrameNodePort | NodePort) => boolean;
     applyNodePortDesign: (data: IPortData, element: HTMLElement, img: HTMLImageElement, pip: HTMLDivElement) => void;
 
+    getPortColor: (portData: IPortData) => string;
+
     storeEditorData: (serializationObject: any, frame?: Nullable<GraphFrame>) => void;
 
     getEditorDataMap: () => { [key: number]: number };
@@ -50,4 +51,19 @@ export class StateManager {
     getScene?: () => Scene;
 
     createDefaultInputData: (rootData: any, portData: IPortData, nodeContainer: INodeContainer) => Nullable<{ data: INodeData; name: string }>;
+
+    private _isRebuildQueued: boolean;
+
+    queueRebuildCommand() {
+        if (this._isRebuildQueued) {
+            return;
+        }
+
+        this._isRebuildQueued = true;
+
+        setTimeout(() => {
+            this.onRebuildRequiredObservable.notifyObservers();
+            this._isRebuildQueued = false;
+        }, 1);
+    }
 }

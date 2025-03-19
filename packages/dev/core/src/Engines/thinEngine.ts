@@ -48,10 +48,11 @@ import { AbstractEngine } from "./abstractEngine";
 import { Constants } from "./constants";
 import { WebGLHardwareTexture } from "./WebGL/webGLHardwareTexture";
 import { ShaderLanguage } from "../Materials/shaderLanguage";
-import { InternalTexture, InternalTextureSource, IsDepthTexture, HasStencilAspect } from "../Materials/Textures/internalTexture";
+import { InternalTexture, InternalTextureSource } from "../Materials/Textures/internalTexture";
 import { Effect } from "../Materials/effect";
 import { _ConcatenateShader, _getGlobalDefines } from "./abstractEngine.functions";
 import { resetCachedPipeline } from "core/Materials/effect.functions";
+import { HasStencilAspect, IsDepthTexture } from "core/Materials/Textures/textureHelper.functions";
 
 /**
  * Keeps track of all the buffer info used in engine.
@@ -283,7 +284,6 @@ export class ThinEngine extends AbstractEngine {
         let canvas: Nullable<HTMLCanvasElement> = null;
         if ((canvasOrContext as any).getContext) {
             canvas = <HTMLCanvasElement>canvasOrContext;
-            this._renderingCanvas = canvas;
 
             if (options.preserveDrawingBuffer === undefined) {
                 options.preserveDrawingBuffer = false;
@@ -344,6 +344,7 @@ export class ThinEngine extends AbstractEngine {
                 this._onContextLost = (evt: Event) => {
                     evt.preventDefault();
                     this._contextWasLost = true;
+                    deleteStateObject(this._gl);
                     Logger.Warn("WebGL context lost.");
 
                     this.onContextLostObservable.notifyObservers(this);
@@ -353,11 +354,16 @@ export class ThinEngine extends AbstractEngine {
                     this._restoreEngineAfterContextLost(() => this._initGLContext());
                 };
 
-                canvas.addEventListener("webglcontextlost", this._onContextLost, false);
                 canvas.addEventListener("webglcontextrestored", this._onContextRestored, false);
 
                 options.powerPreference = options.powerPreference || "high-performance";
+            } else {
+                this._onContextLost = () => {
+                    deleteStateObject(this._gl);
+                };
             }
+
+            canvas.addEventListener("webglcontextlost", this._onContextLost, false);
 
             if (this._badDesktopOS) {
                 options.xrCompatible = false;
@@ -398,7 +404,7 @@ export class ThinEngine extends AbstractEngine {
             }
         } else {
             this._gl = <WebGL2RenderingContext>canvasOrContext;
-            this._renderingCanvas = this._gl.canvas as HTMLCanvasElement;
+            canvas = this._gl.canvas as HTMLCanvasElement;
 
             if ((this._gl as any).renderbufferStorageMultisample) {
                 this._webGLVersion = 2.0;
@@ -412,6 +418,8 @@ export class ThinEngine extends AbstractEngine {
                 options.stencil = attributes.stencil;
             }
         }
+
+        this._sharedInit(canvas);
 
         // Ensures a consistent color space unpacking of textures cross browser.
         this._gl.pixelStorei(this._gl.UNPACK_COLORSPACE_CONVERSION_WEBGL, this._gl.NONE);
@@ -1081,6 +1089,13 @@ export class ThinEngine extends AbstractEngine {
         this.wipeCaches();
     }
 
+    public override setStateCullFaceType(cullBackFaces?: boolean, force?: boolean): void {
+        const cullFace = (this.cullBackFaces ?? cullBackFaces ?? true) ? this._gl.BACK : this._gl.FRONT;
+        if (this._depthCullingState.cullFace !== cullFace || force) {
+            this._depthCullingState.cullFace = cullFace;
+        }
+    }
+
     /**
      * Set various states to the webGL context
      * @param culling defines culling state: true to enable culling, false to disable it
@@ -1098,10 +1113,7 @@ export class ThinEngine extends AbstractEngine {
         }
 
         // Cull face
-        const cullFace = (this.cullBackFaces ?? cullBackFaces ?? true) ? this._gl.BACK : this._gl.FRONT;
-        if (this._depthCullingState.cullFace !== cullFace || force) {
-            this._depthCullingState.cullFace = cullFace;
-        }
+        this.setStateCullFaceType(cullBackFaces, force);
 
         // Z offset
         this.setZOffset(zOffset);
@@ -1973,6 +1985,8 @@ export class ThinEngine extends AbstractEngine {
         const fragment = typeof baseName === "string" ? baseName : baseName.fragmentToken || baseName.fragmentSource || baseName.fragmentElement || baseName.fragment;
         const globalDefines = this._getGlobalDefines()!;
 
+        const isOptions = (attributesNamesOrOptions as IEffectCreationOptions).attributes !== undefined;
+
         let fullDefines = defines ?? (<IEffectCreationOptions>attributesNamesOrOptions).defines ?? "";
 
         if (globalDefines) {
@@ -1994,7 +2008,7 @@ export class ThinEngine extends AbstractEngine {
         const effect = new Effect(
             baseName,
             attributesNamesOrOptions,
-            uniformsNamesOrEngine,
+            isOptions ? this : uniformsNamesOrEngine,
             samplers,
             this,
             defines,
@@ -4034,13 +4048,8 @@ export class ThinEngine extends AbstractEngine {
      * Force the engine to release all cached effects. This means that next effect compilation will have to be done completely even if a similar effect was already compiled
      */
     public releaseEffects() {
-        const keys = Object.keys(this._compiledEffects);
-        for (const name of keys) {
-            const effect = this._compiledEffects[name];
-            effect.dispose(true);
-        }
-
         this._compiledEffects = {};
+        this.onReleaseEffectsObservable.notifyObservers(this);
     }
 
     /**
@@ -4050,8 +4059,9 @@ export class ThinEngine extends AbstractEngine {
         // Events
         if (IsWindowObjectExist()) {
             if (this._renderingCanvas) {
-                if (!this._doNotHandleContextLost) {
-                    this._renderingCanvas.removeEventListener("webglcontextlost", this._onContextLost);
+                this._renderingCanvas.removeEventListener("webglcontextlost", this._onContextLost);
+
+                if (this._onContextRestored) {
                     this._renderingCanvas.removeEventListener("webglcontextrestored", this._onContextRestored);
                 }
             }
@@ -4487,12 +4497,21 @@ export class ThinEngine extends AbstractEngine {
      * @param height defines the height of the rectangle where pixels must be read
      * @param hasAlpha defines whether the output should have alpha or not (defaults to true)
      * @param flushRenderer true to flush the renderer from the pending commands before reading the pixels
+     * @param data defines the data to fill with the read pixels (if not provided, a new one will be created)
      * @returns a ArrayBufferView promise (Uint8Array) containing RGBA colors
      */
-    public readPixels(x: number, y: number, width: number, height: number, hasAlpha = true, flushRenderer = true): Promise<ArrayBufferView> {
+    public readPixels(x: number, y: number, width: number, height: number, hasAlpha = true, flushRenderer = true, data: Nullable<Uint8Array> = null): Promise<ArrayBufferView> {
         const numChannels = hasAlpha ? 4 : 3;
         const format = hasAlpha ? this._gl.RGBA : this._gl.RGB;
-        const data = new Uint8Array(height * width * numChannels);
+
+        const dataLength = width * height * numChannels;
+        if (!data) {
+            data = new Uint8Array(dataLength);
+        } else if (data.length < dataLength) {
+            Logger.Error(`Data buffer is too small to store the read pixels (${data.length} should be more than ${dataLength})`);
+            return Promise.resolve(data);
+        }
+
         if (flushRenderer) {
             this.flushFramebuffer();
         }

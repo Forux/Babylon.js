@@ -93,6 +93,29 @@ export class FrameGraphGeometryRendererTask extends FrameGraphTask {
      */
     public samples = 1;
 
+    private _reverseCulling = false;
+
+    /**
+     * Whether to reverse culling (default is false).
+     */
+    public get reverseCulling() {
+        return this._reverseCulling;
+    }
+
+    public set reverseCulling(value: boolean) {
+        this._reverseCulling = value;
+
+        const configuration = MaterialHelperGeometryRendering.GetConfiguration(this._renderer.renderPassId);
+        if (configuration) {
+            configuration.reverseCulling = value;
+        }
+    }
+
+    /**
+     * Indicates if a mesh shouldn't be rendered when its material has depth write disabled (default is true).
+     */
+    public dontRenderWhenMaterialDepthWriteIsDisabled = true;
+
     /**
      * The list of texture descriptions used by the geometry renderer task.
      */
@@ -201,6 +224,14 @@ export class FrameGraphGeometryRendererTask extends FrameGraphTask {
         this._renderer.renderSprites = false;
         this._renderer.renderParticles = false;
 
+        this._renderer.customIsReadyFunction = (mesh: AbstractMesh, refreshRate: number, preWarm?: boolean) => {
+            if (this.dontRenderWhenMaterialDepthWriteIsDisabled && mesh.material && mesh.material.disableDepthWrite) {
+                return !!preWarm;
+            }
+
+            return mesh.isReady(refreshRate === 0);
+        };
+
         this._renderer.onBeforeRenderingManagerRenderObservable.add(() => {
             if (!this._renderer.options.doNotChangeAspectRatio) {
                 scene.updateTransformMatrix(true);
@@ -239,6 +270,10 @@ export class FrameGraphGeometryRendererTask extends FrameGraphTask {
         if (this.textureDescriptions.length === 0 || this.objectList === undefined) {
             throw new Error(`FrameGraphGeometryRendererTask ${this.name}: object list and at least one geometry texture description must be provided`);
         }
+
+        // Make sure the renderList / particleSystemList are set when FrameGraphGeometryRendererTask.isReady() is called!
+        this._renderer.renderList = this.objectList.meshes;
+        this._renderer.particleSystemList = this.objectList.particleSystems;
 
         const outputTextureHandle = this._createMultiRenderTargetTexture();
 
@@ -316,6 +351,12 @@ export class FrameGraphGeometryRendererTask extends FrameGraphTask {
 
             context.render(this._renderer, this._textureWidth, this._textureHeight);
         });
+
+        const passDisabled = this._frameGraph.addRenderPass(this.name + "_disabled", true);
+
+        passDisabled.setRenderTarget(outputTextureHandle);
+        passDisabled.setRenderTargetDepth(this.depthTexture);
+        passDisabled.setExecuteFunc((_context) => {});
     }
 
     public override dispose(): void {
@@ -430,5 +471,7 @@ export class FrameGraphGeometryRendererTask extends FrameGraphTask {
 
             configuration.defines[geometryDescription.defineIndex] = i;
         }
+
+        configuration.reverseCulling = this.reverseCulling;
     }
 }

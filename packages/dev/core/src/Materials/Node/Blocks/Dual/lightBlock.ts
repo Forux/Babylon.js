@@ -237,12 +237,22 @@ export class LightBlock extends NodeMaterialBlock {
     }
 
     public override updateUniformsAndSamples(state: NodeMaterialBuildState, nodeMaterial: NodeMaterial, defines: NodeMaterialDefines, uniformBuffers: string[]) {
+        state.samplers.push("areaLightsLTC1Sampler");
+        state.samplers.push("areaLightsLTC2Sampler");
         for (let lightIndex = 0; lightIndex < nodeMaterial.maxSimultaneousLights; lightIndex++) {
             if (!defines["LIGHT" + lightIndex]) {
                 break;
             }
             const onlyUpdateBuffersList = state.uniforms.indexOf("vLightData" + lightIndex) >= 0;
-            PrepareUniformsAndSamplersForLight(lightIndex, state.uniforms, state.samplers, defines["PROJECTEDLIGHTTEXTURE" + lightIndex], uniformBuffers, onlyUpdateBuffersList);
+            PrepareUniformsAndSamplersForLight(
+                lightIndex,
+                state.uniforms,
+                state.samplers,
+                defines["PROJECTEDLIGHTTEXTURE" + lightIndex],
+                uniformBuffers,
+                onlyUpdateBuffersList,
+                defines["IESLIGHTTEXTURE" + lightIndex]
+            );
         }
     }
 

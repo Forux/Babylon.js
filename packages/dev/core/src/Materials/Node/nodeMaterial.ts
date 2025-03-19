@@ -70,6 +70,7 @@ import type { IImageProcessingConfigurationDefines } from "../imageProcessingCon
 import { ShaderLanguage } from "../shaderLanguage";
 import { AbstractEngine } from "../../Engines/abstractEngine";
 import type { LoopBlock } from "./Blocks/loopBlock";
+import { MaterialHelperGeometryRendering } from "../materialHelper.geometryrendering";
 
 const onCreatedEffectParameters = { effect: null as unknown as Effect, subMesh: null as unknown as Nullable<SubMesh> };
 
@@ -148,12 +149,28 @@ export class NodeMaterialDefines extends MaterialDefines implements IImageProces
 
     /** MORPH TARGETS */
     public MORPHTARGETS = false;
+    /** Morph target position */
+    public MORPHTARGETS_POSITION = false;
     /** Morph target normal */
     public MORPHTARGETS_NORMAL = false;
     /** Morph target tangent */
     public MORPHTARGETS_TANGENT = false;
     /** Morph target uv */
     public MORPHTARGETS_UV = false;
+    /** Morph target uv2 */
+    public MORPHTARGETS_UV2 = false;
+    public MORPHTARGETS_COLOR = false;
+    /** Morph target support positions */
+    public MORPHTARGETTEXTURE_HASPOSITIONS = false;
+    /** Morph target support normals */
+    public MORPHTARGETTEXTURE_HASNORMALS = false;
+    /** Morph target support tangents */
+    public MORPHTARGETTEXTURE_HASTANGENTS = false;
+    /** Morph target support uvs */
+    public MORPHTARGETTEXTURE_HASUVS = false;
+    /** Morph target support uv2s */
+    public MORPHTARGETTEXTURE_HASUV2S = false;
+    public MORPHTARGETTEXTURE_HASCOLORS = false;
     /** Number of morph influencers */
     public NUM_MORPH_INFLUENCERS = 0;
     /** Using a texture to store morph target data */
@@ -196,6 +213,10 @@ export class NodeMaterialDefines extends MaterialDefines implements IImageProces
     public CAMERA_ORTHOGRAPHIC = false;
     /** Camera is perspective */
     public CAMERA_PERSPECTIVE = false;
+
+    public AREALIGHTSUPPORTED = true;
+
+    public AREALIGHTNOROUGHTNESS = true;
 
     /**
      * Creates a new NodeMaterialDefines
@@ -302,6 +323,13 @@ export class NodeMaterial extends PushMaterial {
 
     private BJSNODEMATERIALEDITOR = this._getGlobalNodeMaterialEditor();
 
+    /** @internal */
+    public _useAdditionalColor = false;
+
+    public override set _glowModeEnabled(value: boolean) {
+        this._useAdditionalColor = value;
+    }
+
     /** Get the inspector from bundle or global
      * @returns the global NME
      */
@@ -321,7 +349,7 @@ export class NodeMaterial extends PushMaterial {
 
     /** Gets or sets the active shader language */
     public override get shaderLanguage(): ShaderLanguage {
-        return this._options.shaderLanguage;
+        return this._options?.shaderLanguage || NodeMaterial.DefaultShaderLanguage;
     }
 
     public override set shaderLanguage(value: ShaderLanguage) {
@@ -700,6 +728,18 @@ export class NodeMaterial extends PushMaterial {
     @serialize()
     public forceAlphaBlending = false;
 
+    public override get _supportGlowLayer() {
+        if (this._fragmentOutputNodes.length === 0) {
+            return false;
+        }
+
+        if (this._fragmentOutputNodes.some((f) => (f as FragmentOutputBlock).additionalColor && (f as FragmentOutputBlock).additionalColor.isConnected)) {
+            return true;
+        }
+
+        return false;
+    }
+
     /**
      * Specifies if the material will require alpha blending
      * @returns a boolean specifying if alpha blending is needed
@@ -884,9 +924,20 @@ export class NodeMaterial extends PushMaterial {
         this._fragmentCompilationState.target = NodeMaterialBlockTargets.Fragment;
 
         // Shared data
+        const needToPurgeList = this._fragmentOutputNodes.filter((n) => n._isFinalOutputAndActive).length > 1;
+        let fragmentOutputNodes = this._fragmentOutputNodes;
+
+        if (needToPurgeList) {
+            // Get all but the final output nodes
+            fragmentOutputNodes = this._fragmentOutputNodes.filter((n) => !n._isFinalOutputAndActive);
+
+            // Get the first with precedence on
+            fragmentOutputNodes.push(this._fragmentOutputNodes.filter((n) => n._isFinalOutputAndActive && n._hasPrecedence)[0]);
+        }
+
         this._sharedData = new NodeMaterialBuildStateSharedData();
         this._sharedData.nodeMaterial = this;
-        this._sharedData.fragmentOutputNodes = this._fragmentOutputNodes;
+        this._sharedData.fragmentOutputNodes = fragmentOutputNodes;
         this._vertexCompilationState.sharedData = this._sharedData;
         this._fragmentCompilationState.sharedData = this._sharedData;
         this._sharedData.buildId = this._buildId;
@@ -904,7 +955,7 @@ export class NodeMaterial extends PushMaterial {
             this._initializeBlock(vertexOutputNode, this._vertexCompilationState, fragmentNodes, autoConfigure);
         }
 
-        for (const fragmentOutputNode of this._fragmentOutputNodes) {
+        for (const fragmentOutputNode of fragmentOutputNodes) {
             fragmentNodes.push(fragmentOutputNode);
             this._initializeBlock(fragmentOutputNode, this._fragmentCompilationState, vertexNodes, autoConfigure);
         }
@@ -1038,6 +1089,8 @@ export class NodeMaterial extends PushMaterial {
         const oit = this.needAlphaBlendingForMesh(mesh) && this.getScene().useOrderIndependentTransparency;
         PrepareDefinesForPrePass(this.getScene(), defines, !oit);
 
+        MaterialHelperGeometryRendering.PrepareDefines(this.getScene().getEngine().currentRenderPassId, mesh, defines);
+
         if (oldNormal !== defines["NORMAL"] || oldTangent !== defines["TANGENT"] || oldColor !== defines["VERTEXCOLOR_NME"] || uvChanged) {
             defines.markAsAttributesDirty();
         }
@@ -1082,6 +1135,22 @@ export class NodeMaterial extends PushMaterial {
 
         if (prePassOutputBlock.worldPosition.isConnected) {
             result.push(Constants.PREPASS_POSITION_TEXTURE_TYPE);
+        }
+
+        if (prePassOutputBlock.localPosition.isConnected) {
+            result.push(Constants.PREPASS_LOCAL_POSITION_TEXTURE_TYPE);
+        }
+
+        if (prePassOutputBlock.reflectivity.isConnected) {
+            result.push(Constants.PREPASS_REFLECTIVITY_TEXTURE_TYPE);
+        }
+
+        if (prePassOutputBlock.velocity.isConnected) {
+            result.push(Constants.PREPASS_VELOCITY_TEXTURE_TYPE);
+        }
+
+        if (prePassOutputBlock.velocityLinear.isConnected) {
+            result.push(Constants.PREPASS_VELOCITY_LINEAR_TEXTURE_TYPE);
         }
 
         return result;
@@ -1239,6 +1308,9 @@ export class NodeMaterial extends PushMaterial {
         }
 
         postProcess.nodeMaterialSource = this;
+        postProcess.onDisposeObservable.add(() => {
+            dummyMesh.dispose();
+        });
 
         postProcess.onApplyObservable.add((effect) => {
             if (buildId !== this._buildId) {
@@ -1654,7 +1726,7 @@ export class NodeMaterial extends PushMaterial {
             }
         }
 
-        if (!subMesh.materialDefines) {
+        if (!subMesh.materialDefines || typeof subMesh.materialDefines === "string") {
             subMesh.materialDefines = new NodeMaterialDefines();
         }
 
@@ -1721,6 +1793,15 @@ export class NodeMaterial extends PushMaterial {
                 } else {
                     scene.resetCachedMaterial();
                     subMesh.setEffect(effect, defines, this._materialContext);
+                }
+            }
+        }
+
+        // Check if Area Lights have LTC texture.
+        if (defines["AREALIGHTUSED"]) {
+            for (let index = 0; index < mesh.lightSources.length; index++) {
+                if (!mesh.lightSources[index]._isReady()) {
+                    return false;
                 }
             }
         }
@@ -2045,8 +2126,8 @@ export class NodeMaterial extends PushMaterial {
 
         const currentScreen = new CurrentScreenBlock("CurrentScreen");
         uv.connectTo(currentScreen);
-
-        currentScreen.texture = new Texture("https://assets.babylonjs.com/nme/currentScreenPostProcess.png", this.getScene());
+        const textureUrl = Tools.GetAssetUrl("https://assets.babylonjs.com/core/nme/currentScreenPostProcess.png");
+        currentScreen.texture = new Texture(textureUrl, this.getScene());
 
         const fragmentOutput = new FragmentOutputBlock("FragmentOutput");
         currentScreen.connectTo(fragmentOutput, { output: "rgba" });
@@ -2524,6 +2605,7 @@ export class NodeMaterial extends PushMaterial {
      * @param skipBuild defines whether to build the node material
      * @param targetMaterial defines a material to use instead of creating a new one
      * @param urlRewriter defines a function used to rewrite urls
+     * @param options defines options to be used with the node material
      * @returns a promise that will resolve to the new node material
      */
     public static async ParseFromFileAsync(
@@ -2533,9 +2615,10 @@ export class NodeMaterial extends PushMaterial {
         rootUrl: string = "",
         skipBuild: boolean = false,
         targetMaterial?: NodeMaterial,
-        urlRewriter?: (url: string) => string
+        urlRewriter?: (url: string) => string,
+        options?: Partial<INodeMaterialOptions>
     ): Promise<NodeMaterial> {
-        const material = targetMaterial ?? new NodeMaterial(name, scene);
+        const material = targetMaterial ?? new NodeMaterial(name, scene, options);
 
         const data = await scene._loadFileAsync(url);
         const serializationObject = JSON.parse(data);
@@ -2555,6 +2638,7 @@ export class NodeMaterial extends PushMaterial {
      * @param skipBuild defines whether to build the node material
      * @param waitForTextureReadyness defines whether to wait for texture readiness resolving the promise (default: false)
      * @param urlRewriter defines a function used to rewrite urls
+     * @param options defines options to be used with the node material
      * @returns a promise that will resolve to the new node material
      */
     public static ParseFromSnippetAsync(
@@ -2564,7 +2648,8 @@ export class NodeMaterial extends PushMaterial {
         nodeMaterial?: NodeMaterial,
         skipBuild: boolean = false,
         waitForTextureReadyness: boolean = false,
-        urlRewriter?: (url: string) => string
+        urlRewriter?: (url: string) => string,
+        options?: Partial<INodeMaterialOptions>
     ): Promise<NodeMaterial> {
         if (snippetId === "_BLANK") {
             return Promise.resolve(NodeMaterial.CreateDefault("blank", scene));
@@ -2579,7 +2664,7 @@ export class NodeMaterial extends PushMaterial {
                         const serializationObject = JSON.parse(snippet.nodeMaterial);
 
                         if (!nodeMaterial) {
-                            nodeMaterial = SerializationHelper.Parse(() => new NodeMaterial(snippetId, scene), serializationObject, scene, rootUrl);
+                            nodeMaterial = SerializationHelper.Parse(() => new NodeMaterial(snippetId, scene, options), serializationObject, scene, rootUrl);
                             nodeMaterial.uniqueId = scene.getUniqueId();
                         }
 

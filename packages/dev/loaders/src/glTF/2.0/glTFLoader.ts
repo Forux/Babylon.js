@@ -1,4 +1,4 @@
-import type { IndicesArray, Nullable } from "core/types";
+import type { IndicesArray, Nullable, TypedArray, TypedArrayConstructor } from "core/types";
 import { Deferred } from "core/Misc/deferred";
 import { Quaternion, Vector3, Matrix, TmpVectors } from "core/Maths/math.vector";
 import { Color3 } from "core/Maths/math.color";
@@ -76,21 +76,15 @@ import type { Light } from "core/Lights/light";
 import { BoundingInfo } from "core/Culling/boundingInfo";
 import type { AssetContainer } from "core/assetContainer";
 import type { AnimationPropertyInfo } from "./glTFLoaderAnimation";
-import { nodeAnimationData } from "./glTFLoaderAnimation";
 import type { IObjectInfo } from "core/ObjectModel/objectModelInterfaces";
 import { registeredGLTFExtensions, registerGLTFExtension, unregisterGLTFExtension } from "./glTFLoaderExtensionRegistry";
 import type { GLTFExtensionFactory } from "./glTFLoaderExtensionRegistry";
+import type { IInterpolationPropertyInfo } from "core/FlowGraph/typeDefinitions";
+import { GetMappingForKey } from "./Extensions/objectModelMapping";
+import { deepMerge } from "core/Misc/deepMerger";
+import { GetTypedArrayConstructor } from "core/Buffers/bufferUtils";
+
 export { GLTFFileLoader };
-
-interface TypedArrayLike extends ArrayBufferView {
-    readonly length: number;
-    [n: number]: number;
-}
-
-interface TypedArrayConstructor {
-    new (length: number): TypedArrayLike;
-    new (buffer: ArrayBufferLike, byteOffset: number, length?: number): TypedArrayLike;
-}
 
 interface ILoaderProperty extends IProperty {
     _activeLoaderExtensionFunctions: {
@@ -101,28 +95,6 @@ interface ILoaderProperty extends IProperty {
 interface IWithMetadata {
     metadata: any;
     _internalMetadata: any;
-}
-
-// https://stackoverflow.com/a/48218209
-function mergeDeep(...objects: any[]): any {
-    const isObject = (obj: any) => obj && typeof obj === "object";
-
-    return objects.reduce((prev, obj) => {
-        Object.keys(obj).forEach((key) => {
-            const pVal = prev[key];
-            const oVal = obj[key];
-
-            if (Array.isArray(pVal) && Array.isArray(oVal)) {
-                prev[key] = pVal.concat(...oVal);
-            } else if (isObject(pVal) && isObject(oVal)) {
-                prev[key] = mergeDeep(pVal, oVal);
-            } else {
-                prev[key] = oVal;
-            }
-        });
-
-        return prev;
-    }, {});
 }
 
 /**
@@ -230,6 +202,9 @@ export class GLTFLoader implements IGLTFLoader {
 
     /** @internal */
     public _allMaterialsDirtyRequired = false;
+
+    /** @internal */
+    public _skipStartAnimationStep = false;
 
     private readonly _parent: GLTFFileLoader;
     private readonly _extensions = new Array<IGLTFLoaderExtension>();
@@ -483,10 +458,20 @@ export class GLTFLoader implements IGLTFLoader {
                         this._rootBabylonMesh.setEnabled(true);
                     }
 
+                    // Making sure we enable enough lights to have all lights together
+                    for (const material of this._babylonScene.materials) {
+                        const mat = material as any;
+
+                        if (mat.maxSimultaneousLights !== undefined) {
+                            mat.maxSimultaneousLights = Math.max(mat.maxSimultaneousLights, this._babylonScene.lights.length);
+                        }
+                    }
+
                     this._extensionsOnReady();
                     this._parent._setState(GLTFLoaderState.READY);
-
-                    this._startAnimations();
+                    if (!this._skipStartAnimationStep) {
+                        this._startAnimations();
+                    }
 
                     return resultFunc();
                 });
@@ -909,7 +894,7 @@ export class GLTFLoader implements IGLTFLoader {
                         const babylonTransformNodeForSkin = node._babylonTransformNodeForSkin!;
 
                         // Merge the metadata from the skin node to the skinned mesh in case a loader extension added metadata.
-                        babylonTransformNode.metadata = mergeDeep(babylonTransformNodeForSkin.metadata, babylonTransformNode.metadata || {});
+                        babylonTransformNode.metadata = deepMerge(babylonTransformNodeForSkin.metadata, babylonTransformNode.metadata || {});
 
                         const skin = ArrayItem.Get(`${context}/skin`, this._gltf.skins, node.skin);
                         promises.push(
@@ -949,7 +934,8 @@ export class GLTFLoader implements IGLTFLoader {
 
         return Promise.all(promises).then(() => {
             this._forEachPrimitive(node, (babylonMesh) => {
-                if ((babylonMesh as Mesh).geometry && (babylonMesh as Mesh).geometry!.useBoundingInfoFromGeometry) {
+                const asMesh = babylonMesh as Mesh;
+                if (!asMesh.isAnInstance && asMesh.geometry && asMesh.geometry.useBoundingInfoFromGeometry) {
                     // simply apply the world matrices to the bounding info - the extends are already ok
                     babylonMesh._updateBoundingInfo();
                 } else {
@@ -1293,6 +1279,48 @@ export class GLTFLoader implements IGLTFLoader {
                 }
             });
             babylonMorphTarget.setTangents(tangents);
+        });
+
+        loadAttribute("TEXCOORD_0", VertexBuffer.UVKind, (babylonVertexBuffer, data) => {
+            const uvs = new Float32Array(data.length);
+            babylonVertexBuffer.forEach(data.length, (value, index) => {
+                uvs[index] = data[index] + value;
+            });
+
+            babylonMorphTarget.setUVs(uvs);
+        });
+
+        loadAttribute("TEXCOORD_1", VertexBuffer.UV2Kind, (babylonVertexBuffer, data) => {
+            const uvs = new Float32Array(data.length);
+            babylonVertexBuffer.forEach(data.length, (value, index) => {
+                uvs[index] = data[index] + value;
+            });
+
+            babylonMorphTarget.setUV2s(uvs);
+        });
+
+        loadAttribute("COLOR_0", VertexBuffer.ColorKind, (babylonVertexBuffer, data) => {
+            let colors = null;
+            const componentSize = babylonVertexBuffer.getSize();
+            if (componentSize === 3) {
+                colors = new Float32Array((data.length / 3) * 4);
+                babylonVertexBuffer.forEach(data.length, (value, index) => {
+                    const pixid = Math.floor(index / 3);
+                    const channel = index % 3;
+                    colors[4 * pixid + channel] = data[3 * pixid + channel] + value;
+                });
+                for (let i = 0; i < data.length / 3; ++i) {
+                    colors[4 * i + 3] = 1;
+                }
+            } else if (componentSize === 4) {
+                colors = new Float32Array(data.length);
+                babylonVertexBuffer.forEach(data.length, (value, index) => {
+                    colors[index] = data[index] + value;
+                });
+            } else {
+                throw new Error(`${context}: Invalid number of components (${componentSize}) for COLOR_0 attribute`);
+            }
+            babylonMorphTarget.setColors(colors);
         });
 
         return Promise.all(promises).then(() => {});
@@ -1648,7 +1676,7 @@ export class GLTFLoader implements IGLTFLoader {
      * @param onLoad Called for each animation loaded
      * @returns A void promise that resolves when the load is complete
      */
-    public _loadAnimationChannelAsync(
+    public async _loadAnimationChannelAsync(
         context: string,
         animationContext: string,
         animation: IAnimation,
@@ -1677,31 +1705,37 @@ export class GLTFLoader implements IGLTFLoader {
         if (!this._parent.loadNodeAnimations && !pathIsWeights && !targetNode._isJoint) {
             return Promise.resolve();
         }
+        // async-load the animation sampler to provide the interpolation of the channelTargetPath
+        await import("./glTFLoaderAnimation");
 
-        let properties: Array<AnimationPropertyInfo>;
+        let properties: IInterpolationPropertyInfo[];
         switch (channelTargetPath) {
             case AnimationChannelTargetPath.TRANSLATION: {
-                properties = nodeAnimationData.translation;
+                properties = GetMappingForKey("/nodes/{}/translation")?.interpolation!;
                 break;
             }
             case AnimationChannelTargetPath.ROTATION: {
-                properties = nodeAnimationData.rotation;
+                properties = GetMappingForKey("/nodes/{}/rotation")?.interpolation!;
                 break;
             }
             case AnimationChannelTargetPath.SCALE: {
-                properties = nodeAnimationData.scale;
+                properties = GetMappingForKey("/nodes/{}/scale")?.interpolation!;
                 break;
             }
             case AnimationChannelTargetPath.WEIGHTS: {
-                properties = nodeAnimationData.weights;
+                properties = GetMappingForKey("/nodes/{}/weights")?.interpolation!;
                 break;
             }
             default: {
                 throw new Error(`${context}/target/path: Invalid value (${channel.target.path})`);
             }
         }
+        // stay safe
+        if (!properties) {
+            throw new Error(`${context}/target/path: Could not find interpolation properties for target path (${channel.target.path})`);
+        }
 
-        const targetInfo: IObjectInfo<AnimationPropertyInfo[]> = {
+        const targetInfo: IObjectInfo<IInterpolationPropertyInfo[]> = {
             object: targetNode,
             info: properties,
         };
@@ -1725,7 +1759,7 @@ export class GLTFLoader implements IGLTFLoader {
         animationContext: string,
         animation: IAnimation,
         channel: IAnimationChannel,
-        targetInfo: IObjectInfo<AnimationPropertyInfo[]>,
+        targetInfo: IObjectInfo<IInterpolationPropertyInfo[]>,
         onLoad: (babylonAnimatable: IAnimatable, babylonAnimation: Animation) => void
     ): Promise<void> {
         const fps = this.parent.targetFps;
@@ -1797,10 +1831,11 @@ export class GLTFLoader implements IGLTFLoader {
 
                 if (outputOffset > 0) {
                     const name = `${animation.name || `animation${animation.index}`}_channel${channel.index}_${numAnimations}`;
-                    propertyInfo.buildAnimations(target, name, fps, keys, (babylonAnimatable, babylonAnimation) => {
-                        ++numAnimations;
-                        onLoad(babylonAnimatable, babylonAnimation);
-                    });
+                    const babylonAnimations = propertyInfo.buildAnimations(target, name, fps, keys);
+                    for (const babylonAnimation of babylonAnimations) {
+                        numAnimations++;
+                        onLoad(babylonAnimation.babylonAnimatable, babylonAnimation.babylonAnimation);
+                    }
                 }
             }
         });
@@ -1934,7 +1969,7 @@ export class GLTFLoader implements IGLTFLoader {
         if (accessor.sparse) {
             const sparse = accessor.sparse;
             accessor._data = accessor._data.then((data) => {
-                const typedArray = data as TypedArrayLike;
+                const typedArray = data as TypedArray;
                 const indicesBufferView = ArrayItem.Get(`${context}/sparse/indices/bufferView`, this._gltf.bufferViews, sparse.indices.bufferView);
                 const valuesBufferView = ArrayItem.Get(`${context}/sparse/values/bufferView`, this._gltf.bufferViews, sparse.values.bufferView);
                 return Promise.all([
@@ -1950,7 +1985,7 @@ export class GLTFLoader implements IGLTFLoader {
                     ) as IndicesArray;
 
                     const sparseLength = numComponents * sparse.count;
-                    let values: TypedArrayLike;
+                    let values: TypedArray;
 
                     if (accessor.componentType === AccessorComponentType.FLOAT && !accessor.normalized) {
                         values = GLTFLoader._GetTypedArray(`${context}/sparse/values`, accessor.componentType, valuesData, sparse.values.byteOffset, sparseLength);
@@ -2199,6 +2234,7 @@ export class GLTFLoader implements IGLTFLoader {
         babylonMaterial.transparencyMode = PBRMaterial.PBRMATERIAL_OPAQUE;
         babylonMaterial.metallic = 1;
         babylonMaterial.roughness = 1;
+
         return babylonMaterial;
     }
 
@@ -2652,31 +2688,14 @@ export class GLTFLoader implements IGLTFLoader {
     }
 
     private static _GetTypedArrayConstructor(context: string, componentType: AccessorComponentType): TypedArrayConstructor {
-        switch (componentType) {
-            case AccessorComponentType.BYTE:
-                return Int8Array;
-            case AccessorComponentType.UNSIGNED_BYTE:
-                return Uint8Array;
-            case AccessorComponentType.SHORT:
-                return Int16Array;
-            case AccessorComponentType.UNSIGNED_SHORT:
-                return Uint16Array;
-            case AccessorComponentType.UNSIGNED_INT:
-                return Uint32Array;
-            case AccessorComponentType.FLOAT:
-                return Float32Array;
-            default:
-                throw new Error(`${context}: Invalid component type ${componentType}`);
+        try {
+            return GetTypedArrayConstructor(componentType);
+        } catch (e) {
+            throw new Error(`${context}: ${e.message}`);
         }
     }
 
-    private static _GetTypedArray(
-        context: string,
-        componentType: AccessorComponentType,
-        bufferView: ArrayBufferView,
-        byteOffset: number | undefined,
-        length: number
-    ): TypedArrayLike {
+    private static _GetTypedArray(context: string, componentType: AccessorComponentType, bufferView: ArrayBufferView, byteOffset: number | undefined, length: number): TypedArray {
         const buffer = bufferView.buffer;
         byteOffset = bufferView.byteOffset + (byteOffset || 0);
 

@@ -78,10 +78,11 @@ import { ExrLoaderGlobalConfiguration } from "./EXR/exrLoader.configuration";
 
 /**
  * Loader for .exr file format
- * #4RN0VF#151: PIZ compression
- * #4RN0VF#146: ZIP compression
- * #4RN0VF#149: RLE compression
- * #4RN0VF#150: PXR24 compression
+ * @see [PIZ compression](https://playground.babylonjs.com/#4RN0VF#151)
+ * @see [ZIP compression](https://playground.babylonjs.com/#4RN0VF#146)
+ * @see [RLE compression](https://playground.babylonjs.com/#4RN0VF#149)
+ * @see [PXR24 compression](https://playground.babylonjs.com/#4RN0VF#150)
+ * @internal
  */
 // eslint-disable-next-line @typescript-eslint/naming-convention
 export class _ExrTextureLoader implements IInternalTextureLoader {
@@ -97,6 +98,7 @@ export class _ExrTextureLoader implements IInternalTextureLoader {
      * @param _createPolynomials will be true if polynomials have been requested
      * @param _onLoad defines the callback to trigger once the texture is ready
      * @param _onError defines the callback to trigger in case of error
+     * Cube texture are not supported by .exr files
      */
     public loadCubeData(
         _data: ArrayBufferView | ArrayBufferView[],

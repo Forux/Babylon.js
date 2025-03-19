@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/naming-convention */
-import type { Nullable, IndicesArray, DataArray, FloatArray, DeepImmutable } from "../types";
+import type { Nullable, IndicesArray, DataArray, FloatArray, DeepImmutable, int } from "../types";
 import { Engine } from "../Engines/engine";
 import type { VertexBuffer } from "../Buffers/buffer";
 import { InternalTexture, InternalTextureSource } from "../Materials/Textures/internalTexture";
@@ -13,7 +13,7 @@ import { Tools } from "../Misc/tools";
 import type { Observer } from "../Misc/observable";
 import { Observable } from "../Misc/observable";
 import type { EnvironmentTextureSpecularInfoV1 } from "../Misc/environmentTextureTools";
-import { CreateImageDataArrayBufferViews, GetEnvInfo, UploadEnvSpherical } from "../Misc/environmentTextureTools";
+import { CreateRadianceImageDataArrayBufferViews, GetEnvInfo, UploadEnvSpherical } from "../Misc/environmentTextureTools";
 import type { Scene } from "../scene";
 import type { RenderTargetCreationOptions, TextureSize, DepthTextureCreationOptions, InternalTextureCreationOptions } from "../Materials/Textures/textureCreationOptions";
 import type { IPipelineContext } from "./IPipelineContext";
@@ -28,12 +28,22 @@ import { ShaderCodeInliner } from "./Processors/shaderCodeInliner";
 import { NativeShaderProcessor } from "./Native/nativeShaderProcessors";
 import type { IMaterialContext } from "./IMaterialContext";
 import type { IDrawContext } from "./IDrawContext";
-import type { ICanvas, IImage } from "./ICanvas";
+import type { ICanvas, IImage, IPath2D } from "./ICanvas";
 import type { IStencilState } from "../States/IStencilState";
 import type { RenderTargetWrapper } from "./renderTargetWrapper";
 import type { NativeData } from "./Native/nativeDataStream";
 import { NativeDataStream } from "./Native/nativeDataStream";
-import type { INative, INativeCamera, INativeEngine, NativeFramebuffer, NativeProgram, NativeTexture, NativeUniform, NativeVertexArrayObject } from "./Native/nativeInterfaces";
+import type {
+    INative,
+    INativeCamera,
+    INativeEngine,
+    NativeFramebuffer,
+    NativeFrameStats,
+    NativeProgram,
+    NativeTexture,
+    NativeUniform,
+    NativeVertexArrayObject,
+} from "./Native/nativeInterfaces";
 import { NativePipelineContext } from "./Native/nativePipelineContext";
 import { NativeRenderTargetWrapper } from "./Native/nativeRenderTargetWrapper";
 import { NativeHardwareTexture } from "./Native/nativeHardwareTexture";
@@ -57,6 +67,7 @@ import type { WebGLHardwareTexture } from "./WebGL/webGLHardwareTexture";
 
 import "../Buffers/buffer.align";
 import { _GetCompatibleTextureLoader } from "core/Materials/Textures/Loaders/textureLoaderManager";
+import { _TimeToken } from "../Instrumentation/timeToken";
 
 // REVIEW: add a flag to effect to prevent multiple compilations of the same shader.
 declare module "../Materials/effect" {
@@ -218,6 +229,8 @@ export class NativeEngine extends Engine {
     private readonly _camera: Nullable<INativeCamera> = _native.Camera ? new _native.Camera() : null;
 
     private readonly _commandBufferEncoder = new CommandBufferEncoder(this._engine);
+
+    private readonly _frameStats: NativeFrameStats = { gpuTimeNs: Number.NaN };
 
     private _boundBuffersVertexArray: any = null;
     private _currentDepthTest: number = _native.Engine.DEPTH_TEST_LEQUAL;
@@ -930,6 +943,10 @@ export class NativeEngine extends Engine {
         this._commandBufferEncoder.encodeCommandArgAsFloat32(0);
         this._commandBufferEncoder.encodeCommandArgAsFloat32(0);
         this._commandBufferEncoder.finishEncodingCommand();
+    }
+
+    public override setStateCullFaceType(_cullBackFaces?: boolean, _force?: boolean): void {
+        throw new Error("setStateCullFaceType: Not Implemented");
     }
 
     public override setState(
@@ -2127,7 +2144,7 @@ export class NativeEngine extends Engine {
                 }
 
                 texture._lodGenerationScale = specularInfo.lodGenerationScale;
-                const imageData = CreateImageDataArrayBufferViews(data, info);
+                const imageData = CreateRadianceImageDataArrayBufferViews(data, info);
 
                 texture.format = Constants.TEXTUREFORMAT_RGBA;
                 texture.type = Constants.TEXTURETYPE_UNSIGNED_BYTE;
@@ -2596,6 +2613,19 @@ export class NativeEngine extends Engine {
     }
 
     /**
+     * Create a 2D path to use with canvas
+     * @returns IPath2D interface
+     * @param d SVG path string
+     */
+    public override createCanvasPath2D(d?: string): IPath2D {
+        if (!_native.Canvas) {
+            throw new Error("Native Canvas plugin not available.");
+        }
+        const path2d = new _native.Path2D(d);
+        return path2d;
+    }
+
+    /**
      * Update a portion of an internal texture
      * @param texture defines the texture to update
      * @param imageData defines the data to store into the texture
@@ -2703,5 +2733,19 @@ export class NativeEngine extends Engine {
 
                 return buffer;
             });
+    }
+
+    override startTimeQuery(): Nullable<_TimeToken> {
+        if (!this._gpuFrameTimeToken) {
+            this._gpuFrameTimeToken = new _TimeToken();
+        }
+
+        // Always return the same time token. For native, we don't need a start marker, we just query for native frame stats.
+        return this._gpuFrameTimeToken;
+    }
+
+    override endTimeQuery(token: _TimeToken): int {
+        this._engine.populateFrameStats?.(this._frameStats);
+        return this._frameStats.gpuTimeNs;
     }
 }

@@ -872,7 +872,13 @@ export class Effect implements IDisposable {
     }
 
     private _processCompilationErrors(e: any, previousPipelineContext: Nullable<IPipelineContext> = null) {
-        this._compilationError = e.message;
+        //>> VRNET
+        if (e !== undefined && e instanceof Error) {
+            this._compilationError = e.message;
+        } else {
+            this._compilationError = "unknown compilation error " + e;
+        }
+        //<< VRNET
         const attributesNames = this._attributesNames;
         const fallbacks = this._fallbacks;
 

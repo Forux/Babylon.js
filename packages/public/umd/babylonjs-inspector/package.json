@@ -1,6 +1,6 @@
 {
     "name": "babylonjs-inspector",
-    "version": "7.53.3",
+    "version": "8.8.5",
     "main": "babylon.inspector.bundle.max.js",
     "types": "babylon.inspector.module.d.ts",
     "files": [
@@ -14,27 +14,27 @@
         "clean": "rimraf dist && rimraf babylon*.* -g"
     },
     "dependencies": {
-        "babylonjs": "^7.53.3",
-        "babylonjs-gui": "^7.53.3",
-        "babylonjs-gui-editor": "^7.53.3",
-        "babylonjs-loaders": "^7.53.3",
-        "babylonjs-materials": "^7.53.3",
-        "babylonjs-serializers": "^7.53.3"
+        "babylonjs": "^8.8.5",
+        "babylonjs-gui": "^8.8.5",
+        "babylonjs-gui-editor": "^8.8.5",
+        "babylonjs-loaders": "^8.8.5",
+        "babylonjs-materials": "^8.8.5",
+        "babylonjs-serializers": "^8.8.5"
     },
     "devDependencies": {
         "@dev/build-tools": "1.0.0",
         "@dev/inspector": "1.0.0",
         "@dev/shared-ui-components": "1.0.0",
-        "@types/react": "^17.0.30",
-        "@types/react-dom": "^17.0.10",
+        "@types/react": "^18.0.0",
+        "@types/react-dom": "^18.0.0",
         "css-loader": "^7.1.0",
-        "react": "^17.0.2",
-        "react-contextmenu": "RaananW/react-contextmenu",
-        "react-dom": "^17.0.2",
+        "react": "^18.2.0",
+        "react-contextmenu": "RaananW/react-contextmenu#4cb92c957ebff7aee6fc3b0ace61bc143a7373f2",
+        "react-dom": "^18.2.0",
         "sass-loader": "^16.0.0",
         "source-map-loader": "^4.0.0",
         "ts-loader": "^9.2.6",
-        "webpack": "^5.73.0",
+        "webpack": "^5.98.0",
         "webpack-cli": "^5.1.0",
         "webpack-merge": "^5.8.0"
     },

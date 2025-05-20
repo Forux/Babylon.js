@@ -1,3 +1,5 @@
+/* eslint-disable github/no-then */
+/* eslint-disable @typescript-eslint/no-floating-promises */
 import * as React from "react";
 import type { GlobalState } from "../globalState";
 import { RuntimeMode } from "../globalState";
@@ -40,6 +42,7 @@ export class RenderingComponent extends React.Component<IRenderingComponentProps
         };
 
         this.props.globalState.onRunRequiredObservable.add(() => {
+            // eslint-disable-next-line @typescript-eslint/no-floating-promises
             this._compileAndRunAsync();
         });
 
@@ -97,7 +100,7 @@ export class RenderingComponent extends React.Component<IRenderingComponentProps
     };
 
     private async _loadScriptAsync(url: string): Promise<void> {
-        return new Promise((resolve) => {
+        return await new Promise((resolve) => {
             const script = document.createElement("script");
             script.setAttribute("type", "text/javascript");
             script.setAttribute("src", url);
@@ -108,8 +111,21 @@ export class RenderingComponent extends React.Component<IRenderingComponentProps
         });
     }
 
-    private async _compileAndRunAsync() {
+    private _notifyError(message: string) {
+        this.props.globalState.onErrorObservable.notifyObservers({
+            message: message,
+        });
         this.props.globalState.onDisplayWaitRingObservable.notifyObservers(false);
+    }
+
+    private _preventReentrancy = false;
+
+    private async _compileAndRunAsync() {
+        if (this._preventReentrancy) {
+            return;
+        }
+        this._preventReentrancy = true;
+
         this.props.globalState.onErrorObservable.notifyObservers(null);
 
         const displayInspector = this._scene?.debugLayer.isVisible();
@@ -197,6 +213,7 @@ export class RenderingComponent extends React.Component<IRenderingComponentProps
             let code = await this.props.globalState.getCompiledCode();
 
             if (!code) {
+                this._preventReentrancy = false;
                 return;
             }
 
@@ -262,10 +279,8 @@ export class RenderingComponent extends React.Component<IRenderingComponentProps
             }
 
             if (!createSceneFunction) {
-                this.props.globalState.onErrorObservable.notifyObservers({
-                    message: "You must provide a function named createScene.",
-                });
-                return;
+                this._preventReentrancy = false;
+                return this._notifyError("You must provide a function named createScene.");
             } else {
                 // Write an "initFunction" that creates engine and scene
                 // using the appropriate default or user-provided functions.
@@ -286,8 +301,8 @@ export class RenderingComponent extends React.Component<IRenderingComponentProps
 
                     window.engine = await asyncEngineCreation();
                     
-                    const engineOptions = window.engine.getCreationOptions();
-                    if (engineOptions.audioEngine !== false) {
+                    const engineOptions = window.engine.getCreationOptions?.();
+                    if (!engineOptions || engineOptions.audioEngine !== false) {
                         ${audioInit}
                     }`;
                 code += "\r\nif (!engine) throw 'engine should not be null.';";
@@ -342,17 +357,13 @@ export class RenderingComponent extends React.Component<IRenderingComponentProps
                 this._engine = globalObject.engine;
 
                 if (!this._engine) {
-                    this.props.globalState.onErrorObservable.notifyObservers({
-                        message: "createEngine function must return an engine.",
-                    });
-                    return;
+                    this._preventReentrancy = false;
+                    return this._notifyError("createEngine function must return an engine.");
                 }
 
                 if (!globalObject.scene) {
-                    this.props.globalState.onErrorObservable.notifyObservers({
-                        message: createSceneFunction + " function must return a scene.",
-                    });
-                    return;
+                    this._preventReentrancy = false;
+                    return this._notifyError("createScene function must return a scene.");
                 }
 
                 let sceneToRenderCode = "sceneToRender = scene";
@@ -379,10 +390,8 @@ export class RenderingComponent extends React.Component<IRenderingComponentProps
             }
 
             if (checkSceneCount && this._engine.scenes.length === 0) {
-                this.props.globalState.onErrorObservable.notifyObservers({
-                    message: "You must at least create a scene.",
-                });
-                return;
+                this._preventReentrancy = false;
+                return this._notifyError("You must at least create a scene.");
             }
 
             if (this._engine.scenes[0] && displayInspector) {
@@ -390,26 +399,38 @@ export class RenderingComponent extends React.Component<IRenderingComponentProps
             }
 
             if (checkCamera && this._engine.scenes[0].activeCamera == null) {
-                this.props.globalState.onErrorObservable.notifyObservers({
-                    message: "You must at least create a camera.",
-                });
-                return;
+                this._preventReentrancy = false;
+                return this._notifyError("You must at least create a camera.");
             } else if (globalObject.scene.then) {
-                globalObject.scene.then(() => {
-                    if (this._engine!.scenes[0] && displayInspector) {
-                        this.props.globalState.onInspectorRequiredObservable.notifyObservers();
+                globalObject.scene.then(
+                    () => {
+                        if (this._engine!.scenes[0] && displayInspector) {
+                            this.props.globalState.onInspectorRequiredObservable.notifyObservers();
+                        }
+                        this._engine!.scenes[0].executeWhenReady(() => {
+                            this.props.globalState.onRunExecutedObservable.notifyObservers();
+                        });
+                        this._preventReentrancy = false;
+                    },
+                    (err: any) => {
+                        // eslint-disable-next-line no-console
+                        console.error(err);
+                        this._preventReentrancy = false;
                     }
-                });
+                );
             } else {
                 this._engine.scenes[0].executeWhenReady(() => {
                     this.props.globalState.onRunExecutedObservable.notifyObservers();
                 });
+                this._preventReentrancy = false;
             }
         } catch (err) {
             // eslint-disable-next-line no-console
             console.error(err, "Retrying if possible. If this error persists please notify the team.");
             this.props.globalState.onErrorObservable.notifyObservers(this._tmpErrorEvent || err);
+            this._preventReentrancy = false;
         }
+        this.props.globalState.onDisplayWaitRingObservable.notifyObservers(false);
     }
 
     public override render() {

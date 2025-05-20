@@ -7,6 +7,7 @@ import type { RichType } from "../../flowGraphRichTypes";
 import type { IFlowGraphBlockConfiguration } from "../../flowGraphBlock";
 import { RegisterClass } from "../../../Misc/typeStore";
 import { FlowGraphBlockNames } from "../flowGraphBlockNames";
+import { FlowGraphCoordinator } from "core/FlowGraph/flowGraphCoordinator";
 /**
  * Parameters used to create a FlowGraphReceiveCustomEventBlock.
  */
@@ -46,10 +47,17 @@ export class FlowGraphReceiveCustomEventBlock extends FlowGraphEventBlock {
 
     public _preparePendingTasks(context: FlowGraphContext): void {
         const observable = context.configuration.coordinator.getCustomEventObservable(this.config.eventId);
+        // check if we are not exceeding the max number of events
+        if (observable && observable.hasObservers() && observable.observers.length > FlowGraphCoordinator.MaxEventsPerType) {
+            this._reportError(context, `FlowGraphReceiveCustomEventBlock: Too many observers for event ${this.config.eventId}. Max is ${FlowGraphCoordinator.MaxEventsPerType}.`);
+            return;
+        }
+
         const eventObserver = observable.add((eventData: { [key: string]: any }) => {
-            Object.keys(eventData).forEach((key) => {
+            const keys = Object.keys(eventData);
+            for (const key of keys) {
                 this.getDataOutput(key)?.setValue(eventData[key], context);
-            });
+            }
             this._execute(context);
         });
         context._setExecutionVariable(this, "_eventObserver", eventObserver);

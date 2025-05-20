@@ -51,7 +51,7 @@
                         preInfo.attenuation *= computeDirectionalLightFalloff_IES(light{X}.vLightDirection.xyz, preInfo.L, iesLightTexture{X});
                     #else
                         preInfo.attenuation *= computeDirectionalLightFalloff(light{X}.vLightDirection.xyz, preInfo.L, light{X}.vLightDirection.w, light{X}.vLightData.w, light{X}.vLightFalloff.z, light{X}.vLightFalloff.w);
-                    #endif                        
+                    #endif
                 #endif
             #elif defined(POINTLIGHT{X})
                 #ifdef LIGHT_FALLOFF_GLTF{X}
@@ -74,6 +74,8 @@
             #else
                 preInfo.roughness = adjustRoughnessFromLightProperties(roughness, light{X}.vLightSpecular.a, preInfo.lightDistance);
             #endif
+            preInfo.diffuseRoughness = diffuseRoughness;
+            preInfo.surfaceAlbedo = surfaceAlbedo;
 
             #ifdef IRIDESCENCE
                 preInfo.iridescenceIntensity = iridescenceIntensity;
@@ -85,7 +87,13 @@
             #elif defined(AREALIGHT{X})
                 info.diffuse = computeAreaDiffuseLighting(preInfo, diffuse{X}.rgb);
             #elif defined(SS_TRANSLUCENCY)
-                info.diffuse = computeDiffuseAndTransmittedLighting(preInfo, diffuse{X}.rgb, subSurfaceOut.transmittance, subSurfaceOut.translucencyIntensity, surfaceAlbedo.rgb);
+                #ifndef SS_TRANSLUCENCY_LEGACY
+                    info.diffuse = computeDiffuseLighting(preInfo, diffuse{X}.rgb) * (1.0 - subSurfaceOut.translucencyIntensity);
+                    info.diffuseTransmission = computeDiffuseTransmittedLighting(preInfo, diffuse{X}.rgb, subSurfaceOut.transmittance); // note subSurfaceOut.translucencyIntensity is already factored in subSurfaceOut.transmittance
+                #else
+                    info.diffuse = computeDiffuseTransmittedLighting(preInfo, diffuse{X}.rgb, subSurfaceOut.transmittance);
+                    info.diffuseTransmission = vec3(0.0);
+                #endif
             #else
                 info.diffuse = computeDiffuseLighting(preInfo, diffuse{X}.rgb);
             #endif
@@ -95,10 +103,30 @@
                 #if AREALIGHT{X}
                     info.specular = computeAreaSpecularLighting(preInfo, light{X}.vLightSpecular.rgb);
                 #else
+                    // For OpenPBR, we use the F82 specular model for metallic materials and mix with the
+                    // usual Schlick lobe.
+                    #if (CONDUCTOR_SPECULAR_MODEL == CONDUCTOR_SPECULAR_MODEL_OPENPBR)
+                        {
+                            vec3 metalFresnel = reflectivityOut.specularWeight * getF82Specular(preInfo.VdotH, clearcoatOut.specularEnvironmentR0, reflectivityOut.colorReflectanceF90, reflectivityOut.roughness);
+                            vec3 dielectricFresnel = fresnelSchlickGGX(preInfo.VdotH, reflectivityOut.dielectricColorF0, reflectivityOut.colorReflectanceF90);
+                            coloredFresnel = mix(dielectricFresnel, metalFresnel, reflectivityOut.metallic);
+                        }
+                    #else
+                        coloredFresnel = fresnelSchlickGGX(preInfo.VdotH, clearcoatOut.specularEnvironmentR0, reflectivityOut.colorReflectanceF90);
+                    #endif
+                    #ifndef LEGACY_SPECULAR_ENERGY_CONSERVATION
+                        {
+                            // The diffuse contribution needs to be decreased by the average Fresnel for the hemisphere.
+                            // We can approximate this with NdotH.
+                            float NdotH = dot(normalW, preInfo.H);
+                            vec3 fresnel = fresnelSchlickGGX(NdotH, vec3(reflectanceF0), specularEnvironmentR90);
+                            info.diffuse *= (vec3(1.0) - fresnel);
+                        }
+                    #endif
                     #ifdef ANISOTROPIC
                         info.specular = computeAnisotropicSpecularLighting(preInfo, viewDirectionW, normalW, anisotropicOut.anisotropicTangent, anisotropicOut.anisotropicBitangent, anisotropicOut.anisotropy, clearcoatOut.specularEnvironmentR0, specularEnvironmentR90, AARoughnessFactors.x, diffuse{X}.rgb);
                     #else
-                        info.specular = computeSpecularLighting(preInfo, normalW, clearcoatOut.specularEnvironmentR0, specularEnvironmentR90, AARoughnessFactors.x, diffuse{X}.rgb);
+                        info.specular = computeSpecularLighting(preInfo, normalW, clearcoatOut.specularEnvironmentR0, coloredFresnel, AARoughnessFactors.x, diffuse{X}.rgb);
                     #endif
                 #endif
             #endif
@@ -129,11 +157,14 @@
                     #endif
 
                     info.clearCoat = computeClearCoatLighting(preInfo, clearcoatOut.clearCoatNormalW, clearcoatOut.clearCoatAARoughnessFactors.x, clearcoatOut.clearCoatIntensity, diffuse{X}.rgb);
-                    
+
                     #ifdef CLEARCOAT_TINT
                         // Absorption
                         absorption = computeClearCoatLightingAbsorption(clearcoatOut.clearCoatNdotVRefract, preInfo.L, clearcoatOut.clearCoatNormalW, clearcoatOut.clearCoatColor, clearcoatOut.clearCoatThickness, clearcoatOut.clearCoatIntensity);
                         info.diffuse *= absorption;
+                        #ifdef SS_TRANSLUCENCY
+                            info.diffuseTransmission *= absorption;
+                        #endif
                         #ifdef SPECULARTERM
                             info.specular *= absorption;
                         #endif
@@ -141,6 +172,9 @@
 
                     // Apply energy conservation on diffuse and specular term.
                     info.diffuse *= info.clearCoat.w;
+                    #ifdef SS_TRANSLUCENCY
+                        info.diffuseTransmission *= info.clearCoat.w;
+                    #endif
                     #ifdef SPECULARTERM
                         info.specular *= info.clearCoat.w;
                     #endif
@@ -178,7 +212,7 @@
 
     #ifdef SHADOW{X}
         #ifdef SHADOWCSM{X}
-            for (int i = 0; i < SHADOWCSMNUM_CASCADES{X}; i++) 
+            for (int i = 0; i < SHADOWCSMNUM_CASCADES{X}; i++)
             {
                 #ifdef SHADOWCSM_RIGHTHANDED{X}
                     diff{X} = viewFrustumZ{X}[i] + vPositionFromCamera{X}.z;
@@ -335,8 +369,11 @@
         #else
             #ifdef SHADOWCSMDEBUG{X}
                 diffuseBase += info.diffuse * shadowDebug{X};
-            #else        
+            #else
                 diffuseBase += info.diffuse * shadow;
+            #endif
+            #ifdef SS_TRANSLUCENCY
+                diffuseTransmissionBase += info.diffuseTransmission * shadow;
             #endif
             #ifdef SPECULARTERM
                 specularBase += info.specular * shadow;

@@ -59,6 +59,10 @@ export class NodeListComponent extends React.Component<INodeListComponentProps, 
         SSRBlock: "Applies a Screen Space Reflection post process",
         AnaglyphBlock: "Applies an anaglyph post process",
         ChromaticAberrationBlock: "Applies a chromatic aberration post process",
+        ImageProcessingBlock: "Applies an image processing post process",
+        FXAABlock: "Applies a FXAA post process",
+        GrainBlock: "Applies a grain post process",
+        MotionBlurBlock: "Applies a motion blur post process",
     };
 
     private _customFrameList: { [key: string]: string };
@@ -163,6 +167,10 @@ export class NodeListComponent extends React.Component<INodeListComponentProps, 
                 "CircleOfConfusionBlock",
                 "DepthOfFieldBlock",
                 "ExtractHighlightsBlock",
+                "FXAABlock",
+                "GrainBlock",
+                "ImageProcessingBlock",
+                "MotionBlurBlock",
                 "PassBlock",
                 "PassCubeBlock",
                 "SSRBlock",
@@ -182,7 +190,7 @@ export class NodeListComponent extends React.Component<INodeListComponentProps, 
         // Create node menu
         const blockMenu = [];
         for (const key in allBlocks) {
-            const blockList = (allBlocks as any)[key]
+            const blockList = allBlocks[key]
                 .filter((b: string) => !this.state.filter || b.toLowerCase().indexOf(this.state.filter.toLowerCase()) !== -1)
                 .sort((a: string, b: string) => a.localeCompare(b))
                 .map((block: any) => {

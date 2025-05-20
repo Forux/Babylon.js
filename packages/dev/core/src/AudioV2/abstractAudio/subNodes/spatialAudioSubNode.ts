@@ -29,7 +29,7 @@ export abstract class _SpatialAudioSubNode extends _AbstractAudioSubNode {
     public abstract rolloffFactor: number;
     public abstract rotation: Vector3;
     public abstract rotationQuaternion: Quaternion;
-    public abstract inNode: AudioNode;
+    public abstract _inNode: AudioNode;
 
     /** @internal */
     public get isAttached(): boolean {
@@ -103,11 +103,6 @@ export abstract class _SpatialAudioSubNode extends _AbstractAudioSubNode {
 /** @internal */
 export function _GetSpatialAudioSubNode(subGraph: _AbstractAudioSubGraph): Nullable<_SpatialAudioSubNode> {
     return subGraph.getSubNode<_SpatialAudioSubNode>(AudioSubNode.SPATIAL);
-}
-
-/** @internal */
-export function _GetSpatialAudioProperty<K extends keyof typeof _SpatialAudioDefaults>(subGraph: _AbstractAudioSubGraph, property: K): (typeof _SpatialAudioDefaults)[K] {
-    return _GetSpatialAudioSubNode(subGraph)?.[property] ?? _SpatialAudioDefaults[property];
 }
 
 /** @internal */

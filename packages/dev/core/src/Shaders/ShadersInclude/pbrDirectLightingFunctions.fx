@@ -4,6 +4,9 @@
 struct lightingInfo
 {
     vec3 diffuse;
+    #ifdef SS_TRANSLUCENCY
+        vec3 diffuseTransmission;
+    #endif
     #ifdef SPECULARTERM
         vec3 specular;
     #endif
@@ -20,7 +23,7 @@ struct lightingInfo
 // Simulate area (small) lights by increasing roughness
 float adjustRoughnessFromLightProperties(float roughness, float lightRadius, float lightDistance) {
     #if defined(USEPHYSICALLIGHTFALLOFF) || defined(USEGLTFLIGHTFALLOFF)
-        // At small angle this approximation works. 
+        // At small angle this approximation works.
         float lightRoughness = lightRadius / lightDistance;
         // Distribution can sum.
         float totalRoughness = saturate(lightRoughness + roughness);
@@ -41,7 +44,14 @@ vec3 computeHemisphericDiffuseLighting(preLightingInfo info, vec3 lightColor, ve
 #endif
 
 vec3 computeDiffuseLighting(preLightingInfo info, vec3 lightColor) {
-    float diffuseTerm = diffuseBRDF_Burley(info.NdotL, info.NdotV, info.VdotH, info.roughness);
+    vec3 diffuseTerm = vec3(1.0 / PI);
+    #if BASE_DIFFUSE_MODEL == BRDF_DIFFUSE_MODEL_BURLEY
+        diffuseTerm = vec3(diffuseBRDF_Burley(info.NdotL, info.NdotV, info.VdotH, info.diffuseRoughness));
+    #elif BASE_DIFFUSE_MODEL == BRDF_DIFFUSE_MODEL_EON
+        vec3 clampedAlbedo = clamp(info.surfaceAlbedo, vec3(0.1), vec3(1.0));
+        diffuseTerm = diffuseBRDF_EON(clampedAlbedo, info.diffuseRoughness, info.NdotL, info.NdotV, info.LdotV);
+        diffuseTerm /= clampedAlbedo;
+    #endif
     return diffuseTerm * info.attenuation * info.NdotL * lightColor;
 }
 
@@ -54,31 +64,40 @@ vec3 computeProjectionTextureDiffuseLighting(sampler2D projectionLightSampler, m
 }
 
 #ifdef SS_TRANSLUCENCY
-    vec3 computeDiffuseAndTransmittedLighting(preLightingInfo info, vec3 lightColor, vec3 transmittance, float transmittanceIntensity, vec3 surfaceAlbedo) {
+    vec3 computeDiffuseTransmittedLighting(preLightingInfo info, vec3 lightColor, vec3 transmittance) {
         vec3 transmittanceNdotL = vec3(0.);
         float NdotL = absEps(info.NdotLUnclamped);
+    #ifndef SS_TRANSLUCENCY_LEGACY
         if (info.NdotLUnclamped < 0.0) {
+    #endif
             // Use wrap lighting to simulate SSS.
             float wrapNdotL = computeWrappedDiffuseNdotL(NdotL, 0.02);
 
             // Remap transmittance from tr to 1. if ndotl is negative.
             float trAdapt = step(0., info.NdotLUnclamped);
             transmittanceNdotL = mix(transmittance * wrapNdotL, vec3(wrapNdotL), trAdapt);
-            }
-
+    #ifndef SS_TRANSLUCENCY_LEGACY
+        }
+        vec3 diffuseTerm = vec3(1.0 / PI);
+        #if BASE_DIFFUSE_MODEL == BRDF_DIFFUSE_MODEL_BURLEY
+            diffuseTerm = vec3(diffuseBRDF_Burley(info.NdotL, info.NdotV, info.VdotH, info.diffuseRoughness));
+        #elif BASE_DIFFUSE_MODEL == BRDF_DIFFUSE_MODEL_EON
+            vec3 clampedAlbedo = clamp(info.surfaceAlbedo, vec3(0.1), vec3(1.0));
+            diffuseTerm = diffuseBRDF_EON(clampedAlbedo, info.diffuseRoughness, info.NdotL, info.NdotV, info.LdotV);
+            diffuseTerm /= clampedAlbedo;
+        #endif
+    #else
         float diffuseTerm = diffuseBRDF_Burley(NdotL, info.NdotV, info.VdotH, info.roughness);
-        // Note: we use a Lambert BRDF for the transmitted term.
-        return (transmittanceNdotL / PI + (1.0 - transmittanceIntensity) * diffuseTerm * surfaceAlbedo * info.NdotL) * info.attenuation * lightColor;
+    #endif
+        return diffuseTerm * transmittanceNdotL * info.attenuation * lightColor;
     }
 #endif
 
 #ifdef SPECULARTERM
-    vec3 computeSpecularLighting(preLightingInfo info, vec3 N, vec3 reflectance0, vec3 reflectance90, float geometricRoughnessFactor, vec3 lightColor) {
+    vec3 computeSpecularLighting(preLightingInfo info, vec3 N, vec3 reflectance0, vec3 fresnel, float geometricRoughnessFactor, vec3 lightColor) {
         float NdotH = saturateEps(dot(N, info.H));
         float roughness = max(info.roughness, geometricRoughnessFactor);
         float alphaG = convertRoughnessToAverageSlope(roughness);
-
-        vec3 fresnel = fresnelSchlickGGX(info.VdotH, reflectance0, reflectance90);
 
         #ifdef IRIDESCENCE
             fresnel = mix(fresnel, reflectance0, info.iridescenceIntensity);

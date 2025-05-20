@@ -42,6 +42,8 @@ import { ParticleHelper } from "core/Particles/particleHelper";
 import { Color4LineComponent } from "shared-ui-components/lines/color4LineComponent";
 import { Constants } from "core/Engines/constants";
 import { Texture } from "core/Materials/Textures/texture";
+import { BlendModeOptions } from "shared-ui-components/constToOptionsMaps";
+import { AttractorsGridComponent } from "./attractorsGridComponent";
 
 interface IParticleSystemPropertyGridComponentProps {
     globalState: GlobalState;
@@ -50,6 +52,16 @@ interface IParticleSystemPropertyGridComponentProps {
     onSelectionChangedObservable?: Observable<any>;
     onPropertyChangedObservable?: Observable<PropertyChangedEvent>;
 }
+
+const ParticleEmitterTypeOptions = [
+    { label: "Box", value: 0 },
+    { label: "Cone", value: 1 },
+    { label: "Cylinder", value: 2 },
+    { label: "Hemispheric", value: 3 },
+    { label: "Mesh", value: 4 },
+    { label: "Point", value: 5 },
+    { label: "Sphere", value: 6 },
+];
 
 export class ParticleSystemPropertyGridComponent extends React.Component<IParticleSystemPropertyGridComponentProps> {
     private _snippetUrl = Constants.SnippetUrl;
@@ -211,7 +223,7 @@ export class ParticleSystemPropertyGridComponent extends React.Component<IPartic
                 system.dispose();
                 this.props.globalState.onSelectionChangedObservable.notifyObservers(null);
 
-                const newSystem = isGpu ? GPUParticleSystem.Parse(jsonObject, scene!, "") : ParticleSystem.Parse(jsonObject, scene!, "");
+                const newSystem = isGpu ? GPUParticleSystem.Parse(jsonObject, scene, "") : ParticleSystem.Parse(jsonObject, scene, "");
                 this.props.globalState.onSelectionChangedObservable.notifyObservers(newSystem);
             },
             undefined,
@@ -234,9 +246,11 @@ export class ParticleSystemPropertyGridComponent extends React.Component<IPartic
         this.props.globalState.onSelectionChangedObservable.notifyObservers(null);
 
         ParticleHelper.ParseFromSnippetAsync(snippedId, scene, isGpu)
+            // eslint-disable-next-line github/no-then
             .then((newSystem) => {
                 this.props.globalState.onSelectionChangedObservable.notifyObservers(newSystem);
             })
+            // eslint-disable-next-line github/no-then
             .catch((err) => {
                 alert("Unable to load your particle system: " + err);
             });
@@ -258,6 +272,7 @@ export class ParticleSystemPropertyGridComponent extends React.Component<IPartic
                     }
                     this.forceUpdate();
                     if (navigator.clipboard) {
+                        // eslint-disable-next-line @typescript-eslint/no-floating-promises
                         navigator.clipboard.writeText(system.snippetId);
                     }
 
@@ -313,24 +328,6 @@ export class ParticleSystemPropertyGridComponent extends React.Component<IPartic
     override render() {
         const system = this.props.system;
 
-        const blendModeOptions = [
-            { label: "Add", value: ParticleSystem.BLENDMODE_ADD },
-            { label: "Multiply", value: ParticleSystem.BLENDMODE_MULTIPLY },
-            { label: "Multiply Add", value: ParticleSystem.BLENDMODE_MULTIPLYADD },
-            { label: "OneOne", value: ParticleSystem.BLENDMODE_ONEONE },
-            { label: "Standard", value: ParticleSystem.BLENDMODE_STANDARD },
-        ];
-
-        const particleEmitterTypeOptions = [
-            { label: "Box", value: 0 },
-            { label: "Cone", value: 1 },
-            { label: "Cylinder", value: 2 },
-            { label: "Hemispheric", value: 3 },
-            { label: "Mesh", value: 4 },
-            { label: "Point", value: 5 },
-            { label: "Sphere", value: 6 },
-        ];
-
         const meshEmitters = this.props.system.getScene()!.meshes.filter((m) => !!m.name);
 
         const emitterOptions = [
@@ -374,7 +371,7 @@ export class ParticleSystemPropertyGridComponent extends React.Component<IPartic
                     )}
                     <OptionsLine
                         label="Blend mode"
-                        options={blendModeOptions}
+                        options={BlendModeOptions}
                         target={system}
                         propertyName="blendMode"
                         onPropertyChangedObservable={this.props.onPropertyChangedObservable}
@@ -437,6 +434,11 @@ export class ParticleSystemPropertyGridComponent extends React.Component<IPartic
                     <ButtonLineComponent label="Load from snippet server" onClick={() => this.loadFromSnippet()} />
                     <ButtonLineComponent label="Save to snippet server" onClick={() => this.saveToSnippet()} />
                 </LineContainerComponent>
+                {system instanceof ParticleSystem && (
+                    <LineContainerComponent title="ATTRACTORS" closed={true} selection={this.props.globalState}>
+                        <AttractorsGridComponent globalState={this.props.globalState} host={system} lockObject={this.props.lockObject} />
+                    </LineContainerComponent>
+                )}
                 <LineContainerComponent title="EMITTER" closed={true} selection={this.props.globalState}>
                     <OptionsLine
                         label="Emitter"
@@ -497,7 +499,7 @@ export class ParticleSystemPropertyGridComponent extends React.Component<IPartic
                     )}
                     <OptionsLine
                         label="Type"
-                        options={particleEmitterTypeOptions}
+                        options={ParticleEmitterTypeOptions}
                         target={system}
                         propertyName="particleEmitterType"
                         noDirectUpdate={true}
@@ -570,11 +572,14 @@ export class ParticleSystemPropertyGridComponent extends React.Component<IPartic
                     {system instanceof ParticleSystem && (
                         <ValueGradientGridComponent
                             globalState={this.props.globalState}
-                            gradients={system.getEmitRateGradients()!}
-                            label="Velocity gradients"
+                            gradients={system.getEmitRateGradients()}
+                            label="Emit rate gradients"
                             docLink="https://doc.babylonjs.com/features/featuresDeepDive/particles/particle_system/tuning_gradients#change-speed-over-lifetime"
                             onCreateRequired={() => {
                                 system.addEmitRateGradient(0, 50, 50);
+                            }}
+                            onRemoveRequired={(step) => {
+                                system.removeEmitRateGradient(step.gradient);
                             }}
                             mode={GradientGridMode.Factor}
                             host={system}
@@ -596,13 +601,17 @@ export class ParticleSystemPropertyGridComponent extends React.Component<IPartic
                         propertyName="maxEmitPower"
                         onPropertyChangedObservable={this.props.onPropertyChangedObservable}
                     />
+
                     <ValueGradientGridComponent
                         globalState={this.props.globalState}
-                        gradients={system.getVelocityGradients()!}
+                        gradients={system.getVelocityGradients()}
                         label="Velocity gradients"
                         docLink="https://doc.babylonjs.com/features/featuresDeepDive/particles/particle_system/tuning_gradients#change-speed-over-lifetime"
                         onCreateRequired={() => {
                             system.addVelocityGradient(0, 0.1, 0.1);
+                        }}
+                        onRemoveRequired={(step) => {
+                            system.removeVelocityGradient(step.gradient);
                         }}
                         mode={GradientGridMode.Factor}
                         host={system}
@@ -611,24 +620,39 @@ export class ParticleSystemPropertyGridComponent extends React.Component<IPartic
                     />
                     <ValueGradientGridComponent
                         globalState={this.props.globalState}
-                        gradients={system.getLimitVelocityGradients()!}
+                        gradients={system.getLimitVelocityGradients()}
                         label="Limit velocity gradients"
                         docLink="https://doc.babylonjs.com/features/featuresDeepDive/particles/particle_system/tuning_gradients#limit-speed-over-lifetime"
                         onCreateRequired={() => {
                             system.addLimitVelocityGradient(0, 0.1, 0.1);
+                        }}
+                        onRemoveRequired={(step) => {
+                            system.removeLimitVelocityGradient(step.gradient);
                         }}
                         mode={GradientGridMode.Factor}
                         host={system}
                         codeRecorderPropertyName="getLimitVelocityGradients()"
                         lockObject={this.props.lockObject}
                     />
+                    {system.getLimitVelocityGradients() && system.getLimitVelocityGradients()!.length > 0 && (
+                        <FloatLineComponent
+                            lockObject={this.props.lockObject}
+                            label="Limit Velocity Damping"
+                            target={system}
+                            propertyName="limitVelocityDamping"
+                            onPropertyChangedObservable={this.props.onPropertyChangedObservable}
+                        />
+                    )}
                     <ValueGradientGridComponent
                         globalState={this.props.globalState}
-                        gradients={system.getDragGradients()!}
+                        gradients={system.getDragGradients()}
                         label="Drag gradients"
                         docLink="https://doc.babylonjs.com/features/featuresDeepDive/particles/particle_system/tuning_gradients#change-drag-over-lifetime"
                         onCreateRequired={() => {
                             system.addDragGradient(0, 0.1, 0.1);
+                        }}
+                        onRemoveRequired={(step) => {
+                            system.removeDragGradient(step.gradient);
                         }}
                         host={system}
                         codeRecorderPropertyName="getDragGradients()"
@@ -686,11 +710,14 @@ export class ParticleSystemPropertyGridComponent extends React.Component<IPartic
                     {system instanceof ParticleSystem && (
                         <ValueGradientGridComponent
                             globalState={this.props.globalState}
-                            gradients={system.getStartSizeGradients()!}
+                            gradients={system.getStartSizeGradients()}
                             label="Start size gradients"
                             docLink="https://doc.babylonjs.com/features/featuresDeepDive/particles/particle_system/tuning_gradients#change-size-over-lifetime"
                             onCreateRequired={() => {
                                 system.addStartSizeGradient(0, 1, 1);
+                            }}
+                            onRemoveRequired={(step) => {
+                                system.removeStartSizeGradient(step.gradient);
                             }}
                             host={system}
                             codeRecorderPropertyName="getStartSizeGradients()"
@@ -700,11 +727,14 @@ export class ParticleSystemPropertyGridComponent extends React.Component<IPartic
                     )}
                     <ValueGradientGridComponent
                         globalState={this.props.globalState}
-                        gradients={system.getSizeGradients()!}
+                        gradients={system.getSizeGradients()}
                         label="Size gradients"
                         docLink="https://doc.babylonjs.com/features/featuresDeepDive/particles/particle_system/tuning_gradients#change-size-over-lifetime"
                         onCreateRequired={() => {
                             system.addSizeGradient(0, 1, 1);
+                        }}
+                        onRemoveRequired={(step) => {
+                            system.removeSizeGradient(step.gradient);
                         }}
                         host={system}
                         codeRecorderPropertyName="getSizeGradients()"
@@ -737,11 +767,14 @@ export class ParticleSystemPropertyGridComponent extends React.Component<IPartic
                     {system instanceof ParticleSystem && (
                         <ValueGradientGridComponent
                             globalState={this.props.globalState}
-                            gradients={system.getLifeTimeGradients()!}
+                            gradients={system.getLifeTimeGradients()}
                             label="Lifetime gradients"
                             docLink="https://doc.babylonjs.com/features/featuresDeepDive/particles/particle_system/tuning_gradients#change-lifetime-over-duration"
                             onCreateRequired={() => {
                                 system.addLifeTimeGradient(0, 1, 1);
+                            }}
+                            onRemoveRequired={(step) => {
+                                system.removeLifeTimeGradient(step.gradient);
                             }}
                             host={system}
                             codeRecorderPropertyName="getLifeTimeGradients()"
@@ -778,12 +811,15 @@ export class ParticleSystemPropertyGridComponent extends React.Component<IPartic
                     )}
                     <ValueGradientGridComponent
                         globalState={this.props.globalState}
-                        gradients={system.getColorGradients()!}
+                        gradients={system.getColorGradients()}
                         label="Color gradients"
                         docLink="https://doc.babylonjs.com/features/featuresDeepDive/particles/particle_system/tuning_gradients#change-color-over-lifetime"
                         onCreateRequired={() => {
                             system.addColorGradient(0, new Color4(0, 0, 0, 1), new Color4(0, 0, 0, 1));
                             system.addColorGradient(1, new Color4(1, 1, 1, 1), new Color4(1, 1, 1, 1));
+                        }}
+                        onRemoveRequired={(step) => {
+                            system.removeColorGradient(step.gradient);
                         }}
                         host={system}
                         codeRecorderPropertyName="getColorGradients()"
@@ -797,12 +833,15 @@ export class ParticleSystemPropertyGridComponent extends React.Component<IPartic
                                 <>
                                     <ValueGradientGridComponent
                                         globalState={this.props.globalState}
-                                        gradients={system.getRampGradients()!}
+                                        gradients={system.getRampGradients()}
                                         label="Ramp gradients"
                                         docLink="https://doc.babylonjs.com/features/featuresDeepDive/particles/particle_system/ramps_and_blends#ramp-gradients"
                                         onCreateRequired={() => {
                                             system.addRampGradient(0, Color3.White());
                                             system.addRampGradient(1, Color3.Black());
+                                        }}
+                                        onRemoveRequired={(step) => {
+                                            system.removeRampGradient(step.gradient);
                                         }}
                                         mode={GradientGridMode.Color3}
                                         host={system}
@@ -812,11 +851,14 @@ export class ParticleSystemPropertyGridComponent extends React.Component<IPartic
 
                                     <ValueGradientGridComponent
                                         globalState={this.props.globalState}
-                                        gradients={system.getColorRemapGradients()!}
+                                        gradients={system.getColorRemapGradients()}
                                         label="Color remap gradients"
                                         docLink="https://doc.babylonjs.com/features/featuresDeepDive/particles/particle_system/ramps_and_blends#ramp-gradients"
                                         onCreateRequired={() => {
                                             system.addColorRemapGradient(0, 1, 1);
+                                        }}
+                                        onRemoveRequired={(step) => {
+                                            system.removeColorRemapGradient(step.gradient);
                                         }}
                                         host={system}
                                         codeRecorderPropertyName="getColorRemapGradients()"
@@ -825,11 +867,14 @@ export class ParticleSystemPropertyGridComponent extends React.Component<IPartic
                                     />
                                     <ValueGradientGridComponent
                                         globalState={this.props.globalState}
-                                        gradients={system.getAlphaRemapGradients()!}
+                                        gradients={system.getAlphaRemapGradients()}
                                         label="Alpha remap gradients"
                                         docLink="https://doc.babylonjs.com/features/featuresDeepDive/particles/particle_system/ramps_and_blends#ramp-gradients"
                                         onCreateRequired={() => {
                                             system.addAlphaRemapGradient(0, 1, 1);
+                                        }}
+                                        onRemoveRequired={(step) => {
+                                            system.removeAlphaRemapGradient(step.gradient);
                                         }}
                                         host={system}
                                         codeRecorderPropertyName="getAlphaRemapGradients()"
@@ -872,11 +917,14 @@ export class ParticleSystemPropertyGridComponent extends React.Component<IPartic
                     />
                     <ValueGradientGridComponent
                         globalState={this.props.globalState}
-                        gradients={system.getAngularSpeedGradients()!}
+                        gradients={system.getAngularSpeedGradients()}
                         label="Angular speed gradients"
                         docLink="https://doc.babylonjs.com/features/featuresDeepDive/particles/particle_system/tuning_gradients#change-rotation-speed-over-lifetime"
                         onCreateRequired={() => {
                             system.addAngularSpeedGradient(0, 0.1, 0.1);
+                        }}
+                        onRemoveRequired={(step) => {
+                            system.removeAngularSpeedGradient(step.gradient);
                         }}
                         host={system}
                         codeRecorderPropertyName="getAngularSpeedGradients()"

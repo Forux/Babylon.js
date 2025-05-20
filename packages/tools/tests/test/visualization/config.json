@@ -2,9 +2,58 @@
     "root": "https://cdn.babylonjs.com",
     "tests": [
         {
+            "title": "MSDF",
+            "playgroundId": "#6RLCWP#20",
+            "referenceImage": "msdf.png"
+        },
+        {
+            "title": "MSDF Billboard",
+            "playgroundId": "#6RLCWP#23",
+            "referenceImage": "msdf-billboard.png"
+        },
+        {
+            "title": "Attractors",
+            "playgroundId": "#DEZ79M#34",
+            "referenceImage": "attractors.png"
+        },
+        {
+            "title": "PBR in mirror",
+            "playgroundId": "#Q7DP2M",
+            "referenceImage": "pbr_mirror.png"
+        },
+        {
             "title": "OpenPBR Base Weight",
             "playgroundId": "#DT1XPP#4",
             "referenceImage": "openpbr_base_weight.png"
+        },
+        {
+            "title": "OpenPBR Base Diffuse Roughness Analytical Lights",
+            "playgroundId": "#MXACV7#23",
+            "referenceImage": "openpbr_base_diffuse_roughness.png"
+        },
+        {
+            "title": "OpenPBR Base Diffuse Roughness Realtime IBL",
+            "playgroundId": "#MXACV7#22",
+            "renderCount": 15,
+            "referenceImage": "openpbr_base_diffuse_roughness_realtime_ibl.png"
+        },
+        {
+            "title": "OpenPBR Base Diffuse Roughness Prefiltered IBL with CDF",
+            "playgroundId": "#MXACV7#19",
+            "renderCount": 5,
+            "referenceImage": "openpbr_base_diffuse_roughness_prefiltered_ibl_with_cdf.png"
+        },
+        {
+            "title": "OpenPBR Base Diffuse Roughness Prefiltered IBL",
+            "playgroundId": "#MXACV7#20",
+            "renderCount": 5,
+            "referenceImage": "openpbr_base_diffuse_roughness_prefiltered_ibl.png"
+        },
+        {
+            "title": "OpenPBR Base Diffuse Roughness SH IBL",
+            "playgroundId": "#MXACV7#21",
+            "renderCount": 2,
+            "referenceImage": "openpbr_base_diffuse_roughness_spherical_harmonics.png"
         },
         {
             "title": "NME Glow Manual",
@@ -236,7 +285,7 @@
         },
         {
             "title": "EXT_texture_webp",
-            "playgroundId": "#LSAUH2#2",
+            "playgroundId": "#LSAUH2#6",
             "referenceImage": "webp.png"
         },
         {
@@ -938,6 +987,12 @@
             "errorRatio": 1.1
         },
         {
+            "title": "GLTF Serializer Shared Buffer Conversions",
+            "playgroundId": "#KX53VK#85",
+            "referenceImage": "glTFSerializerSharedBufferConversions.png",
+            "replace": "//options//, meshCount = 2;"
+        },
+        {
             "title": "GLTF Serializer Skinning and Animation",
             "playgroundId": "#DMZBX1#1",
             "referenceImage": "gltfSerializerSkinningAndAnimation.png"
@@ -1013,6 +1068,11 @@
             "referenceImage": "glTFSerializerCameraRightHand.png"
         },
         {
+            "title": "GLTF Serializer Rotation conversion, left-handed",
+            "playgroundId": "#UK7FLI#1",
+            "referenceImage": "glTFSerializerRotationConversionLH.png"
+        },
+        {
             "title": "GLTF Buggy with Draco Mesh Compression",
             "playgroundId": "#JNW207#1",
             "referenceImage": "gltfBuggyDraco.png"
@@ -1041,6 +1101,12 @@
             "title": "GLTF Extension KHR_materials_volume",
             "playgroundId": "#YG3BBF#16",
             "referenceImage": "gltfExtensionKhrMaterialsVolume.png",
+            "renderCount": 5
+        },
+        {
+            "title": "GLTF Extension KHR_materials_volume with analytic light",
+            "playgroundId": "#YG3BBF#48",
+            "referenceImage": "gltfExtensionKhrMaterialsVolumeHemiLight.png",
             "renderCount": 5
         },
         {
@@ -1419,8 +1485,7 @@
             "playgroundId": "#E5YGEL#20",
             "referenceImage": "motionBlur.png",
             "renderCount": 10,
-            "excludedEngines": ["webgl1"],
-            "excludeFromAutomaticTesting": true
+            "excludedEngines": ["webgl1"]
         },
         {
             "title": "Screen space reflections",
@@ -1451,7 +1516,7 @@
         },
         {
             "title": "Glow layer and LODs",
-            "playgroundId": "#UNS6ZV#4",
+            "playgroundId": "#UNS6ZV#13",
             "referenceImage": "glowlayerandlods.png"
         },
         {
@@ -1495,8 +1560,9 @@
         {
             "title": "Prepass SSAO + depth of field",
             "renderCount": 10,
-            "playgroundId": "#8F5HYV#16",
+            "playgroundId": "#8F5HYV#72",
             "excludedEngines": ["webgl1"],
+            "errorRatio": 3.5,
             "referenceImage": "prepass-ssao-dof.png"
         },
         {
@@ -1702,7 +1768,7 @@
             "title": "Instances + GBR + motion blur",
             "renderCount": 10,
             "playgroundId": "#YB006J#549",
-            "excludedEngines": ["webgl1", "webgpu"],
+            "excludedEngines": ["webgl1"],
             "referenceImage": "instances-gbr-mb.png"
         },
         {
@@ -1939,9 +2005,8 @@
         },
         {
             "title": "Export GLTF Extension KHR_texture_transform",
-            "playgroundId": "#20OAV9#9228",
-            "referenceImage": "exportGltfKHRTextureTransform.png",
-            "renderCount": 15
+            "playgroundId": "#20OAV9#15148",
+            "referenceImage": "exportGltfKHRTextureTransform.png"
         },
         {
             "title": "GUI Input Text Area Inside ScrollViewer",
@@ -2223,7 +2288,7 @@
         {
             "title": "dissolve-effect-with-node-material-and-glow-layer",
             "renderCount": 2,
-            "playgroundId": "#F6PGMC"
+            "playgroundId": "#F6PGMC#12"
         },
         {
             "title": "cascaded-shadow-maps-and-flying-saucers",
@@ -2263,11 +2328,6 @@
             "playgroundId": "#KICG93#2"
         },
         {
-            "title": "update-sampler-info",
-            "renderCount": 5,
-            "playgroundId": "#7GKK8E#20"
-        },
-        {
             "title": "wgsl-in-shadermaterial",
             "renderCount": 30,
             "playgroundId": "#8RU8Q3#157",
@@ -2278,7 +2338,8 @@
             "renderCount": 15,
             "errorRatio": 6,
             "playgroundId": "#C90R62#17",
-            "excludedEngines": ["webgl1", "webgl2"]
+            "excludedEngines": ["webgl1", "webgl2"],
+            "excludeFromAutomaticTesting": true
         },
         {
             "title": "change-texture-of-material",
@@ -2391,7 +2452,7 @@
         },
         {
             "title": "IBL Voxel Shadowing",
-            "playgroundId": "#8R5SSE#456",
+            "playgroundId": "#8R5SSE#628",
             "referenceImage": "voxelShadows.png",
             "renderCount": 15,
             "excludedEngines": ["webgl1"],
@@ -2404,21 +2465,21 @@
         },
         {
             "title": "IBL Voxel Shadowing Right-Handed",
-            "playgroundId": "#8R5SSE#457",
+            "playgroundId": "#8R5SSE#630",
             "referenceImage": "voxelShadowsRightHanded.png",
             "renderCount": 15,
             "excludedEngines": ["webgl1"]
         },
         {
             "title": "IBL Voxel Shadowing Left-Handed",
-            "playgroundId": "#8R5SSE#458",
+            "playgroundId": "#8R5SSE#629",
             "referenceImage": "voxelShadowsLeftHanded.png",
             "renderCount": 15,
             "excludedEngines": ["webgl1"]
         },
         {
             "title": "IBL Screen-space Shadowing Left-Handed",
-            "playgroundId": "#8R5SSE#459",
+            "playgroundId": "#8R5SSE#631",
             "referenceImage": "ssShadowsLeftHanded.png",
             "renderCount": 15,
             "excludedEngines": ["webgl1"],
@@ -2426,7 +2487,7 @@
         },
         {
             "title": "IBL Screen-space Shadowing Right-Handed",
-            "playgroundId": "#8R5SSE#461",
+            "playgroundId": "#8R5SSE#632",
             "referenceImage": "ssShadowsRightHanded.png",
             "renderCount": 15,
             "excludedEngines": ["webgl1"],
@@ -2488,6 +2549,12 @@
             "excludedEngines": ["webgl1"]
         },
         {
+            "title": "FrameGraph nrge motion blur",
+            "playgroundId": "#YB006J#753",
+            "excludedEngines": ["webgl1"],
+            "renderCount": 40
+        },
+        {
             "title": "FrameGraph nrg gui bloom",
             "playgroundId": "#3LB017#1",
             "errorRatio": 2
@@ -2511,8 +2578,27 @@
             "playgroundId": "#RM56RY#16"
         },
         {
+            "title": "FrameGraph image processing",
+            "playgroundId": "#PV8OLY#21"
+        },
+        {
+            "title": "FrameGraph motion blur screen based",
+            "playgroundId": "#YB006J#746",
+            "renderCount": 10
+        },
+        {
+            "title": "FrameGraph motion blur object based",
+            "playgroundId": "#YB006J#747",
+            "renderCount": 10
+        },
+        {
+            "title": "FrameGraph motion blur skinned",
+            "playgroundId": "#YB006J#749",
+            "renderCount": 40
+        },
+        {
             "title": "IBL radiance roughness",
-            "playgroundId": "#RNO672#7"
+            "playgroundId": "#RNO672#10"
         },
         {
             "title": "Synchronous Effect",
@@ -2544,6 +2630,46 @@
             "playgroundId": "#5H0H89#129",
             "renderCount": 10,
             "excludedEngines": ["webgl1"]
+        },
+        {
+            "title": "Specular Reflectance with IOR",
+            "playgroundId": "#KQYNYS#41"
+        },
+        {
+            "title": "Conductor Transmission",
+            "playgroundId": "#KQYNYS#15"
+        },
+        {
+            "title": "Furnace Test (Legacy) for Spec-Gloss",
+            "playgroundId": "#KQYNYS#20"
+        },
+        {
+            "title": "Furnace Test (Legacy) for Metal-Rough",
+            "playgroundId": "#KQYNYS#21"
+        },
+        {
+            "title": "Furnace Test for Spec-Gloss",
+            "playgroundId": "#KQYNYS#40"
+        },
+        {
+            "title": "Furnace Test for Metal-Rough",
+            "playgroundId": "#KQYNYS#39"
+        },
+        {
+            "title": "Specular reflectance models for IBL",
+            "playgroundId": "#GRQHVV#20"
+        },
+        {
+            "title": "Specular reflectance models for analytic lights",
+            "playgroundId": "#GRQHVV#9"
+        },
+        {
+            "title": "F82 Specular Roughness vs Weight",
+            "playgroundId": "#GRQHVV#18"
+        },
+        {
+            "title": "F82 Specular Metal vs Weight",
+            "playgroundId": "#GRQHVV#19"
         }
     ]
 }

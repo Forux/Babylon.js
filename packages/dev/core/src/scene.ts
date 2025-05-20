@@ -110,6 +110,7 @@ export interface IDisposable {
 }
 
 /** Interface defining initialization parameters for Scene class */
+// eslint-disable-next-line @typescript-eslint/naming-convention
 export interface SceneOptions {
     /**
      * Defines that scene should keep up-to-date a map of geometry to enable fast look-up by uniqueId
@@ -260,12 +261,20 @@ export class Scene implements IAnimatable, IClipPlanesHolder, IAssetContainer {
     public environmentBRDFTexture: BaseTexture;
 
     /**
-     * Intensity of the environment in all pbr material.
-     * This dims or reinforces the IBL lighting overall (reflection and diffuse).
+     * Intensity of the environment (i.e. all indirect lighting) in all pbr material.
+     * This dims or reinforces the indirect lighting overall (reflection and diffuse).
      * As in the majority of the scene they are the same (exception for multi room and so on),
      * this is easier to reference from here than from all the materials.
+     * Note that this is more of a debugging parameter and is not physically accurate.
+     * If you want to modify the intensity of the IBL texture, you should update iblIntensity instead.
      */
     public environmentIntensity: number = 1;
+
+    /**
+     * Overall intensity of the IBL texture.
+     * This value is multiplied with the reflectionTexture.level value to calculate the final IBL intensity.
+     */
+    public iblIntensity = 1;
 
     /** @internal */
     protected _imageProcessingConfiguration: ImageProcessingConfiguration;
@@ -486,7 +495,6 @@ export class Scene implements IAnimatable, IClipPlanesHolder, IAssetContainer {
 
     /**
      * ActionManagers available on the scene.
-     * @deprecated
      */
     public actionManagers: AbstractActionManager[] = [];
 
@@ -563,7 +571,9 @@ export class Scene implements IAnimatable, IClipPlanesHolder, IAssetContainer {
         nodes = nodes.concat(this.lights);
         nodes = nodes.concat(this.cameras);
         nodes = nodes.concat(this.transformNodes); // dummies
-        this.skeletons.forEach((skeleton) => (nodes = nodes.concat(skeleton.bones)));
+        for (const skeleton of this.skeletons) {
+            nodes = nodes.concat(skeleton.bones);
+        }
         return nodes;
     }
 
@@ -1450,6 +1460,11 @@ export class Scene implements IAnimatable, IClipPlanesHolder, IAssetContainer {
         }
     }
 
+    /**
+     * List of frame graphs associated with the scene
+     */
+    public frameGraphs: FrameGraph[] = [];
+
     // Physics
     /**
      * Gets or sets a boolean indicating if physic engines are enabled on this scene
@@ -1626,7 +1641,7 @@ export class Scene implements IAnimatable, IClipPlanesHolder, IAssetContainer {
     private _activeRequests = new Array<IFileRequest>();
 
     /** @internal */
-    public _pendingData = new Array();
+    public _pendingData = [] as any[];
     private _isDisposed = false;
 
     /**
@@ -1685,7 +1700,7 @@ export class Scene implements IAnimatable, IClipPlanesHolder, IAssetContainer {
     /** @internal */
     public readonly useClonedMeshMap: boolean;
 
-    private _externalData: StringDictionary<Object>;
+    private _externalData: StringDictionary<object>;
     private _uid: Nullable<string>;
 
     /**
@@ -2297,7 +2312,7 @@ export class Scene implements IAnimatable, IClipPlanesHolder, IAssetContainer {
                             if (this._processedMaterials.indexOf(material) === -1) {
                                 this._processedMaterials.push(material);
 
-                                this._materialsRenderTargets.concatWithNoDuplicate(material.getRenderTargetTextures!());
+                                this._materialsRenderTargets.concatWithNoDuplicate(material.getRenderTargetTextures());
                             }
                         }
                     }
@@ -2306,7 +2321,7 @@ export class Scene implements IAnimatable, IClipPlanesHolder, IAssetContainer {
                         if (this._processedMaterials.indexOf(mat) === -1) {
                             this._processedMaterials.push(mat);
 
-                            this._materialsRenderTargets.concatWithNoDuplicate(mat.getRenderTargetTextures!());
+                            this._materialsRenderTargets.concatWithNoDuplicate(mat.getRenderTargetTextures());
                         }
                     }
                 }
@@ -2506,8 +2521,8 @@ export class Scene implements IAnimatable, IClipPlanesHolder, IAssetContainer {
      * @param checkRenderTargets true to also check that the meshes rendered as part of a render target are ready (default: false)
      * @returns A promise that resolves when the scene is ready
      */
-    public whenReadyAsync(checkRenderTargets = false): Promise<void> {
-        return new Promise((resolve) => {
+    public async whenReadyAsync(checkRenderTargets = false): Promise<void> {
+        return await new Promise((resolve) => {
             this.executeWhenReady(() => {
                 resolve();
             }, checkRenderTargets);
@@ -2686,9 +2701,11 @@ export class Scene implements IAnimatable, IClipPlanesHolder, IAssetContainer {
         });
 
         if (recursive) {
-            newMesh.getChildMeshes().forEach((m) => {
+            const children = newMesh.getChildMeshes();
+
+            for (const m of children) {
                 this.addMesh(m);
-            });
+            }
         }
     }
 
@@ -2714,9 +2731,10 @@ export class Scene implements IAnimatable, IClipPlanesHolder, IAssetContainer {
 
         this.onMeshRemovedObservable.notifyObservers(toRemove);
         if (recursive) {
-            toRemove.getChildMeshes().forEach((m) => {
+            const children = toRemove.getChildMeshes();
+            for (const m of children) {
                 this.removeMesh(m);
-            });
+            }
         }
         return index;
     }
@@ -3263,8 +3281,20 @@ export class Scene implements IAnimatable, IClipPlanesHolder, IAssetContainer {
      * @param uniqueId defines the material's unique id
      * @param allowMultiMaterials determines whether multimaterials should be considered
      * @returns the material or null if none found.
+     * @deprecated Please use getMaterialByUniqueId instead.
      */
+    // eslint-disable-next-line @typescript-eslint/naming-convention
     public getMaterialByUniqueID(uniqueId: number, allowMultiMaterials: boolean = false): Nullable<Material> {
+        return this.getMaterialByUniqueId(uniqueId, allowMultiMaterials);
+    }
+
+    /**
+     * Get a material using its unique id
+     * @param uniqueId defines the material's unique id
+     * @param allowMultiMaterials determines whether multimaterials should be considered
+     * @returns the material or null if none found.
+     */
+    public getMaterialByUniqueId(uniqueId: number, allowMultiMaterials: boolean = false): Nullable<Material> {
         return this._getMaterial(allowMultiMaterials, (m) => m.uniqueId === uniqueId);
     }
 
@@ -3508,6 +3538,21 @@ export class Scene implements IAnimatable, IClipPlanesHolder, IAssetContainer {
                 if (this.geometries[index].uniqueId === uniqueId) {
                     return this.geometries[index];
                 }
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Gets a frame graph using its name
+     * @param name defines the frame graph's name
+     * @returns the frame graph or null if none found.
+     */
+    public getFrameGraphByName(name: string): Nullable<FrameGraph> {
+        for (let index = 0; index < this.frameGraphs.length; index++) {
+            if (this.frameGraphs[index].name === name) {
+                return this.frameGraphs[index];
             }
         }
 
@@ -3978,9 +4023,9 @@ export class Scene implements IAnimatable, IClipPlanesHolder, IAssetContainer {
      * @param data the data object to associate to the key for this Engine instance
      * @returns true if no such key were already present and the data was added successfully, false otherwise
      */
-    public addExternalData<T extends Object>(key: string, data: T): boolean {
+    public addExternalData<T extends object>(key: string, data: T): boolean {
         if (!this._externalData) {
-            this._externalData = new StringDictionary<Object>();
+            this._externalData = new StringDictionary<object>();
         }
         return this._externalData.add(key, data);
     }
@@ -4003,9 +4048,9 @@ export class Scene implements IAnimatable, IClipPlanesHolder, IAssetContainer {
      * @param factory the factory that will be called to create the instance if and only if it doesn't exists
      * @returns the associated data, can be null if the factory returned null.
      */
-    public getOrAddExternalDataWithFactory<T extends Object>(key: string, factory: (k: string) => T): T {
+    public getOrAddExternalDataWithFactory<T extends object>(key: string, factory: (k: string) => T): T {
         if (!this._externalData) {
-            this._externalData = new StringDictionary<Object>();
+            this._externalData = new StringDictionary<object>();
         }
         return <T>this._externalData.getOrAddWithFactory(key, factory);
     }
@@ -4032,7 +4077,7 @@ export class Scene implements IAnimatable, IClipPlanesHolder, IAssetContainer {
                     if (this._processedMaterials.indexOf(material) === -1) {
                         this._processedMaterials.push(material);
 
-                        this._materialsRenderTargets.concatWithNoDuplicate(material.getRenderTargetTextures!());
+                        this._materialsRenderTargets.concatWithNoDuplicate(material.getRenderTargetTextures());
                     }
                 }
 
@@ -4165,7 +4210,9 @@ export class Scene implements IAnimatable, IClipPlanesHolder, IAssetContainer {
     ): Scene {
         this.executeWhenReady(() => {
             if (!this.activeCamera) {
-                onError && onError("No active camera found");
+                if (onError) {
+                    onError("No active camera found");
+                }
                 return;
             }
 
@@ -4183,7 +4230,9 @@ export class Scene implements IAnimatable, IClipPlanesHolder, IAssetContainer {
                     this._activeMeshes.data[index]._freeze();
                 }
             }
-            onSuccess && onSuccess();
+            if (onSuccess) {
+                onSuccess();
+            }
         });
         return this;
     }
@@ -4900,7 +4949,9 @@ export class Scene implements IAnimatable, IClipPlanesHolder, IAssetContainer {
         this._defaultFrameBufferCleared = false;
         this._checkCameraRenderTarget(this.activeCamera);
         if (this.activeCameras?.length) {
-            this.activeCameras.forEach(this._checkCameraRenderTarget);
+            for (const c of this.activeCameras) {
+                this._checkCameraRenderTarget(c);
+            }
         }
 
         // Register components that have been associated lately to the scene.
@@ -5132,10 +5183,10 @@ export class Scene implements IAnimatable, IClipPlanesHolder, IAssetContainer {
 
         if (this._activeAnimatables && this.stopAllAnimations) {
             // Ensures that no animatable notifies a callback that could start a new animation group, constantly adding new animatables to the active list...
-            this._activeAnimatables.forEach((animatable) => {
+            for (const animatable of this._activeAnimatables) {
                 animatable.onAnimationEndObservable.clear();
                 animatable.onAnimationEnd = null;
-            });
+            }
             this.stopAllAnimations();
         }
 
@@ -5366,11 +5417,12 @@ export class Scene implements IAnimatable, IClipPlanesHolder, IAssetContainer {
         const min = new Vector3(Number.MAX_VALUE, Number.MAX_VALUE, Number.MAX_VALUE);
         const max = new Vector3(-Number.MAX_VALUE, -Number.MAX_VALUE, -Number.MAX_VALUE);
         filterPredicate = filterPredicate || (() => true);
-        this.meshes.filter(filterPredicate).forEach((mesh) => {
+        const meshes = this.meshes.filter(filterPredicate);
+        for (const mesh of meshes) {
             mesh.computeWorldMatrix(true);
 
             if (!mesh.subMeshes || mesh.subMeshes.length === 0 || mesh.infiniteDistance) {
-                return;
+                continue;
             }
 
             const boundingInfo = mesh.getBoundingInfo();
@@ -5380,7 +5432,7 @@ export class Scene implements IAnimatable, IClipPlanesHolder, IAssetContainer {
 
             Vector3.CheckExtends(minBox, min, max);
             Vector3.CheckExtends(maxBox, min, max);
-        });
+        }
 
         return {
             min: min,
@@ -5767,7 +5819,7 @@ export class Scene implements IAnimatable, IClipPlanesHolder, IAssetContainer {
         return request;
     }
 
-    public _loadFileAsync(
+    public async _loadFileAsync(
         fileOrUrl: File | string,
         onProgress?: (data: any) => void,
         useOfflineSupport?: boolean,
@@ -5775,7 +5827,7 @@ export class Scene implements IAnimatable, IClipPlanesHolder, IAssetContainer {
         onOpened?: (request: WebRequest) => void
     ): Promise<string>;
 
-    public _loadFileAsync(
+    public async _loadFileAsync(
         fileOrUrl: File | string,
         onProgress?: (data: any) => void,
         useOfflineSupport?: boolean,
@@ -5786,14 +5838,14 @@ export class Scene implements IAnimatable, IClipPlanesHolder, IAssetContainer {
     /**
      * @internal
      */
-    public _loadFileAsync(
+    public async _loadFileAsync(
         fileOrUrl: File | string,
         onProgress?: (data: any) => void,
         useOfflineSupport?: boolean,
         useArrayBuffer?: boolean,
         onOpened?: (request: WebRequest) => void
     ): Promise<string | ArrayBuffer> {
-        return new Promise((resolve, reject) => {
+        return await new Promise((resolve, reject) => {
             this._loadFile(
                 fileOrUrl,
                 (data) => {
@@ -5803,6 +5855,7 @@ export class Scene implements IAnimatable, IClipPlanesHolder, IAssetContainer {
                 useOfflineSupport,
                 useArrayBuffer,
                 (request, exception) => {
+                    // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors
                     reject(exception);
                 },
                 onOpened
@@ -5833,14 +5886,14 @@ export class Scene implements IAnimatable, IClipPlanesHolder, IAssetContainer {
     /**
      * @internal
      */
-    public _requestFileAsync(
+    public async _requestFileAsync(
         url: string,
         onProgress?: (ev: ProgressEvent) => void,
         useOfflineSupport?: boolean,
         useArrayBuffer?: boolean,
         onOpened?: (request: WebRequest) => void
     ): Promise<string | ArrayBuffer> {
-        return new Promise((resolve, reject) => {
+        return await new Promise((resolve, reject) => {
             this._requestFile(
                 url,
                 (data) => {
@@ -5878,8 +5931,8 @@ export class Scene implements IAnimatable, IClipPlanesHolder, IAssetContainer {
     /**
      * @internal
      */
-    public _readFileAsync(file: File, onProgress?: (ev: ProgressEvent) => any, useArrayBuffer?: boolean): Promise<string | ArrayBuffer> {
-        return new Promise((resolve, reject) => {
+    public async _readFileAsync(file: File, onProgress?: (ev: ProgressEvent) => any, useArrayBuffer?: boolean): Promise<string | ArrayBuffer> {
+        return await new Promise((resolve, reject) => {
             this._readFile(
                 file,
                 (data) => {
@@ -5917,6 +5970,7 @@ export class Scene implements IAnimatable, IClipPlanesHolder, IAssetContainer {
      * @returns the new active camera or null if none found.
      * @deprecated Please use setActiveCameraById instead
      */
+    // eslint-disable-next-line @typescript-eslint/naming-convention
     setActiveCameraByID(id: string): Nullable<Camera> {
         return this.setActiveCameraById(id);
     }
@@ -5926,6 +5980,7 @@ export class Scene implements IAnimatable, IClipPlanesHolder, IAssetContainer {
      * @returns the material or null if none found.
      * @deprecated Please use getMaterialById instead
      */
+    // eslint-disable-next-line @typescript-eslint/naming-convention
     getMaterialByID(id: string): Nullable<Material> {
         return this.getMaterialById(id);
     }
@@ -5935,6 +5990,7 @@ export class Scene implements IAnimatable, IClipPlanesHolder, IAssetContainer {
      * @returns the last material with the given id or null if none found.
      * @deprecated Please use getLastMaterialById instead
      */
+    // eslint-disable-next-line @typescript-eslint/naming-convention
     getLastMaterialByID(id: string): Nullable<Material> {
         return this.getLastMaterialById(id);
     }
@@ -5945,6 +6001,7 @@ export class Scene implements IAnimatable, IClipPlanesHolder, IAssetContainer {
      * @returns the texture or null if none found.
      * @deprecated Please use getTextureByUniqueId instead
      */
+    // eslint-disable-next-line @typescript-eslint/naming-convention
     getTextureByUniqueID(uniqueId: number): Nullable<BaseTexture> {
         return this.getTextureByUniqueId(uniqueId);
     }
@@ -5954,6 +6011,7 @@ export class Scene implements IAnimatable, IClipPlanesHolder, IAssetContainer {
      * @returns the camera or null if not found
      * @deprecated Please use getCameraById instead
      */
+    // eslint-disable-next-line @typescript-eslint/naming-convention
     getCameraByID(id: string): Nullable<Camera> {
         return this.getCameraById(id);
     }
@@ -5963,6 +6021,7 @@ export class Scene implements IAnimatable, IClipPlanesHolder, IAssetContainer {
      * @returns the camera or null if not found
      * @deprecated Please use getCameraByUniqueId instead
      */
+    // eslint-disable-next-line @typescript-eslint/naming-convention
     getCameraByUniqueID(uniqueId: number): Nullable<Camera> {
         return this.getCameraByUniqueId(uniqueId);
     }
@@ -5972,6 +6031,7 @@ export class Scene implements IAnimatable, IClipPlanesHolder, IAssetContainer {
      * @returns the bone or null if not found
      * @deprecated Please use getBoneById instead
      */
+    // eslint-disable-next-line @typescript-eslint/naming-convention
     getBoneByID(id: string): Nullable<Bone> {
         return this.getBoneById(id);
     }
@@ -5981,6 +6041,7 @@ export class Scene implements IAnimatable, IClipPlanesHolder, IAssetContainer {
      * @returns the light or null if none found.
      * @deprecated Please use getLightById instead
      */
+    // eslint-disable-next-line @typescript-eslint/naming-convention
     getLightByID(id: string): Nullable<Light> {
         return this.getLightById(id);
     }
@@ -5990,6 +6051,7 @@ export class Scene implements IAnimatable, IClipPlanesHolder, IAssetContainer {
      * @returns the light or null if none found.
      * @deprecated Please use getLightByUniqueId instead
      */
+    // eslint-disable-next-line @typescript-eslint/naming-convention
     getLightByUniqueID(uniqueId: number): Nullable<Light> {
         return this.getLightByUniqueId(uniqueId);
     }
@@ -5999,6 +6061,7 @@ export class Scene implements IAnimatable, IClipPlanesHolder, IAssetContainer {
      * @returns the corresponding system or null if none found
      * @deprecated Please use getParticleSystemById instead
      */
+    // eslint-disable-next-line @typescript-eslint/naming-convention
     getParticleSystemByID(id: string): Nullable<IParticleSystem> {
         return this.getParticleSystemById(id);
     }
@@ -6008,6 +6071,7 @@ export class Scene implements IAnimatable, IClipPlanesHolder, IAssetContainer {
      * @returns the geometry or null if none found.
      * @deprecated Please use getGeometryById instead
      */
+    // eslint-disable-next-line @typescript-eslint/naming-convention
     getGeometryByID(id: string): Nullable<Geometry> {
         return this.getGeometryById(id);
     }
@@ -6017,6 +6081,7 @@ export class Scene implements IAnimatable, IClipPlanesHolder, IAssetContainer {
      * @returns the mesh found or null if not found at all
      * @deprecated Please use getMeshById instead
      */
+    // eslint-disable-next-line @typescript-eslint/naming-convention
     getMeshByID(id: string): Nullable<AbstractMesh> {
         return this.getMeshById(id);
     }
@@ -6026,6 +6091,7 @@ export class Scene implements IAnimatable, IClipPlanesHolder, IAssetContainer {
      * @returns the found mesh or null if not found at all.
      * @deprecated Please use getMeshByUniqueId instead
      */
+    // eslint-disable-next-line @typescript-eslint/naming-convention
     getMeshByUniqueID(uniqueId: number): Nullable<AbstractMesh> {
         return this.getMeshByUniqueId(uniqueId);
     }
@@ -6035,6 +6101,7 @@ export class Scene implements IAnimatable, IClipPlanesHolder, IAssetContainer {
      * @returns the found mesh or null if not found at all.
      * @deprecated Please use getLastMeshById instead
      */
+    // eslint-disable-next-line @typescript-eslint/naming-convention
     getLastMeshByID(id: string): Nullable<AbstractMesh> {
         return this.getLastMeshById(id);
     }
@@ -6044,6 +6111,7 @@ export class Scene implements IAnimatable, IClipPlanesHolder, IAssetContainer {
      * @returns a list of meshes
      * @deprecated Please use getMeshesById instead
      */
+    // eslint-disable-next-line @typescript-eslint/naming-convention
     getMeshesByID(id: string): Array<AbstractMesh> {
         return this.getMeshesById(id);
     }
@@ -6053,6 +6121,7 @@ export class Scene implements IAnimatable, IClipPlanesHolder, IAssetContainer {
      * @returns the found transform node or null if not found at all.
      * @deprecated Please use getTransformNodeById instead
      */
+    // eslint-disable-next-line @typescript-eslint/naming-convention
     getTransformNodeByID(id: string): Nullable<TransformNode> {
         return this.getTransformNodeById(id);
     }
@@ -6062,6 +6131,7 @@ export class Scene implements IAnimatable, IClipPlanesHolder, IAssetContainer {
      * @returns the found transform node or null if not found at all.
      * @deprecated Please use getTransformNodeByUniqueId instead
      */
+    // eslint-disable-next-line @typescript-eslint/naming-convention
     getTransformNodeByUniqueID(uniqueId: number): Nullable<TransformNode> {
         return this.getTransformNodeByUniqueId(uniqueId);
     }
@@ -6071,6 +6141,7 @@ export class Scene implements IAnimatable, IClipPlanesHolder, IAssetContainer {
      * @returns a list of transform nodes
      * @deprecated Please use getTransformNodesById instead
      */
+    // eslint-disable-next-line @typescript-eslint/naming-convention
     getTransformNodesByID(id: string): Array<TransformNode> {
         return this.getTransformNodesById(id);
     }
@@ -6080,6 +6151,7 @@ export class Scene implements IAnimatable, IClipPlanesHolder, IAssetContainer {
      * @returns the found node or null if not found at all
      * @deprecated Please use getNodeById instead
      */
+    // eslint-disable-next-line @typescript-eslint/naming-convention
     getNodeByID(id: string): Nullable<Node> {
         return this.getNodeById(id);
     }
@@ -6089,6 +6161,7 @@ export class Scene implements IAnimatable, IClipPlanesHolder, IAssetContainer {
      * @returns the found node or null if not found at all
      * @deprecated Please use getLastEntryById instead
      */
+    // eslint-disable-next-line @typescript-eslint/naming-convention
     getLastEntryByID(id: string): Nullable<Node> {
         return this.getLastEntryById(id);
     }
@@ -6098,6 +6171,7 @@ export class Scene implements IAnimatable, IClipPlanesHolder, IAssetContainer {
      * @returns the found skeleton or null if not found at all.
      * @deprecated Please use getLastSkeletonById instead
      */
+    // eslint-disable-next-line @typescript-eslint/naming-convention
     getLastSkeletonByID(id: string): Nullable<Skeleton> {
         return this.getLastSkeletonById(id);
     }

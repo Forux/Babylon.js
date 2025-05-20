@@ -753,6 +753,62 @@ describe("Flow Nodes", () => {
         expect(log).toHaveBeenCalledWith(1);
     });
 
+    test("variable/get and variable/setMultiple", async () => {
+        await generateSimpleNodeGraph(
+            [{ op: "variable/setMultiple" }, { op: "variable/get" }, { op: "flow/log", extension: "BABYLON" }],
+            [
+                {
+                    declaration: 0,
+                    configuration: {
+                        variables: {
+                            value: [0, 1], //the index of the variable
+                        },
+                    },
+                    values: {
+                        0: {
+                            type: 0,
+                            value: [4],
+                        },
+                        1: {
+                            type: 0,
+                            value: [5],
+                        },
+                    },
+                    flows: {
+                        out: {
+                            node: 2,
+                            socket: "in",
+                        },
+                    },
+                },
+                {
+                    declaration: 1,
+                    configuration: {
+                        variable: {
+                            value: [1], //the index of the variable
+                        },
+                    },
+                },
+                {
+                    declaration: 2,
+                    values: {
+                        message: {
+                            node: 1,
+                            socket: "value",
+                        },
+                    },
+                },
+            ],
+            [{ signature: "float" }],
+            [
+                { type: 0, value: [2] },
+                { type: 0, value: [3] },
+            ]
+        );
+
+        expect(log).toHaveBeenCalledWith(5);
+    });
+
     test("variable/interpolate with float", async () => {
         // linear interpolation from 1 to 5 in 1 second
         await generateSimpleNodeGraph(
@@ -1494,7 +1550,7 @@ describe("Flow Nodes", () => {
 
         // wait for 1 second
         await new Promise((resolve) => setTimeout(resolve, 1000 + 100));
-        const values = log.mock.calls.map((c) => c[0]);
+        const values = log.mock.calls.map((c) => c[0].value);
         // expect log to be called 3 times - after the first was triggered (2 remaining), then after the second (1 remaining), and then after the last one (0 remaining - completed.)
         expect(log).toHaveBeenCalledTimes(3);
         // last remaining inputs test, also testing out and completed flows

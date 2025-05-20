@@ -26,7 +26,8 @@ import { VertexBuffer } from "core/Buffers/buffer";
 import type { Node } from "core/node";
 import { TransformNode } from "core/Meshes/transformNode";
 import type { SubMesh } from "core/Meshes/subMesh";
-import { Mesh } from "core/Meshes/mesh";
+import type { Mesh } from "core/Meshes/mesh";
+import { AbstractMesh } from "core/Meshes/abstractMesh";
 import { InstancedMesh } from "core/Meshes/instancedMesh";
 import type { BaseTexture } from "core/Materials/Textures/baseTexture";
 import type { Texture } from "core/Materials/Textures/texture";
@@ -55,6 +56,7 @@ import {
     FloatsNeed16BitInteger,
     IsStandardVertexAttribute,
     IndicesArrayToTypedArray,
+    GetVertexBufferInfo,
 } from "./glTFUtilities";
 import { BufferManager } from "./bufferManager";
 import { Camera } from "core/Cameras/camera";
@@ -84,14 +86,14 @@ class ExporterState {
 
     private _remappedBufferView = new Map<Buffer, Map<VertexBuffer, IBufferView>>();
 
-    private _meshMorphTargetMap = new Map<Mesh, IMorphTargetData[]>();
+    private _meshMorphTargetMap = new Map<AbstractMesh, IMorphTargetData[]>();
 
     private _vertexMapColorAlpha = new Map<VertexBuffer, boolean>();
 
     private _exportedNodes = new Set<Node>();
 
     // Babylon mesh -> glTF mesh index
-    private _meshMap = new Map<Mesh, number>();
+    private _meshMap = new Map<AbstractMesh, number>();
 
     public constructor(convertToRightHanded: boolean, wasAddedByNoopNode: boolean) {
         this.convertToRightHanded = convertToRightHanded;
@@ -192,15 +194,15 @@ class ExporterState {
         return this._vertexMapColorAlpha.set(vertexBuffer, hasAlpha);
     }
 
-    public getMesh(mesh: Mesh): number | undefined {
+    public getMesh(mesh: AbstractMesh): number | undefined {
         return this._meshMap.get(mesh);
     }
 
-    public setMesh(mesh: Mesh, meshIndex: number): void {
+    public setMesh(mesh: AbstractMesh, meshIndex: number): void {
         this._meshMap.set(mesh, meshIndex);
     }
 
-    public bindMorphDataToMesh(mesh: Mesh, morphData: IMorphTargetData) {
+    public bindMorphDataToMesh(mesh: AbstractMesh, morphData: IMorphTargetData) {
         const morphTargets = this._meshMorphTargetMap.get(mesh) || [];
         this._meshMorphTargetMap.set(mesh, morphTargets);
         if (morphTargets.indexOf(morphData) === -1) {
@@ -208,7 +210,7 @@ class ExporterState {
         }
     }
 
-    public getMorphTargetsFromMesh(mesh: Mesh): IMorphTargetData[] | undefined {
+    public getMorphTargetsFromMesh(mesh: AbstractMesh): IMorphTargetData[] | undefined {
         return this._meshMorphTargetMap.get(mesh);
     }
 }
@@ -268,7 +270,8 @@ export class GLTFExporter {
     private static readonly _ExtensionNames = new Array<string>();
     private static readonly _ExtensionFactories: { [name: string]: (exporter: GLTFExporter) => IGLTFExporterExtensionV2 } = {};
 
-    private _applyExtension<T>(
+    // eslint-disable-next-line @typescript-eslint/naming-convention, @typescript-eslint/promise-function-async
+    private _ApplyExtension<T>(
         node: T,
         extensions: IGLTFExporterExtensionV2[],
         index: number,
@@ -281,34 +284,42 @@ export class GLTFExporter {
         const currentPromise = actionAsync(extensions[index], node);
 
         if (!currentPromise) {
-            return this._applyExtension(node, extensions, index + 1, actionAsync);
+            return this._ApplyExtension(node, extensions, index + 1, actionAsync);
         }
 
-        return currentPromise.then((newNode) => (newNode ? this._applyExtension(newNode, extensions, index + 1, actionAsync) : null));
+        // eslint-disable-next-line github/no-then
+        return currentPromise.then(async (newNode) => (newNode ? await this._ApplyExtension(newNode, extensions, index + 1, actionAsync) : null));
     }
 
-    private _applyExtensions<T>(node: T, actionAsync: (extension: IGLTFExporterExtensionV2, node: T) => Promise<Nullable<T>> | undefined): Promise<Nullable<T>> {
+    // eslint-disable-next-line @typescript-eslint/naming-convention, @typescript-eslint/promise-function-async
+    private _ApplyExtensions<T>(node: T, actionAsync: (extension: IGLTFExporterExtensionV2, node: T) => Promise<Nullable<T>> | undefined): Promise<Nullable<T>> {
         const extensions: IGLTFExporterExtensionV2[] = [];
         for (const name of GLTFExporter._ExtensionNames) {
             extensions.push(this._extensions[name]);
         }
 
-        return this._applyExtension(node, extensions, 0, actionAsync);
+        return this._ApplyExtension(node, extensions, 0, actionAsync);
     }
 
+    // eslint-disable-next-line no-restricted-syntax, @typescript-eslint/promise-function-async
     public _extensionsPreExportTextureAsync(context: string, babylonTexture: Texture, mimeType: ImageMimeType): Promise<Nullable<BaseTexture>> {
-        return this._applyExtensions(babylonTexture, (extension, node) => extension.preExportTextureAsync && extension.preExportTextureAsync(context, node, mimeType));
+        // eslint-disable-next-line @typescript-eslint/promise-function-async
+        return this._ApplyExtensions(babylonTexture, (extension, node) => extension.preExportTextureAsync && extension.preExportTextureAsync(context, node, mimeType));
     }
 
+    // eslint-disable-next-line no-restricted-syntax, @typescript-eslint/promise-function-async
     public _extensionsPostExportNodeAsync(context: string, node: INode, babylonNode: Node, nodeMap: Map<Node, number>, convertToRightHanded: boolean): Promise<Nullable<INode>> {
-        return this._applyExtensions(
+        return this._ApplyExtensions(
             node,
+            // eslint-disable-next-line @typescript-eslint/promise-function-async
             (extension, node) => extension.postExportNodeAsync && extension.postExportNodeAsync(context, node, babylonNode, nodeMap, convertToRightHanded, this._bufferManager)
         );
     }
 
+    // eslint-disable-next-line no-restricted-syntax, @typescript-eslint/promise-function-async
     public _extensionsPostExportMaterialAsync(context: string, material: IMaterial, babylonMaterial: Material): Promise<Nullable<IMaterial>> {
-        return this._applyExtensions(material, (extension, node) => extension.postExportMaterialAsync && extension.postExportMaterialAsync(context, node, babylonMaterial));
+        // eslint-disable-next-line @typescript-eslint/promise-function-async
+        return this._ApplyExtensions(material, (extension, node) => extension.postExportMaterialAsync && extension.postExportMaterialAsync(context, node, babylonMaterial));
     }
 
     public _extensionsPostExportMaterialAdditionalTextures(context: string, material: IMaterial, babylonMaterial: Material): BaseTexture[] {
@@ -350,6 +361,7 @@ export class GLTFExporter {
             const extension = this._extensions[name];
 
             if (extension.preGenerateBinaryAsync) {
+                // eslint-disable-next-line no-await-in-loop
                 await extension.preGenerateBinaryAsync(this._bufferManager);
             }
         }
@@ -404,7 +416,7 @@ export class GLTFExporter {
         this._options = {
             shouldExportNode: () => true,
             shouldExportAnimation: () => true,
-            metadataSelector: (metadata) => metadata,
+            metadataSelector: (metadata) => metadata?.gltf?.extras,
             animationSampleRate: 1 / 60,
             exportWithoutWaitingForScene: false,
             exportUnusedUVs: false,
@@ -811,10 +823,9 @@ export class GLTFExporter {
 
         // Scene metadata
         if (this._babylonScene.metadata) {
-            if (this._options.metadataSelector) {
-                scene.extras = this._options.metadataSelector(this._babylonScene.metadata);
-            } else if (this._babylonScene.metadata.gltf) {
-                scene.extras = this._babylonScene.metadata.gltf.extras;
+            const extras = this._options.metadataSelector(this._babylonScene.metadata);
+            if (extras) {
+                scene.extras = extras;
             }
         }
 
@@ -886,6 +897,7 @@ export class GLTFExporter {
         this._exportBuffers(babylonRootNodes, state);
 
         for (const babylonNode of babylonRootNodes) {
+            // eslint-disable-next-line no-await-in-loop
             await this._exportNodeAsync(babylonNode, nodes, state);
         }
 
@@ -895,11 +907,11 @@ export class GLTFExporter {
     private _collectBuffers(
         babylonNode: Node,
         bufferToVertexBuffersMap: Map<Buffer, VertexBuffer[]>,
-        vertexBufferToMeshesMap: Map<VertexBuffer, Mesh[]>,
-        morphTargetsToMeshesMap: Map<MorphTarget, Mesh[]>,
+        vertexBufferToMeshesMap: Map<VertexBuffer, AbstractMesh[]>,
+        morphTargetsToMeshesMap: Map<MorphTarget, AbstractMesh[]>,
         state: ExporterState
     ): void {
-        if (this._shouldExportNode(babylonNode) && babylonNode instanceof Mesh && babylonNode.geometry) {
+        if (this._shouldExportNode(babylonNode) && babylonNode instanceof AbstractMesh && babylonNode.geometry) {
             const vertexBuffers = babylonNode.geometry.getVertexBuffers();
             if (vertexBuffers) {
                 for (const kind in vertexBuffers) {
@@ -945,11 +957,11 @@ export class GLTFExporter {
 
     private _exportBuffers(babylonRootNodes: Node[], state: ExporterState): void {
         const bufferToVertexBuffersMap = new Map<Buffer, VertexBuffer[]>();
-        const vertexBufferToMeshesMap = new Map<VertexBuffer, Mesh[]>();
-        const morphTagetsMeshesMap = new Map<MorphTarget, Mesh[]>();
+        const vertexBufferToMeshesMap = new Map<VertexBuffer, AbstractMesh[]>();
+        const morphTargetsMeshesMap = new Map<MorphTarget, AbstractMesh[]>();
 
         for (const babylonNode of babylonRootNodes) {
-            this._collectBuffers(babylonNode, bufferToVertexBuffersMap, vertexBufferToMeshesMap, morphTagetsMeshesMap, state);
+            this._collectBuffers(babylonNode, bufferToVertexBuffersMap, vertexBufferToMeshesMap, morphTargetsMeshesMap, state);
         }
 
         const buffers = Array.from(bufferToVertexBuffersMap.keys());
@@ -973,20 +985,16 @@ export class GLTFExporter {
 
             const bytes = DataArrayToUint8Array(data).slice();
 
-            // Apply conversions to buffer data in-place.
+            // Apply normalizations and color corrections to buffer data in-place.
             for (const vertexBuffer of vertexBuffers) {
-                const { byteOffset, byteStride, type, normalized } = vertexBuffer;
-                const size = vertexBuffer.getSize();
                 const meshes = vertexBufferToMeshesMap.get(vertexBuffer)!;
-                const maxTotalVertices = meshes.reduce((max, current) => {
-                    return current.getTotalVertices() > max ? current.getTotalVertices() : max;
-                }, -Number.MAX_VALUE); // To ensure nothing is missed when enumerating, but may not be necessary.
+                const { byteOffset, byteStride, componentCount, type, count, normalized, kind } = GetVertexBufferInfo(vertexBuffer, meshes);
 
-                switch (vertexBuffer.getKind()) {
+                switch (kind) {
                     // Normalize normals and tangents.
                     case VertexBuffer.NormalKind:
                     case VertexBuffer.TangentKind: {
-                        EnumerateFloatValues(bytes, byteOffset, byteStride, size, type, maxTotalVertices * size, normalized, (values) => {
+                        EnumerateFloatValues(bytes, byteOffset, byteStride, componentCount, type, count, normalized, (values) => {
                             const length = Math.sqrt(values[0] * values[0] + values[1] * values[1] + values[2] * values[2]);
                             if (length > 0) {
                                 const invLength = 1 / length;
@@ -1000,17 +1008,14 @@ export class GLTFExporter {
                     // Convert StandardMaterial vertex colors from gamma to linear space.
                     case VertexBuffer.ColorKind: {
                         const stdMaterialCount = meshes.filter((mesh) => mesh.material instanceof StandardMaterial || mesh.material == null).length;
-
                         if (stdMaterialCount == 0) {
                             break; // Buffer not used by StandardMaterials, so no conversion needed.
                         }
-
                         // TODO: Implement this case.
                         if (stdMaterialCount != meshes.length) {
                             Logger.Warn("Not converting vertex color space, as buffer is shared by StandardMaterials and other material types. Results may look incorrect.");
                             break;
                         }
-
                         if (type == VertexBuffer.UNSIGNED_BYTE) {
                             Logger.Warn("Converting uint8 vertex colors to linear space. Results may look incorrect.");
                         }
@@ -1019,7 +1024,7 @@ export class GLTFExporter {
                         const vertexData4 = new Color4();
                         const useExactSrgbConversions = this._babylonScene.getEngine().useExactSrgbConversions;
 
-                        EnumerateFloatValues(bytes, byteOffset, byteStride, size, type, maxTotalVertices * size, normalized, (values) => {
+                        EnumerateFloatValues(bytes, byteOffset, byteStride, componentCount, type, count, normalized, (values) => {
                             // Using separate Color3 and Color4 objects to ensure the right functions are called.
                             if (values.length === 3) {
                                 vertexData3.fromArray(values, 0);
@@ -1035,20 +1040,19 @@ export class GLTFExporter {
                 }
             }
 
-            // Performs coordinate conversion if needed (only for position, normal and tangent).
+            // Perform coordinate conversions, if needed, to buffer data in-place (only for positions, normals and tangents).
             if (state.convertToRightHanded) {
                 for (const vertexBuffer of vertexBuffers) {
-                    switch (vertexBuffer.getKind()) {
+                    const meshes = vertexBufferToMeshesMap.get(vertexBuffer)!;
+                    const { byteOffset, byteStride, componentCount, type, count, normalized, kind } = GetVertexBufferInfo(vertexBuffer, meshes);
+
+                    switch (kind) {
                         case VertexBuffer.PositionKind:
                         case VertexBuffer.NormalKind:
                         case VertexBuffer.TangentKind: {
-                            for (const mesh of vertexBufferToMeshesMap.get(vertexBuffer)!) {
-                                const { byteOffset, byteStride, type, normalized } = vertexBuffer;
-                                const size = vertexBuffer.getSize();
-                                EnumerateFloatValues(bytes, byteOffset, byteStride, size, type, mesh.getTotalVertices() * size, normalized, (values) => {
-                                    values[0] = -values[0];
-                                });
-                            }
+                            EnumerateFloatValues(bytes, byteOffset, byteStride, componentCount, type, count, normalized, (values) => {
+                                values[0] = -values[0];
+                            });
                         }
                     }
                 }
@@ -1065,15 +1069,15 @@ export class GLTFExporter {
 
             // If buffers are of type MatricesIndicesKind and have float values, we need to create a new buffer instead.
             for (const vertexBuffer of vertexBuffers) {
-                switch (vertexBuffer.getKind()) {
+                const meshes = vertexBufferToMeshesMap.get(vertexBuffer)!;
+                const { kind, totalVertices } = GetVertexBufferInfo(vertexBuffer, meshes);
+                switch (kind) {
                     case VertexBuffer.MatricesIndicesKind:
                     case VertexBuffer.MatricesIndicesExtraKind: {
                         if (vertexBuffer.type == VertexBuffer.FLOAT) {
-                            for (const mesh of vertexBufferToMeshesMap.get(vertexBuffer)!) {
-                                const floatData = vertexBuffer.getFloatData(mesh.getTotalVertices());
-                                if (floatData !== null) {
-                                    floatMatricesIndices.set(vertexBuffer, floatData);
-                                }
+                            const floatData = vertexBuffer.getFloatData(totalVertices);
+                            if (floatData !== null) {
+                                floatMatricesIndices.set(vertexBuffer, floatData);
                             }
                         }
                     }
@@ -1105,10 +1109,11 @@ export class GLTFExporter {
             }
         }
 
-        const morphTargets = Array.from(morphTagetsMeshesMap.keys());
+        // Build morph targets buffers
+        const morphTargets = Array.from(morphTargetsMeshesMap.keys());
 
         for (const morphTarget of morphTargets) {
-            const meshes = morphTagetsMeshesMap.get(morphTarget);
+            const meshes = morphTargetsMeshesMap.get(morphTarget);
 
             if (!meshes) {
                 continue;
@@ -1197,6 +1202,7 @@ export class GLTFExporter {
         // Begin processing child nodes once parent has been added to the node list
         const children = node ? [] : parentNodeChildren;
         for (const babylonChildNode of babylonNode.getChildren()) {
+            // eslint-disable-next-line no-await-in-loop
             await this._exportNodeAsync(babylonChildNode, children, state);
         }
 
@@ -1220,11 +1226,19 @@ export class GLTFExporter {
             node.name = babylonNode.name;
         }
 
+        // Node metadata
+        if (babylonNode.metadata) {
+            const extras = this._options.metadataSelector(babylonNode.metadata);
+            if (extras) {
+                node.extras = extras;
+            }
+        }
+
         if (babylonNode instanceof TransformNode) {
             this._setNodeTransformation(node, babylonNode, state.convertToRightHanded);
 
-            if (babylonNode instanceof Mesh || babylonNode instanceof InstancedMesh) {
-                const babylonMesh = babylonNode instanceof Mesh ? babylonNode : babylonNode.sourceMesh;
+            if (babylonNode instanceof AbstractMesh) {
+                const babylonMesh = babylonNode instanceof InstancedMesh ? babylonNode.sourceMesh : (babylonNode as Mesh);
                 if (babylonMesh.subMeshes && babylonMesh.subMeshes.length > 0) {
                     node.mesh = await this._exportMeshAsync(babylonMesh, state);
                 }
@@ -1449,7 +1463,7 @@ export class GLTFExporter {
                         name: babylonMaterial.name,
                     };
 
-                    const babylonLinesMesh = babylonMesh as GreasedLineBaseMesh;
+                    const babylonLinesMesh = babylonMesh;
 
                     const colorWhite = Color3.White();
                     const alpha = babylonLinesMesh.material?.alpha ?? 1;
@@ -1468,7 +1482,7 @@ export class GLTFExporter {
                         name: babylonMaterial.name,
                     };
 
-                    const babylonLinesMesh = babylonMesh as LinesMesh;
+                    const babylonLinesMesh = babylonMesh;
 
                     if (!babylonLinesMesh.color.equals(Color3.White()) || babylonLinesMesh.alpha < 1) {
                         material.pbrMetallicRoughness = {
@@ -1480,6 +1494,7 @@ export class GLTFExporter {
                     primitive.material = this._materials.length - 1;
                 } else {
                     // Material
+                    // eslint-disable-next-line no-await-in-loop
                     await this._exportMaterialAsync(babylonMaterial, vertexBuffers, subMesh, primitive);
                 }
 

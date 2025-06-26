@@ -98,7 +98,7 @@ fn computeBoundingBasedCoords(worldPos: vec4f, worldNormal: vec3f, eyePosition: 
     // worldNormal has already been normalized.
     var coords: vec3f = reflect(viewDir, worldNormal);
 
-	coords = boundingBasedReflection(worldPos.xyz, coords, reflectionSize, reflectionPosition, reflectionOffset, eyePosition, boundingBoxMax, boundingBoxMin);
+	coords = boundingBasedParallaxCorrectNormal(worldPos.xyz, coords, reflectionSize, reflectionPosition, reflectionOffset, boundingBoxMax, boundingBoxMin);
 
     coords = (reflectionMatrix *  vec4f(coords, 0)).xyz;
 

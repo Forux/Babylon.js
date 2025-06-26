@@ -218,33 +218,21 @@ vec3 parallaxCorrectNormal( vec3 vertexPos, vec3 origVec, vec3 cubeSize, vec3 cu
 }
 
 //>> VRNET
-vec3 boundingBasedReflection( vec3 vertexPos, vec3 origVec, vec3 cubeSize, vec3 cubePos, vec3 cubeOffset, vec3 eyePosition, vec3 boundingBoxMax, vec3 boundingBoxMin ) {
-    vec3 halfSize = cubeSize * 0.5;
-    
-    // Calculate expanded box bounds in eye space
-    vec3 envBoxMax = max(cubePos + cubeOffset + halfSize, boundingBoxMax) - eyePosition;
-    vec3 envBoxMin = min(cubePos + cubeOffset - halfSize, boundingBoxMin) - eyePosition;
-    vec3 envCenter = cubePos - eyePosition;
-    vec3 viewDir = vertexPos - eyePosition;
-    
-    // Avoid division by zero with safe inverse
-    vec3 invOrigVec = 1.0 / (origVec + sign(origVec) * Epsilon);
-    
-    // Calculate intersection distances for all planes
-    vec3 t1 = (envBoxMax - viewDir) * invOrigVec;
-    vec3 t2 = (envBoxMin - viewDir) * invOrigVec;
-    
-    // Select correct intersection based on ray direction (branchless)
-    vec3 tNear = min(t1, t2);
-    vec3 tFar = max(t1, t2);
-    
-    // Find closest valid intersection
-    float fa = min(min(tFar.x, tFar.y), tFar.z);
-    
-    // Ensure forward intersection only
-    fa = max(fa, 0.0);
-    
-    return (viewDir + origVec * fa) - envCenter;
+// same as parallaxCorrectNormal, but with reflection probe offset and mesh's bounding box for correction
+vec3 boundingBasedParallaxCorrectNormal( vec3 vertexPos, vec3 origVec, vec3 cubeSize, vec3 cubePos, vec3 cubeOffset, vec3 boundingBoxMax, vec3 boundingBoxMin ) {
+	// Find the ray intersection with box plane
+	vec3 invOrigVec = 1.0 / (origVec + sign(origVec) * Epsilon);
+	vec3 halfSize = cubeSize * 0.5;
+	vec3 intersecAtMaxPlane = (max(cubePos + cubeOffset + halfSize, boundingBoxMax) - vertexPos) * invOrigVec;
+	vec3 intersecAtMinPlane = (min(cubePos + cubeOffset - halfSize, boundingBoxMin) - vertexPos) * invOrigVec;
+	// Get the largest intersection values (we are not intersted in negative values)
+	vec3 largestIntersec = max(intersecAtMaxPlane, intersecAtMinPlane);
+	// Get the closest of all solutions
+	float distance = min(min(largestIntersec.x, largestIntersec.y), largestIntersec.z);
+	// Get the intersection position
+	vec3 intersectPositionWS = vertexPos + origVec * distance;
+	// Get corrected vector
+	return intersectPositionWS - cubePos;
 }
 //<< VRNET
 

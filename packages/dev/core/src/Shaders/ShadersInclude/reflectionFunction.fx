@@ -98,7 +98,7 @@ vec3 computeBoundingBasedCoords(vec4 worldPos, vec3 worldNormal, vec3 eyePositio
     // worldNormal has already been normalized.
     vec3 coords = reflect(viewDir, worldNormal);
 
-	coords = boundingBasedReflection(worldPos.xyz, coords, reflectionSize, reflectionPosition, reflectionOffset, eyePosition, boundingBoxMax, boundingBoxMin);
+	coords = boundingBasedParallaxCorrectNormal(worldPos.xyz, coords, reflectionSize, reflectionPosition, reflectionOffset, boundingBoxMax, boundingBoxMin);
 
     coords = vec3(reflectionMatrix * vec4(coords, 0));
 

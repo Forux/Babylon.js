@@ -217,6 +217,37 @@ vec3 parallaxCorrectNormal( vec3 vertexPos, vec3 origVec, vec3 cubeSize, vec3 cu
 	return intersectPositionWS - cubePos;
 }
 
+//>> VRNET
+vec3 boundingBasedReflection( vec3 vertexPos, vec3 origVec, vec3 cubeSize, vec3 cubePos, vec3 cubeOffset, vec3 eyePosition, vec3 boundingBoxMax, vec3 boundingBoxMin ) {
+    vec3 halfSize = cubeSize * 0.5;
+    
+    // Calculate expanded box bounds in eye space
+    vec3 envBoxMax = max(cubePos + cubeOffset + halfSize, boundingBoxMax) - eyePosition;
+    vec3 envBoxMin = min(cubePos + cubeOffset - halfSize, boundingBoxMin) - eyePosition;
+    vec3 envCenter = cubePos - eyePosition;
+    vec3 viewDir = vertexPos - eyePosition;
+    
+    // Avoid division by zero with safe inverse
+    vec3 invOrigVec = 1.0 / (origVec + sign(origVec) * Epsilon);
+    
+    // Calculate intersection distances for all planes
+    vec3 t1 = (envBoxMax - viewDir) * invOrigVec;
+    vec3 t2 = (envBoxMin - viewDir) * invOrigVec;
+    
+    // Select correct intersection based on ray direction (branchless)
+    vec3 tNear = min(t1, t2);
+    vec3 tFar = max(t1, t2);
+    
+    // Find closest valid intersection
+    float fa = min(min(tFar.x, tFar.y), tFar.z);
+    
+    // Ensure forward intersection only
+    fa = max(fa, 0.0);
+    
+    return (viewDir + origVec * fa) - envCenter;
+}
+//<< VRNET
+
 vec3 equirectangularToCubemapDirection(vec2 uv) {
     float longitude = uv.x * TWO_PI - PI;
     float latitude = HALF_PI - uv.y * PI;

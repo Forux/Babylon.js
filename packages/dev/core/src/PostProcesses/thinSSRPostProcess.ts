@@ -37,9 +37,6 @@ export class ThinSSRPostProcess extends EffectWrapper {
         "maxDistance",
         "selfCollisionNumSkip",
         "vReflectionPosition",
-        //>> VRNET
-        "vReflectionOffset",
-        //<< VRNET
         "vReflectionSize",
         "backSizeFactor",
         "reflectivityThreshold",
@@ -444,9 +441,6 @@ export class ThinSSRPostProcess extends EffectWrapper {
 
             if (this._environmentTexture.boundingBoxSize) {
                 effect.setVector3("vReflectionPosition", this._environmentTexture.boundingBoxPosition);
-                //>> VRNET
-                effect.setVector3("vReflectionOffset", this._environmentTexture.boundingBoxOffset);
-                //<< VRNET
                 effect.setVector3("vReflectionSize", this._environmentTexture.boundingBoxSize);
             }
         }

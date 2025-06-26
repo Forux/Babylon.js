@@ -78,7 +78,11 @@ uniform mat4 view;
 
     #if defined(USE_LOCAL_REFLECTIONMAP_CUBIC) && defined(REFLECTIONMAP_CUBIC)
 	    uniform vec3 vReflectionPosition;
+        //>> VRNET
         uniform vec3 vReflectionOffset;
+        uniform vec3 vBoundingBoxMax;
+        uniform vec3 vBoundingBoxMin;
+        //<< VRNET
 	    uniform vec3 vReflectionSize;
     #endif
 #endif

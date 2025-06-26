@@ -1413,8 +1413,12 @@ export class StandardMaterial extends PushMaterial {
                 "refractionLeftColor",
                 "refractionRightColor",
                 "vReflectionPosition",
-                "vReflectionSize",
+                //>> VRNET
                 "vReflectionOffset",
+                "vBoundingBoxMax",
+                "vBoundingBoxMin",
+                //<< VRNET
+                "vReflectionSize",
                 "vRefractionPosition",
                 "vRefractionSize",
                 "logarithmicDepthConstant",
@@ -1583,7 +1587,11 @@ export class StandardMaterial extends PushMaterial {
         ubo.addUniform("vOpacityInfos", 2);
         ubo.addUniform("vReflectionInfos", 2);
         ubo.addUniform("vReflectionPosition", 3);
+        //>> VRNET
         ubo.addUniform("vReflectionOffset", 3);
+        ubo.addUniform("vBoundingBoxMax", 3);
+        ubo.addUniform("vBoundingBoxMin", 3);
+        //<< VRNET
         ubo.addUniform("vReflectionSize", 3);
         ubo.addUniform("vEmissiveInfos", 2);
         ubo.addUniform("vLightmapInfos", 2);
@@ -1725,7 +1733,11 @@ export class StandardMaterial extends PushMaterial {
                             const cubeTexture = <CubeTexture>this._reflectionTexture;
 
                             ubo.updateVector3("vReflectionPosition", cubeTexture.boundingBoxPosition);
+                            //>> VRNET
                             ubo.updateVector3("vReflectionOffset", cubeTexture.boundingBoxOffset);
+                            ubo.updateVector3("vBoundingBoxMax", mesh.getBoundingInfo().boundingBox.maximumWorld);
+                            ubo.updateVector3("vBoundingBoxMin", mesh.getBoundingInfo().boundingBox.minimumWorld);
+                            //<< VRNET
                             ubo.updateVector3("vReflectionSize", cubeTexture.boundingBoxSize);
                         }
                     } else {

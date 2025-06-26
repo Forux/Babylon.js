@@ -35,7 +35,11 @@ uniform Material {
     vec2 vReflectionInfos;
     vec2 vReflectionFilteringInfo;
     vec3 vReflectionPosition;
+    //>> VRNET
     vec3 vReflectionOffset;
+    vec3 vBoundingBoxMax;
+    vec3 vBoundingBoxMin;
+    //<< VRNET
     vec3 vReflectionSize;
     vec3 vBumpInfos;
     mat4 albedoMatrix;

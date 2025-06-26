@@ -1496,7 +1496,11 @@ export abstract class PBRBaseMaterial extends PushMaterial {
             "vOpacityInfos",
             "vReflectionInfos",
             "vReflectionPosition",
+            //>> VRNET
             "vReflectionOffset",
+            "vBoundingBoxMax",
+            "vBoundingBoxMin",
+            //<< VRNET
             "vReflectionSize",
             "vEmissiveInfos",
             "vReflectivityInfos",
@@ -2104,7 +2108,11 @@ export abstract class PBRBaseMaterial extends PushMaterial {
         ubo.addUniform("vReflectionInfos", 2);
         ubo.addUniform("vReflectionFilteringInfo", 2);
         ubo.addUniform("vReflectionPosition", 3);
+        //>> VRNET
         ubo.addUniform("vReflectionOffset", 3);
+        ubo.addUniform("vBoundingBoxMax", 3);
+        ubo.addUniform("vBoundingBoxMin", 3);
+        //<< VRNET
         ubo.addUniform("vReflectionSize", 3);
         ubo.addUniform("vBumpInfos", 3);
         ubo.addUniform("albedoMatrix", 16);
@@ -2261,7 +2269,11 @@ export abstract class PBRBaseMaterial extends PushMaterial {
                             const cubeTexture = <CubeTexture>reflectionTexture;
 
                             ubo.updateVector3("vReflectionPosition", cubeTexture.boundingBoxPosition);
+                            //>> VRNET
                             ubo.updateVector3("vReflectionOffset", cubeTexture.boundingBoxOffset);
+                            ubo.updateVector3("vBoundingBoxMax", mesh.getBoundingInfo().boundingBox.maximumWorld);
+                            ubo.updateVector3("vBoundingBoxMin", mesh.getBoundingInfo().boundingBox.minimumWorld);
+                            //<< VRNET
                             ubo.updateVector3("vReflectionSize", cubeTexture.boundingBoxSize);
                         }
 

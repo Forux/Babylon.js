@@ -211,6 +211,37 @@ fn parallaxCorrectNormal(vertexPos: vec3f, origVec: vec3f, cubeSize: vec3f, cube
 	return intersectPositionWS - cubePos;
 }
 
+//>> VRNET
+fn boundingBasedReflection(vertexPos: vec3f, origVec: vec3f, cubeSize: vec3f, cubePos: vec3f, cubeOffset: vec3f, eyePosition: vec3f, boundingBoxMax: vec3f, boundingBoxMin: vec3f) -> vec3f {
+    let halfSize: vec3f = cubeSize * 0.5;
+    
+    // Calculate expanded box bounds in eye space
+    let envBoxMax: vec3f = max(cubePos + cubeOffset + halfSize, boundingBoxMax) - eyePosition;
+    let envBoxMin: vec3f = min(cubePos + cubeOffset - halfSize, boundingBoxMin) - eyePosition;
+    let envCenter: vec3f = cubePos - eyePosition;
+    let viewDir: vec3f = vertexPos - eyePosition;
+    
+    // Avoid division by zero with safe inverse
+    let invOrigVec: vec3f = vec3f(1.0) / (origVec + sign(origVec) * Epsilon);
+    
+    // Calculate intersection distances for all planes
+    let t1: vec3f = (envBoxMax - viewDir) * invOrigVec;
+    let t2: vec3f = (envBoxMin - viewDir) * invOrigVec;
+    
+    // Select correct intersection based on ray direction (branchless)
+    let tNear: vec3f = min(t1, t2);
+    let tFar: vec3f = max(t1, t2);
+    
+    // Find closest valid intersection
+    let fa: f32 = min(min(tFar.x, tFar.y), tFar.z);
+    
+    // Ensure forward intersection only
+    let finalFa: f32 = max(fa, 0.0);
+    
+    return (viewDir + origVec * finalFa) - envCenter;
+}
+//<< VRNET
+
 fn equirectangularToCubemapDirection(uv : vec2f)->vec3f {
     var longitude : f32 = uv.x * TWO_PI - PI;
     var latitude : f32 = HALF_PI - uv.y * PI;

@@ -201,30 +201,30 @@ vec3 fromRGBD(vec4 rgbd) {
     return rgbd.rgb / rgbd.a;
 }
 
-vec3 parallaxCorrectNormal( vec3 vertexPos, vec3 origVec, vec3 cubeSize, vec3 cubePos ) {
+//>> VRNET
+vec3 parallaxCorrectNormal(
+    vec3 vertexPos,
+    vec3 origVec, 
+    vec3 cubeSize, 
+    vec3 cubePos, 
+    vec3 cubeOffset, 
+    vec3 boundingBoxMax, 
+    vec3 boundingBoxMin, 
+    bool useBoundingBox
+) 
+{
 	// Find the ray intersection with box plane
 	vec3 invOrigVec = vec3(1.) / origVec;
 	vec3 halfSize = cubeSize * 0.5;
-	vec3 intersecAtMaxPlane = (cubePos + halfSize - vertexPos) * invOrigVec;
-	vec3 intersecAtMinPlane = (cubePos - halfSize - vertexPos) * invOrigVec;
-	// Get the largest intersection values (we are not intersted in negative values)
-	vec3 largestIntersec = max(intersecAtMaxPlane, intersecAtMinPlane);
-	// Get the closest of all solutions
-	float distance = min(min(largestIntersec.x, largestIntersec.y), largestIntersec.z);
-	// Get the intersection position
-	vec3 intersectPositionWS = vertexPos + origVec * distance;
-	// Get corrected vector
-	return intersectPositionWS - cubePos;
-}
-
-//>> VRNET
-// same as parallaxCorrectNormal, but with reflection probe offset and mesh's bounding box for correction
-vec3 boundingBasedParallaxCorrectNormal( vec3 vertexPos, vec3 origVec, vec3 cubeSize, vec3 cubePos, vec3 cubeOffset, vec3 boundingBoxMax, vec3 boundingBoxMin ) {
-	// Find the ray intersection with box plane
-	vec3 invOrigVec = 1.0 / (origVec + sign(origVec) * Epsilon);
-	vec3 halfSize = cubeSize * 0.5;
-	vec3 intersecAtMaxPlane = (max(cubePos + cubeOffset + halfSize, boundingBoxMax) - vertexPos) * invOrigVec;
-	vec3 intersecAtMinPlane = (min(cubePos + cubeOffset - halfSize, boundingBoxMin) - vertexPos) * invOrigVec;
+    
+    vec3 maxBounds = cubePos + cubeOffset + halfSize;
+    vec3 minBounds = cubePos + cubeOffset - halfSize;
+    if (useBoundingBox) {
+        maxBounds = max(maxBounds, boundingBoxMax);
+        minBounds = min(minBounds, boundingBoxMin);
+    }
+    vec3 intersecAtMaxPlane = (maxBounds - vertexPos) * invOrigVec;
+    vec3 intersecAtMinPlane = (minBounds - vertexPos) * invOrigVec;
 	// Get the largest intersection values (we are not intersted in negative values)
 	vec3 largestIntersec = max(intersecAtMaxPlane, intersecAtMinPlane);
 	// Get the closest of all solutions

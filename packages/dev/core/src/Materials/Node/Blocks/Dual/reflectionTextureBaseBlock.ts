@@ -435,6 +435,7 @@ export abstract class ReflectionTextureBaseBlock extends NodeMaterialBlock {
 
         worldNormalVarName += ".xyz";
 
+        //>> VRNET
         let code = `
             #ifdef ${this._defineMirroredEquirectangularFixedName}
                ${state._declareLocalVar(this._reflectionVectorName, NodeMaterialBlockConnectionPointTypes.Vector3)} = computeMirroredFixedEquirectangularCoords(${worldPos}, ${worldNormalVarName}, ${direction});
@@ -475,6 +476,7 @@ export abstract class ReflectionTextureBaseBlock extends NodeMaterialBlock {
             #ifdef ${this._defineExplicitName}
                 ${state._declareLocalVar(this._reflectionVectorName, NodeMaterialBlockConnectionPointTypes.Vector3)} = vec3(0, 0, 0);
             #endif\n`;
+        //<< VRNET
 
         if (!doNotEmitInvertZ) {
             code += `#ifdef ${this._defineOppositeZ}

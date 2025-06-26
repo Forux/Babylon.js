@@ -145,7 +145,7 @@ fn main(input: FragmentInputs) -> FragmentOutputs {
     #ifdef SSR_USE_LOCAL_REFLECTIONMAP_CUBIC
         var worldPos: vec4f = uniforms.invView *  vec4f(csPosition, 1.0);
         //>> VRNET
-	    wReflectedVector = parallaxCorrectNormal(worldPos.xyz, normalize(wReflectedVector), uniforms.vReflectionSize, uniforms.vReflectionPosition, vec3f(0.), vec3f(0.), vec3f(0.), false);
+	    wReflectedVector = parallaxCorrectNormal(worldPos.xyz, normalize(wReflectedVector), uniforms.vReflectionSize, uniforms.vReflectionPosition, vec3f(0.), vec3f(0.), vec3f(0.), 0.);
         //<< VRNET
     #endif
     #ifdef SSR_INVERTCUBICMAP

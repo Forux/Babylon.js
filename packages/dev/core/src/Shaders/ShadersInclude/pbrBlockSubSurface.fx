@@ -82,7 +82,7 @@ struct subSurfaceOutParams
             #ifdef SS_REFRACTIONMAP_3D
                 #ifdef SS_USE_LOCAL_REFRACTIONMAP_CUBIC
                     //>> VRNET
-                    refractionVector = parallaxCorrectNormal(vPositionW, refractionVector, refractionSize, refractionPosition, vec3(0.), vec3(0.), vec3(0.), false);
+                    refractionVector = parallaxCorrectNormal(vPositionW, refractionVector, refractionSize, refractionPosition, vec3(0.), vec3(0.), vec3(0.), 0.);
                     //<< VRNET
                 #endif
                 refractionVector.y = refractionVector.y * vRefractionInfos.w;

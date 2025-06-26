@@ -73,7 +73,7 @@ vec3 computeCubicCoords(vec4 worldPos, vec3 worldNormal, vec3 eyePosition, mat4 
 }
 
 //>> VRNET
-vec3 computeCubicLocalCoords(vec4 worldPos, vec3 worldNormal, vec3 eyePosition, mat4 reflectionMatrix, vec3 reflectionSize, vec3 reflectionPosition, vec3 reflectionOffset, vec3 boundingBoxMax, vec3 boundingBoxMin, bool useBoundingBox)
+vec3 computeCubicLocalCoords(vec4 worldPos, vec3 worldNormal, vec3 eyePosition, mat4 reflectionMatrix, vec3 reflectionSize, vec3 reflectionPosition, vec3 reflectionOffset, vec3 boundingBoxMax, vec3 boundingBoxMin, float useBoundingBox)
 {
     vec3 viewDir = normalize(worldPos.xyz - eyePosition);
 
@@ -130,7 +130,7 @@ vec3 computeReflectionCoords(vec4 worldPos, vec3 worldNormal)
 #ifdef REFLECTIONMAP_CUBIC
 	#ifdef USE_LOCAL_REFLECTIONMAP_CUBIC
 		//>> VRNET
-    	return computeCubicLocalCoords(worldPos, worldNormal, vEyePosition.xyz, reflectionMatrix, vReflectionSize, vReflectionPosition, vReflectionOffset, vBoundingBoxMax, vBoundingBoxMin, true);
+    	return computeCubicLocalCoords(worldPos, worldNormal, vEyePosition.xyz, reflectionMatrix, vReflectionSize, vReflectionPosition, vReflectionOffset, vBoundingBoxMax, vBoundingBoxMin, 1.0);
 		//<< VRNET
 	#else
     	return computeCubicCoords(worldPos, worldNormal, vEyePosition.xyz, reflectionMatrix);

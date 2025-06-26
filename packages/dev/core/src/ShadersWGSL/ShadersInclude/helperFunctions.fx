@@ -204,18 +204,15 @@ fn parallaxCorrectNormal(
     cubeOffset: vec3f, 
     boundingBoxMax: vec3f, 
     boundingBoxMin: vec3f, 
-    useBoundingBox: bool
+    useBoundingBox: float
 ) -> vec3f  {
 	// Find the ray intersection with box plane
 	let invOrigVec: vec3f = vec3f(1.) / origVec;
 	let halfSize: vec3f = cubeSize * 0.5;
     let maxBound: vec3f = cubePos + cubeOffset + halfSize;
     let minBound: vec3f = cubePos + cubeOffset - halfSize;
-    if (useBoundingBox) {
-        // Use bounding box for intersection
-        maxBound = max(maxBound, boundingBoxMax);
-        minBound = min(minBound, boundingBoxMin);
-    }
+    maxBound = mix(maxBound, max(maxBound, boundingBoxMax), useBoundingBox);
+    minBound = mix(minBound, min(minBound, boundingBoxMin), useBoundingBox);
     // Get the intersection values at the max and min planes
 	let intersecAtMaxPlane: vec3f = (maxBound - vertexPos) * invOrigVec;
 	let intersecAtMinPlane: vec3f = (minBound - vertexPos) * invOrigVec;

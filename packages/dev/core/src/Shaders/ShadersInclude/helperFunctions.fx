@@ -210,7 +210,7 @@ vec3 parallaxCorrectNormal(
     vec3 cubeOffset, 
     vec3 boundingBoxMax, 
     vec3 boundingBoxMin, 
-    bool useBoundingBox
+    float useBoundingBox
 ) 
 {
 	// Find the ray intersection with box plane
@@ -219,10 +219,8 @@ vec3 parallaxCorrectNormal(
     
     vec3 maxBounds = cubePos + cubeOffset + halfSize;
     vec3 minBounds = cubePos + cubeOffset - halfSize;
-    if (useBoundingBox) {
-        maxBounds = max(maxBounds, boundingBoxMax);
-        minBounds = min(minBounds, boundingBoxMin);
-    }
+    maxBounds = mix(maxBounds, max(maxBounds, boundingBoxMax), useBoundingBox);
+    minBounds = mix(minBounds, min(minBounds, boundingBoxMin), useBoundingBox);
     vec3 intersecAtMaxPlane = (maxBounds - vertexPos) * invOrigVec;
     vec3 intersecAtMinPlane = (minBounds - vertexPos) * invOrigVec;
 	// Get the largest intersection values (we are not intersted in negative values)

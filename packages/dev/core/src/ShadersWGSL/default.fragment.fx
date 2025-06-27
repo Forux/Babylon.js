@@ -209,7 +209,9 @@ fn main(input: FragmentInputs) -> FragmentOutputs {
 	var refractionVector: vec3f = normalize(refract(-viewDirectionW, normalW, uniforms.vRefractionInfos.y));
 	#ifdef REFRACTIONMAP_3D
         #ifdef USE_LOCAL_REFRACTIONMAP_CUBIC
-            refractionVector = parallaxCorrectNormal(fragmentInputs.vPositionW, refractionVector, uniforms.vRefractionSize, uniforms.vRefractionPosition);
+			//>> VRNET
+            refractionVector = parallaxCorrectNormal(fragmentInputs.vPositionW, refractionVector, uniforms.vRefractionSize, uniforms.vRefractionPosition, vec3f(0.), vec3f(0.), vec3f(0.), false);
+			//<< VRNET
         #endif
 		refractionVector.y = refractionVector.y * uniforms.vRefractionInfos.w;
 

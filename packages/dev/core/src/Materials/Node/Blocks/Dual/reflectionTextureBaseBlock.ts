@@ -58,8 +58,6 @@ export abstract class ReflectionTextureBaseBlock extends NodeMaterialBlock {
     /** @internal */
     public _reflectionPositionName: string;
     /** @internal */
-    public _reflectionOffsetName: string;
-    /** @internal */
     public _reflectionSizeName: string;
 
     protected _positionUVWName: string;
@@ -280,7 +278,6 @@ export abstract class ReflectionTextureBaseBlock extends NodeMaterialBlock {
         if ((<any>texture).boundingBoxSize) {
             const cubeTexture = <CubeTexture>texture;
             effect.setVector3(this._reflectionPositionName, cubeTexture.boundingBoxPosition);
-            effect.setVector3(this._reflectionOffsetName, cubeTexture.boundingBoxOffset);
             effect.setVector3(this._reflectionSizeName, cubeTexture.boundingBoxSize);
         }
     }
@@ -404,9 +401,6 @@ export abstract class ReflectionTextureBaseBlock extends NodeMaterialBlock {
         this._reflectionPositionName = state._getFreeVariableName("vReflectionPosition");
         state._emitUniformFromString(this._reflectionPositionName, NodeMaterialBlockConnectionPointTypes.Vector3);
 
-        this._reflectionOffsetName = state._getFreeVariableName("vReflectionOffset");
-        state._emitUniformFromString(this._reflectionOffsetName, NodeMaterialBlockConnectionPointTypes.Vector3);
-
         this._reflectionSizeName = state._getFreeVariableName("vReflectionSize");
         state._emitUniformFromString(this._reflectionSizeName, NodeMaterialBlockConnectionPointTypes.Vector3);
     }
@@ -463,8 +457,12 @@ export abstract class ReflectionTextureBaseBlock extends NodeMaterialBlock {
             #endif
 
             #ifdef ${this._defineCubicName}
-                #ifdef ${this._defineLocalCubicName}
-                    ${state._declareLocalVar(this._reflectionVectorName, NodeMaterialBlockConnectionPointTypes.Vector3)} = computeCubicLocalCoords(${worldPos}, ${worldNormalVarName}, ${vEyePosition}.xyz, ${reflectionMatrix}, ${this._reflectionSizeName}, ${this._reflectionPositionName}, ${this._reflectionOffsetName});
+                #ifdef ${this._defineLocalCubicName}`;
+        //>> VRNET
+        code += `
+                    ${state._declareLocalVar(this._reflectionVectorName, NodeMaterialBlockConnectionPointTypes.Vector3)} = computeCubicLocalCoords(${worldPos}, ${worldNormalVarName}, ${vEyePosition}.xyz, ${reflectionMatrix}, ${this._reflectionSizeName}, ${this._reflectionPositionName}, vec3(0, 0, 0), vec3(0, 0, 0), vec3(0, 0, 0), false);`;
+        //<< VRNET
+        code += `
                 #else
                 ${state._declareLocalVar(this._reflectionVectorName, NodeMaterialBlockConnectionPointTypes.Vector3)} = computeCubicCoords(${worldPos}, ${worldNormalVarName}, ${vEyePosition}.xyz, ${reflectionMatrix});
                 #endif

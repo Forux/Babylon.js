@@ -10,6 +10,11 @@ uniform vMicroSurfaceSamplerInfos: vec2f;
 uniform vReflectionInfos: vec2f;
 uniform vReflectionFilteringInfo: vec2f;
 uniform vReflectionPosition: vec3f;
+//>> VRNET
+uniform vReflectionOffset: vec3f;
+uniform vBoundingBoxMax: vec3f;
+uniform vBoundingBoxMin: vec3f;
+//<< VRNET
 uniform vReflectionSize: vec3f;
 uniform vBumpInfos: vec3f;
 uniform albedoMatrix: mat4x4f;

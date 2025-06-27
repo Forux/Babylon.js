@@ -28,7 +28,6 @@ uniform sampler2D depthSampler;
     uniform samplerCube envCubeSampler;
     #ifdef SSR_USE_LOCAL_REFLECTIONMAP_CUBIC
         uniform vec3 vReflectionPosition;
-        uniform vec3 vReflectionOffset;
         uniform vec3 vReflectionSize;
     #endif
 #endif
@@ -148,7 +147,9 @@ void main()
     vec3 wReflectedVector = vec3(invView * vec4(csReflectedVector, 0.0));
     #ifdef SSR_USE_LOCAL_REFLECTIONMAP_CUBIC
         vec4 worldPos = invView * vec4(csPosition, 1.0);
-	    wReflectedVector = parallaxCorrectNormal(worldPos.xyz, normalize(wReflectedVector), vReflectionSize, vReflectionPosition);
+        //>> VRNET
+	    wReflectedVector = parallaxCorrectNormal(worldPos.xyz, normalize(wReflectedVector), vReflectionSize, vReflectionPosition, vec3(0.), vec3(0.), vec3(0.), false);
+        //<< VRNET
     #endif
     #ifdef SSR_INVERTCUBICMAP
         wReflectedVector.y *= -1.0;

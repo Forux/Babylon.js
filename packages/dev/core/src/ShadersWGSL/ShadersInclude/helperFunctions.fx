@@ -195,12 +195,30 @@ fn fromRGBD(rgbd: vec4<f32>) -> vec3f {
     return rgb / rgbd.a;
 }
 
-fn parallaxCorrectNormal(vertexPos: vec3f, origVec: vec3f, cubeSize: vec3f, cubePos: vec3f) -> vec3f  {
+//>> VRNET
+fn parallaxCorrectNormal(
+    vertexPos: vec3f,
+    origVec: vec3f, 
+    cubeSize: vec3f, 
+    cubePos: vec3f, 
+    cubeOffset: vec3f, 
+    boundingBoxMax: vec3f, 
+    boundingBoxMin: vec3f, 
+    useBoundingBox: bool
+) -> vec3f  {
 	// Find the ray intersection with box plane
 	let invOrigVec: vec3f = vec3f(1.) / origVec;
 	let halfSize: vec3f = cubeSize * 0.5;
-	let intersecAtMaxPlane: vec3f = (cubePos + halfSize - vertexPos) * invOrigVec;
-	let intersecAtMinPlane: vec3f = (cubePos - halfSize - vertexPos) * invOrigVec;
+    let maxBound: vec3f = cubePos + cubeOffset + halfSize;
+    let minBound: vec3f = cubePos + cubeOffset - halfSize;
+    if (useBoundingBox) {
+        // Use bounding box for intersection
+        maxBound = max(maxBound, boundingBoxMax);
+        minBound = min(minBound, boundingBoxMin);
+    }
+    // Get the intersection values at the max and min planes
+	let intersecAtMaxPlane: vec3f = (maxBound - vertexPos) * invOrigVec;
+	let intersecAtMinPlane: vec3f = (minBound - vertexPos) * invOrigVec;
 	// Get the largest intersection values (we are not intersted in negative values)
 	let largestIntersec: vec3f = max(intersecAtMaxPlane, intersecAtMinPlane);
 	// Get the closest of all solutions
@@ -210,6 +228,7 @@ fn parallaxCorrectNormal(vertexPos: vec3f, origVec: vec3f, cubeSize: vec3f, cube
 	// Get corrected vector
 	return intersectPositionWS - cubePos;
 }
+//<< VRNET
 
 fn equirectangularToCubemapDirection(uv : vec2f)->vec3f {
     var longitude : f32 = uv.x * TWO_PI - PI;

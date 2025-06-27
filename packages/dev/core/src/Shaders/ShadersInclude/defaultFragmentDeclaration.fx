@@ -87,7 +87,11 @@ uniform vec4 emissiveRightColor;
     #ifndef REFLECTIONMAP_SKYBOX
         #if defined(USE_LOCAL_REFLECTIONMAP_CUBIC) && defined(REFLECTIONMAP_CUBIC)
             uniform vec3 vReflectionPosition;
+            //>> VRNET
             uniform vec3 vReflectionOffset;
+            uniform vec3 vBoundinxBoxMax;
+            uniform vec3 vBoundinxBoxMin;
+            //<< VRNET
             uniform vec3 vReflectionSize; 
         #endif
     #endif

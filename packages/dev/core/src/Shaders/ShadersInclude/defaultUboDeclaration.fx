@@ -16,7 +16,11 @@ uniform Material
 	vec2 vOpacityInfos;
 	vec2 vReflectionInfos;
 	vec3 vReflectionPosition;
+	//>> VRNET
 	vec3 vReflectionOffset;
+	vec3 vBoundinxBoxMax;
+	vec3 vBoundinxBoxMin;
+	//<< VRNET
 	vec3 vReflectionSize;
 	vec2 vEmissiveInfos;
 	vec2 vLightmapInfos;

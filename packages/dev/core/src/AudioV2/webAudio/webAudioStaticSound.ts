@@ -1,8 +1,8 @@
 import type { Nullable } from "../../types";
 import type { AbstractAudioNode } from "../abstractAudio/abstractAudioNode";
-import type { IStaticSoundOptions, IStaticSoundPlayOptions, IStaticSoundStopOptions, IStaticSoundStoredOptions } from "../abstractAudio/staticSound";
+import type { IStaticSoundCloneOptions, IStaticSoundOptions, IStaticSoundPlayOptions, IStaticSoundStopOptions, IStaticSoundStoredOptions } from "../abstractAudio/staticSound";
 import { StaticSound } from "../abstractAudio/staticSound";
-import type { IStaticSoundBufferOptions } from "../abstractAudio/staticSoundBuffer";
+import type { IStaticSoundBufferCloneOptions, IStaticSoundBufferOptions } from "../abstractAudio/staticSoundBuffer";
 import { StaticSoundBuffer } from "../abstractAudio/staticSoundBuffer";
 import type { IStaticSoundInstanceOptions } from "../abstractAudio/staticSoundInstance";
 import { _StaticSoundInstance } from "../abstractAudio/staticSoundInstance";
@@ -11,6 +11,7 @@ import type { _SpatialAudio } from "../abstractAudio/subProperties/spatialAudio"
 import { _StereoAudio } from "../abstractAudio/subProperties/stereoAudio";
 import { _CleanUrl, _FileExtensionRegex } from "../audioUtils";
 import { SoundState } from "../soundState";
+import { _WebAudioParameterComponent } from "./components/webAudioParameterComponent";
 import { _WebAudioBusAndSoundSubGraph } from "./subNodes/webAudioBusAndSoundSubGraph";
 import { _SpatialWebAudio } from "./subProperties/spatialWebAudio";
 import type { _WebAudioEngine } from "./webAudioEngine";
@@ -74,7 +75,7 @@ export class _WebAudioStaticSound extends StaticSound implements IWebAudioSuperN
 
         if (options.outBus) {
             this.outBus = options.outBus;
-        } else {
+        } else if (options.outBusAutoDefault !== false) {
             await this.engine.isReadyPromise;
             this.outBus = this.engine.defaultMainBus;
         }
@@ -118,6 +119,15 @@ export class _WebAudioStaticSound extends StaticSound implements IWebAudioSuperN
     /** @internal */
     public override get stereo(): _StereoAudio {
         return this._stereo ?? (this._stereo = new _StereoAudio(this._subGraph));
+    }
+
+    /** @internal */
+    public override async cloneAsync(options: Nullable<Partial<IStaticSoundCloneOptions>> = null): Promise<StaticSound> {
+        const clone = await this.engine.createSoundAsync(this.name, options?.cloneBuffer ? this.buffer.clone() : this.buffer, this._options);
+
+        clone.outBus = options?.outBus ? options.outBus : this.outBus;
+
+        return clone;
     }
 
     /** @internal */
@@ -238,6 +248,25 @@ export class _WebAudioStaticSoundBuffer extends StaticSoundBuffer {
         return this._audioBuffer.sampleRate;
     }
 
+    /** @internal */
+    public override clone(options: Nullable<Partial<IStaticSoundBufferCloneOptions>> = null): StaticSoundBuffer {
+        const audioBuffer = new AudioBuffer({
+            length: this._audioBuffer.length,
+            numberOfChannels: this._audioBuffer.numberOfChannels,
+            sampleRate: this._audioBuffer.sampleRate,
+        });
+
+        for (let i = 0; i < this._audioBuffer.numberOfChannels; i++) {
+            audioBuffer.copyToChannel(this._audioBuffer.getChannelData(i), i);
+        }
+
+        const buffer = new _WebAudioStaticSoundBuffer(this.engine);
+        buffer._audioBuffer = audioBuffer;
+        buffer.name = options?.name ? options.name : this.name;
+
+        return buffer;
+    }
+
     private async _initFromArrayBufferAsync(arrayBuffer: ArrayBuffer): Promise<void> {
         this._audioBuffer = await this.engine._audioContext.decodeAudioData(arrayBuffer);
     }
@@ -278,6 +307,8 @@ export class _WebAudioStaticSoundBuffer extends StaticSoundBuffer {
 class _WebAudioStaticSoundInstance extends _StaticSoundInstance implements IWebAudioOutNode {
     private _enginePlayTime: number = 0;
     private _enginePauseTime: number = 0;
+    private _pitch: Nullable<_WebAudioParameterComponent> = null;
+    private _playbackRate: Nullable<_WebAudioParameterComponent> = null;
     private _sourceNode: Nullable<AudioBufferSourceNode> = null;
     private _volumeNode: GainNode;
 
@@ -294,6 +325,22 @@ class _WebAudioStaticSoundInstance extends _StaticSoundInstance implements IWebA
 
         this._volumeNode = new GainNode(sound._audioContext);
         this._initSourceNode();
+    }
+
+    /** @internal */
+    public override dispose(): void {
+        super.dispose();
+
+        this._pitch?.dispose();
+        this._playbackRate?.dispose();
+
+        this._sourceNode = null;
+
+        this.stop();
+
+        this._deinitSourceNode();
+
+        this.engine.stateChangedObservable.removeCallback(this._onEngineStateChanged);
     }
 
     /** @internal */
@@ -327,16 +374,12 @@ class _WebAudioStaticSoundInstance extends _StaticSoundInstance implements IWebA
 
     /** @internal */
     public set pitch(value: number) {
-        if (this._sourceNode) {
-            this.engine._setAudioParam(this._sourceNode.detune, value);
-        }
+        this._pitch?.setTargetValue(value);
     }
 
     /** @internal */
     public set playbackRate(value: number) {
-        if (this._sourceNode) {
-            this.engine._setAudioParam(this._sourceNode.playbackRate, value);
-        }
+        this._playbackRate?.setTargetValue(value);
     }
 
     /** @internal */
@@ -346,19 +389,6 @@ class _WebAudioStaticSoundInstance extends _StaticSoundInstance implements IWebA
         }
 
         return this._enginePlayTime;
-    }
-
-    /** @internal */
-    public override dispose(): void {
-        super.dispose();
-
-        this._sourceNode = null;
-
-        this.stop();
-
-        this._deinitSourceNode();
-
-        this.engine.stateChangedObservable.removeCallback(this._onEngineStateChanged);
     }
 
     /** @internal */
@@ -505,6 +535,9 @@ class _WebAudioStaticSoundInstance extends _StaticSoundInstance implements IWebA
             if (!this._connect(this._sound)) {
                 throw new Error("Connect failed");
             }
+
+            this._pitch = new _WebAudioParameterComponent(this.engine, this._sourceNode.detune);
+            this._playbackRate = new _WebAudioParameterComponent(this.engine, this._sourceNode.playbackRate);
         }
 
         const node = this._sourceNode;

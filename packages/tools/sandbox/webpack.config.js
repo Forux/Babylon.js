@@ -19,6 +19,7 @@ module.exports = (env) => {
             extensions: [".js", ".ts", ".tsx"],
             alias: {
                 "shared-ui-components": path.resolve("../../dev/sharedUiComponents/dist"),
+                "inspector-v2": path.resolve("../../dev/inspector-v2/dist"),
             },
         },
         externals: [
@@ -38,6 +39,8 @@ module.exports = (env) => {
                     return callback(null, "BABYLON");
                 } else if (/^gui-editor\//.test(request)) {
                     return callback(null, "BABYLON.GUIEditor");
+                } else if (/^addons\//.test(request)) {
+                    return callback(null, "ADDONS");
                 }
 
                 // Continue without externalizing the import

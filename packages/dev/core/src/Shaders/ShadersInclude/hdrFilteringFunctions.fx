@@ -1,4 +1,4 @@
-#ifdef NUM_SAMPLES
+#if NUM_SAMPLES
     #if NUM_SAMPLES > 0
 
     #if defined(WEBGL2) || defined(WEBGPU) || defined(NATIVE)
@@ -53,11 +53,12 @@
         vec3 N;
 
         vec2 uvRange = uv;
-        float theta = uvRange.x * 2.0 * PI;
+        float theta = uvRange.x * 2. * PI;
         float phi = uvRange.y * PI;
 
-        N.x = cos(theta) * sin(phi);
-        N.z = sin(theta) * sin(phi);
+        float sinPhi = sin(phi);
+        N.x = cos(theta) * sinPhi;
+        N.z = sin(theta) * sinPhi;
         N.y = cos(phi);
         return N;
     }
@@ -184,14 +185,23 @@
         //
 
         #define inline
-        vec3 irradiance(samplerCube inputTexture, vec3 inputN, vec2 filteringInfo, float diffuseRoughness, vec3 surfaceAlbedo, vec3 inputV
-        #ifdef IBL_CDF_FILTERING
-        , sampler2D icdfSampler
+        vec3 irradiance(
+        #ifdef CUSTOM_IRRADIANCE_FILTERING_INPUT
+            CUSTOM_IRRADIANCE_FILTERING_INPUT
+        #else
+            samplerCube inputTexture,
+        #endif
+            vec3 inputN, vec2 filteringInfo,
+            float diffuseRoughness,
+            vec3 surfaceAlbedo,
+            vec3 inputV
+        #if IBL_CDF_FILTERING
+            , sampler2D icdfSampler
         #endif
         )
         {
             vec3 n = normalize(inputN);
-            vec3 result = vec3(0.0);
+            vec3 result = vec3(0.);
 
             #ifndef IBL_CDF_FILTERING
             vec3 tangent = abs(n.z) < 0.999 ? vec3(0., 0., 1.) : vec3(1., 0., 0.);
@@ -215,9 +225,9 @@
             {
                 vec2 Xi = hammersley(i, NUM_SAMPLES);
 
-                #ifdef IBL_CDF_FILTERING
+                #if IBL_CDF_FILTERING
                     vec2 T;
-                    T.x = texture2D(icdfSampler, vec2(Xi.x, 0.0)).x;
+                    T.x = texture2D(icdfSampler, vec2(Xi.x, 0.)).x;
                     T.y = texture2D(icdfSampler, vec2(T.x, Xi.y)).y;
                     vec3 Ls = uv_to_normal(vec2(1.0 - fract(T.x + 0.25), T.y));
                     float NoL = dot(n, Ls);
@@ -231,10 +241,9 @@
                 #else
                     vec3 Ls = hemisphereCosSample(Xi);
                     Ls = normalize(Ls);
-                    vec3 Ns = vec3(0., 0., 1.);
-                    float NoL = dot(Ns, Ls);
+                    float NoL = Ls.z; // N = (0, 0, 1)
                     vec3 V = tbnInverse * inputV;
-                    float NoV = dot(Ns, V);
+                    float NoV = V.z; // N = (0, 0, 1)
                     #if BASE_DIFFUSE_MODEL == BRDF_DIFFUSE_MODEL_EON
                         float LoV = dot (Ls, V);
                     #elif BASE_DIFFUSE_MODEL == BRDF_DIFFUSE_MODEL_BURLEY
@@ -245,17 +254,21 @@
                 #endif
 
                 if (NoL > 0.) {
-                    #ifdef IBL_CDF_FILTERING
+                    #if IBL_CDF_FILTERING
                         float pdf = texture2D(icdfSampler, T).z;
-                        vec3 c = textureCubeLodEXT(inputTexture, Ls, 0.0).rgb;
+                        vec3 c = textureCubeLodEXT(inputTexture, Ls, 0.).rgb;
                     #else
                         float pdf_inversed = PI / NoL;
                         float omegaS = NUM_SAMPLES_FLOAT_INVERSED * pdf_inversed;
                         float l = log4(omegaS) - log4(omegaP) + log4(K);
-                        float mipLevel = clamp(l, 0.0, maxLevel);
-                        vec3 c = textureCubeLodEXT(inputTexture, tbn * Ls, mipLevel).rgb;
+                        float mipLevel = clamp(l, 0., maxLevel);
+                        #ifdef CUSTOM_IRRADIANCE_FILTERING_FUNCTION
+                            CUSTOM_IRRADIANCE_FILTERING_FUNCTION
+                        #else
+                            vec3 c = textureCubeLodEXT(inputTexture, tbn * Ls, mipLevel).rgb;
+                        #endif
                     #endif
-                    #ifdef GAMMA_INPUT
+                    #if GAMMA_INPUT
                         c = toLinearSpace(c);
                     #endif
 
@@ -266,7 +279,7 @@
                         diffuseRoughnessTerm = vec3(diffuseBRDF_Burley(NoL, NoV, VoH, diffuseRoughness) * PI);
                     #endif
 
-                    #ifdef IBL_CDF_FILTERING
+                    #if IBL_CDF_FILTERING
                         vec3 light = pdf < 1e-6 ? vec3(0.0) : vec3(1.0) / vec3(pdf) * c;
                         result += NoL * diffuseRoughnessTerm * light;
                     #else
@@ -291,7 +304,7 @@
             vec3 c = textureCube(inputTexture, n).rgb; // Don't put it in the "if (alphaG == 0.)" branch for uniformity (analysis) reasons!
 
             if (alphaG == 0.) {
-                #ifdef GAMMA_INPUT
+                #if GAMMA_INPUT
                     c = toLinearSpace(c);
                 #endif
                 return c;
@@ -333,7 +346,7 @@
 
                         weight += NoL;
                         vec3 c = textureCubeLodEXT(inputTexture, tbn * L, mipLevel).rgb;
-                        #ifdef GAMMA_INPUT
+                        #if GAMMA_INPUT
                             c = toLinearSpace(c);
                         #endif
                         result += c * NoL;

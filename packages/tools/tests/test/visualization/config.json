@@ -2,9 +2,19 @@
     "root": "https://cdn.babylonjs.com",
     "tests": [
         {
+            "title": "RH billboard",
+            "playgroundId": "#PDO1L6#1",
+            "referenceImage": "rh-billboard.png"
+        },
+        {
             "title": "MSDF",
             "playgroundId": "#6RLCWP#20",
             "referenceImage": "msdf.png"
+        },
+        {
+            "title": "MSDF Screen projected",
+            "playgroundId": "#6RLCWP#48",
+            "referenceImage": "msdf-projected.png"
         },
         {
             "title": "MSDF Billboard",
@@ -12,8 +22,13 @@
             "referenceImage": "msdf-billboard.png"
         },
         {
+            "title": "MSDF Stroke",
+            "playgroundId": "#6RLCWP#41",
+            "referenceImage": "msdf-stroke.png"
+        },
+        {
             "title": "Attractors",
-            "playgroundId": "#DEZ79M#34",
+            "playgroundId": "#DEZ79M#57",
             "referenceImage": "attractors.png"
         },
         {
@@ -28,24 +43,24 @@
         },
         {
             "title": "OpenPBR Base Diffuse Roughness Analytical Lights",
-            "playgroundId": "#MXACV7#23",
+            "playgroundId": "#MXACV7#30",
             "referenceImage": "openpbr_base_diffuse_roughness.png"
         },
         {
             "title": "OpenPBR Base Diffuse Roughness Realtime IBL",
-            "playgroundId": "#MXACV7#22",
+            "playgroundId": "#MXACV7#29",
             "renderCount": 15,
             "referenceImage": "openpbr_base_diffuse_roughness_realtime_ibl.png"
         },
         {
             "title": "OpenPBR Base Diffuse Roughness Prefiltered IBL with CDF",
-            "playgroundId": "#MXACV7#19",
+            "playgroundId": "#MXACV7#28",
             "renderCount": 5,
             "referenceImage": "openpbr_base_diffuse_roughness_prefiltered_ibl_with_cdf.png"
         },
         {
             "title": "OpenPBR Base Diffuse Roughness Prefiltered IBL",
-            "playgroundId": "#MXACV7#20",
+            "playgroundId": "#MXACV7#27",
             "renderCount": 5,
             "referenceImage": "openpbr_base_diffuse_roughness_prefiltered_ibl.png"
         },
@@ -637,7 +652,7 @@
         },
         {
             "title": "Area Lights - Standard Material",
-            "playgroundId": "#T7FXR8#11",
+            "playgroundId": "#T7FXR8#67",
             "referenceImage": "areaLightsStandardMaterial.png"
         },
         {
@@ -1033,37 +1048,37 @@
         },
         {
             "title": "GLTF Serializer KHR punctual light, left-handed",
-            "playgroundId": "#FLXW8B#25",
+            "playgroundId": "#FLXW8B#27",
             "replace": "//options//, roundtrip = true; useRightHandedSystem = false;",
             "referenceImage": "glTFSerializerKHRPunctualLightLH.png"
         },
         {
             "title": "GLTF Serializer KHR punctual light, right-handed",
-            "playgroundId": "#FLXW8B#25",
+            "playgroundId": "#FLXW8B#27",
             "replace": "//options//, roundtrip = true; useRightHandedSystem = true;",
             "referenceImage": "glTFSerializerKHRPunctualLightRH.png"
         },
         {
             "title": "GLTF Serializer Camera, left-handed",
-            "playgroundId": "#O0M0J9#8",
+            "playgroundId": "#O0M0J9#20",
             "replace": "//options//, roundtripCount = 1; useRightHandedSystem = false;",
             "referenceImage": "glTFSerializerCameraLeftHand.png"
         },
         {
             "title": "GLTF Serializer Camera, right-handed",
-            "playgroundId": "#O0M0J9#8",
+            "playgroundId": "#O0M0J9#20",
             "replace": "//options//, roundtripCount = 1; useRightHandedSystem = true;",
             "referenceImage": "glTFSerializerCameraRightHand.png"
         },
         {
             "title": "GLTF Serializer Camera, left-handed, round trip twice",
-            "playgroundId": "#O0M0J9#8",
+            "playgroundId": "#O0M0J9#20",
             "replace": "//options//, roundtripCount = 2; useRightHandedSystem = false;",
             "referenceImage": "glTFSerializerCameraLeftHand.png"
         },
         {
             "title": "GLTF Serializer Camera, right-handed, round trip twice",
-            "playgroundId": "#O0M0J9#8",
+            "playgroundId": "#O0M0J9#20",
             "replace": "//options//, roundtripCount = 2; useRightHandedSystem = true;",
             "referenceImage": "glTFSerializerCameraRightHand.png"
         },
@@ -1071,6 +1086,30 @@
             "title": "GLTF Serializer Rotation conversion, left-handed",
             "playgroundId": "#UK7FLI#1",
             "referenceImage": "glTFSerializerRotationConversionLH.png"
+        },
+        {
+            "title": "GLTF Serializer camera rotation animation, RH -> LH",
+            "playgroundId": "#3A00GJ#42",
+            "replace": "//options//, roundtripCount = 1; srcRH = true; destRH = false;",
+            "referenceImage": "glTFSerializerCameraRotationAnimation.png"
+        },
+        {
+            "title": "GLTF Serializer camera rotation animation, RH -> RH",
+            "playgroundId": "#3A00GJ#42",
+            "replace": "//options//, roundtripCount = 1; srcRH = true; destRH = true;",
+            "referenceImage": "glTFSerializerCameraRotationAnimation.png"
+        },
+        {
+            "title": "GLTF Serializer camera rotation animation, LH -> RH",
+            "playgroundId": "#3A00GJ#42",
+            "replace": "//options//, roundtripCount = 1; srcRH = false; destRH = true;",
+            "referenceImage": "glTFSerializerCameraRotationAnimation.png"
+        },
+        {
+            "title": "GLTF Serializer camera rotation animation, LH -> LH",
+            "playgroundId": "#3A00GJ#42",
+            "replace": "//options//, roundtripCount = 1; srcRH = false; destRH = false;",
+            "referenceImage": "glTFSerializerCameraRotationAnimation.png"
         },
         {
             "title": "GLTF Buggy with Draco Mesh Compression",
@@ -2451,6 +2490,18 @@
             "referenceImage": "glTFLoaderCapabilities.png"
         },
         {
+            "title": "glTF Loader Cameras RH",
+            "playgroundId": "#933H4X#11",
+            "replace": "//options//, useRightHandedSystem = true;",
+            "referenceImage": "glTFLoaderCameras.png"
+        },
+        {
+            "title": "glTF Loader Cameras LH",
+            "playgroundId": "#933H4X#11",
+            "replace": "//options//, useRightHandedSystem = false;",
+            "referenceImage": "glTFLoaderCameras.png"
+        },
+        {
             "title": "IBL Voxel Shadowing",
             "playgroundId": "#8R5SSE#628",
             "referenceImage": "voxelShadows.png",
@@ -2512,6 +2563,11 @@
             "title": "FrameGraph nrge csm shadows",
             "playgroundId": "#JWKDME#29",
             "errorRatio": 2
+        },
+        {
+            "title": "FrameGraph nrge csm shadows with autoCalcDepthBounds",
+            "playgroundId": "#JWKDME#88",
+            "renderCount": 10
         },
         {
             "title": "FrameGraph nrge custom rendering",
@@ -2657,19 +2713,23 @@
         },
         {
             "title": "Specular reflectance models for IBL",
-            "playgroundId": "#GRQHVV#20"
+            "playgroundId": "#GRQHVV#24"
         },
         {
             "title": "Specular reflectance models for analytic lights",
-            "playgroundId": "#GRQHVV#9"
+            "playgroundId": "#GRQHVV#23"
         },
         {
             "title": "F82 Specular Roughness vs Weight",
-            "playgroundId": "#GRQHVV#18"
+            "playgroundId": "#GRQHVV#22"
         },
         {
             "title": "F82 Specular Metal vs Weight",
-            "playgroundId": "#GRQHVV#19"
+            "playgroundId": "#GRQHVV#21"
+        },
+        {
+            "title": "Test code inlining",
+            "playgroundId": "#YG3BBF#51"
         }
     ]
 }

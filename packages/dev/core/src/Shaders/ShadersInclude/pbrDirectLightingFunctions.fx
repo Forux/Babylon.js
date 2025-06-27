@@ -45,7 +45,9 @@ vec3 computeHemisphericDiffuseLighting(preLightingInfo info, vec3 lightColor, ve
 
 vec3 computeDiffuseLighting(preLightingInfo info, vec3 lightColor) {
     vec3 diffuseTerm = vec3(1.0 / PI);
-    #if BASE_DIFFUSE_MODEL == BRDF_DIFFUSE_MODEL_BURLEY
+    #if BASE_DIFFUSE_MODEL == BRDF_DIFFUSE_MODEL_LEGACY
+        diffuseTerm = vec3(diffuseBRDF_Burley(info.NdotL, info.NdotV, info.VdotH, info.roughness));
+    #elif BASE_DIFFUSE_MODEL == BRDF_DIFFUSE_MODEL_BURLEY
         diffuseTerm = vec3(diffuseBRDF_Burley(info.NdotL, info.NdotV, info.VdotH, info.diffuseRoughness));
     #elif BASE_DIFFUSE_MODEL == BRDF_DIFFUSE_MODEL_EON
         vec3 clampedAlbedo = clamp(info.surfaceAlbedo, vec3(0.1), vec3(1.0));
@@ -79,7 +81,9 @@ vec3 computeProjectionTextureDiffuseLighting(sampler2D projectionLightSampler, m
     #ifndef SS_TRANSLUCENCY_LEGACY
         }
         vec3 diffuseTerm = vec3(1.0 / PI);
-        #if BASE_DIFFUSE_MODEL == BRDF_DIFFUSE_MODEL_BURLEY
+        #if BASE_DIFFUSE_MODEL == BRDF_DIFFUSE_MODEL_LEGACY
+            diffuseTerm = vec3(diffuseBRDF_Burley(info.NdotL, info.NdotV, info.VdotH, info.roughness));
+        #elif BASE_DIFFUSE_MODEL == BRDF_DIFFUSE_MODEL_BURLEY
             diffuseTerm = vec3(diffuseBRDF_Burley(info.NdotL, info.NdotV, info.VdotH, info.diffuseRoughness));
         #elif BASE_DIFFUSE_MODEL == BRDF_DIFFUSE_MODEL_EON
             vec3 clampedAlbedo = clamp(info.surfaceAlbedo, vec3(0.1), vec3(1.0));
@@ -116,8 +120,8 @@ vec3 computeProjectionTextureDiffuseLighting(sampler2D projectionLightSampler, m
     }
 
     #if defined(AREALIGHTUSED) && defined(AREALIGHTSUPPORTED)
-        vec3 computeAreaSpecularLighting(preLightingInfo info, vec3 specularColor) {
-            vec3 fresnel = ( specularColor * info.areaLightFresnel.x + ( vec3( 1.0 ) - specularColor ) * info.areaLightFresnel.y );
+        vec3 computeAreaSpecularLighting(preLightingInfo info, vec3 specularColor, vec3 reflectance0, vec3 reflectance90) {
+            vec3 fresnel = specularColor * info.areaLightFresnel.x * reflectance0 + ( vec3( 1.0 ) - specularColor ) * info.areaLightFresnel.y * reflectance90;
 	        return specularColor * fresnel * info.areaLightSpecular;
         }
     #endif

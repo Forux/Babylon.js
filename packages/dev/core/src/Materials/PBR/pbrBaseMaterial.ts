@@ -81,7 +81,6 @@ export class PBRMaterialDefines extends MaterialDefines implements IImageProcess
     public NUM_SAMPLES = "0";
     public REALTIME_FILTERING = false;
     public IBL_CDF_FILTERING = false;
-    public BASE_DIFFUSE_MODEL = 0;
     public MAINUV1 = false;
     public MAINUV2 = false;
     public MAINUV3 = false;
@@ -197,8 +196,6 @@ export class PBRMaterialDefines extends MaterialDefines implements IImageProcess
     public LINEARSPECULARREFLECTION = false;
     public RADIANCEOCCLUSION = false;
     public HORIZONOCCLUSION = false;
-    public DIELECTRIC_SPECULAR_MODEL = 0;
-    public CONDUCTOR_SPECULAR_MODEL = 0;
 
     public INSTANCES = false;
     public THIN_INSTANCES = false;
@@ -217,6 +214,8 @@ export class PBRMaterialDefines extends MaterialDefines implements IImageProcess
     public PREPASS_DEPTH_INDEX = -1;
     public PREPASS_SCREENSPACE_DEPTH = false;
     public PREPASS_SCREENSPACE_DEPTH_INDEX = -1;
+    public PREPASS_NORMALIZED_VIEW_DEPTH = false;
+    public PREPASS_NORMALIZED_VIEW_DEPTH_INDEX = -1;
     public PREPASS_NORMAL = false;
     public PREPASS_NORMAL_INDEX = -1;
     public PREPASS_NORMAL_WORLDSPACE = false;
@@ -360,11 +359,6 @@ export abstract class PBRBaseMaterial extends PushMaterial {
      * (point spot...).
      */
     public static DEFAULT_AO_ON_ANALYTICAL_LIGHTS = 0;
-
-    /**
-     * Defines the default diffuse model used by the material.
-     */
-    public static DEFAULT_DIFFUSE_MODEL = Constants.MATERIAL_DIFFUSE_MODEL_E_OREN_NAYAR;
 
     /**
      * PBRMaterialLightFalloff Physical: light is falling off following the inverse squared distance law.
@@ -826,11 +820,6 @@ export abstract class PBRBaseMaterial extends PushMaterial {
         this._realTimeFilteringQuality = n;
         this.markAsDirty(Constants.MATERIAL_TextureDirtyFlag);
     }
-
-    private _baseDiffuseModel: number = PBRBaseMaterial.DEFAULT_DIFFUSE_MODEL;
-
-    private _dielectricSpecularModel: number = Constants.MATERIAL_DIELECTRIC_SPECULAR_MODEL_GLTF;
-    private _conductorSpecularModel: number = Constants.MATERIAL_CONDUCTOR_SPECULAR_MODEL_GLTF;
 
     /**
      * Can this material render to several textures at once
@@ -1552,6 +1541,7 @@ export abstract class PBRBaseMaterial extends PushMaterial {
             "vDebugMode",
             "morphTargetTextureInfo",
             "morphTargetTextureIndices",
+            "cameraInfo",
         ];
 
         const samplers = [
@@ -1672,7 +1662,6 @@ export abstract class PBRBaseMaterial extends PushMaterial {
         // Lights
         PrepareDefinesForLights(scene, mesh, defines, true, this._maxSimultaneousLights, this._disableLighting);
         defines._needNormals = true;
-        defines.BASE_DIFFUSE_MODEL = this._baseDiffuseModel;
 
         // Multiview
         PrepareDefinesForMultiview(scene, defines);
@@ -2011,10 +2000,6 @@ export abstract class PBRBaseMaterial extends PushMaterial {
 
         defines.HORIZONOCCLUSION = this._useHorizonOcclusion;
 
-        defines.DIELECTRIC_SPECULAR_MODEL = this._dielectricSpecularModel;
-
-        defines.CONDUCTOR_SPECULAR_MODEL = this._conductorSpecularModel;
-
         // Misc.
         if (defines._areMiscDirty) {
             PrepareDefinesForMisc(
@@ -2169,6 +2154,8 @@ export abstract class PBRBaseMaterial extends PushMaterial {
         ubo.addUniform("vSphericalYZ", 3);
         ubo.addUniform("vSphericalZX", 3);
 
+        ubo.addUniform("cameraInfo", 4);
+
         super.buildUniformLayout();
     }
 
@@ -2206,6 +2193,13 @@ export abstract class PBRBaseMaterial extends PushMaterial {
         this.prePassConfiguration.bindForSubMesh(this._activeEffect, scene, mesh, world, this.isFrozen);
 
         MaterialHelperGeometryRendering.Bind(engine.currentRenderPassId, this._activeEffect, mesh, world, this);
+
+        const camera = scene.activeCamera;
+        if (camera) {
+            this._uniformBuffer.updateFloat4("cameraInfo", camera.minZ, camera.maxZ, 0, 0);
+        } else {
+            this._uniformBuffer.updateFloat4("cameraInfo", 0, 0, 0, 0);
+        }
 
         this._eventInfo.subMesh = subMesh;
         this._callbackPluginEventHardBindForSubMesh(this._eventInfo);

@@ -188,6 +188,8 @@ export class StandardMaterialDefines extends MaterialDefines implements IImagePr
     public PREPASS_DEPTH_INDEX = -1;
     public PREPASS_SCREENSPACE_DEPTH = false;
     public PREPASS_SCREENSPACE_DEPTH_INDEX = -1;
+    public PREPASS_NORMALIZED_VIEW_DEPTH = false;
+    public PREPASS_NORMALIZED_VIEW_DEPTH_INDEX = -1;
     public PREPASS_NORMAL = false;
     public PREPASS_NORMAL_INDEX = -1;
     public PREPASS_NORMAL_WORLDSPACE = false;
@@ -646,7 +648,7 @@ export class StandardMaterial extends PushMaterial {
         this._attachImageProcessingConfiguration(value);
 
         // Ensure the effect will be rebuilt.
-        this._markAllSubMeshesAsTexturesDirty();
+        this._markAllSubMeshesAsImageProcessingDirty();
     }
 
     /**
@@ -1427,6 +1429,7 @@ export class StandardMaterial extends PushMaterial {
                 "boneTextureWidth",
                 "morphTargetTextureInfo",
                 "morphTargetTextureIndices",
+                "cameraInfo",
             ];
 
             const samplers = [
@@ -1617,6 +1620,7 @@ export class StandardMaterial extends PushMaterial {
         ubo.addUniform("vEmissiveColor", 3);
         ubo.addUniform("vDiffuseColor", 4);
         ubo.addUniform("vAmbientColor", 3);
+        ubo.addUniform("cameraInfo", 4);
 
         super.buildUniformLayout();
     }
@@ -1651,6 +1655,13 @@ export class StandardMaterial extends PushMaterial {
         this.prePassConfiguration.bindForSubMesh(this._activeEffect, scene, mesh, world, this.isFrozen);
 
         MaterialHelperGeometryRendering.Bind(scene.getEngine().currentRenderPassId, this._activeEffect, mesh, world, this);
+
+        const camera = scene.activeCamera;
+        if (camera) {
+            this._uniformBuffer.updateFloat4("cameraInfo", camera.minZ, camera.maxZ, 0, 0);
+        } else {
+            this._uniformBuffer.updateFloat4("cameraInfo", 0, 0, 0, 0);
+        }
 
         this._eventInfo.subMesh = subMesh;
         this._callbackPluginEventHardBindForSubMesh(this._eventInfo);

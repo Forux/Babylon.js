@@ -281,6 +281,7 @@ export class PBRMetallicRoughnessBlock extends NodeMaterialBlock {
             { label: "Lambert", value: Constants.MATERIAL_DIFFUSE_MODEL_LAMBERT },
             { label: "Burley", value: Constants.MATERIAL_DIFFUSE_MODEL_BURLEY },
             { label: "Oren-Nayar", value: Constants.MATERIAL_DIFFUSE_MODEL_E_OREN_NAYAR },
+            { label: "Legacy", value: Constants.MATERIAL_DIFFUSE_MODEL_LEGACY },
         ],
     })
     public baseDiffuseModel = Constants.MATERIAL_DIFFUSE_MODEL_E_OREN_NAYAR;
@@ -716,7 +717,11 @@ export class PBRMetallicRoughnessBlock extends NodeMaterialBlock {
         }
     }
 
-    public override prepareDefines(mesh: AbstractMesh, nodeMaterial: NodeMaterial, defines: NodeMaterialDefines) {
+    public override prepareDefines(defines: NodeMaterialDefines, nodeMaterial: NodeMaterial, mesh?: AbstractMesh) {
+        if (!mesh) {
+            return;
+        }
+
         // General
         defines.setValue("PBR", true);
         defines.setValue("METALLICWORKFLOW", true);
@@ -781,6 +786,7 @@ export class PBRMetallicRoughnessBlock extends NodeMaterialBlock {
 
         // Advanced
         defines.setValue("BRDF_V_HEIGHT_CORRELATED", true);
+        defines.setValue("LEGACY_SPECULAR_ENERGY_CONSERVATION", true);
         defines.setValue("MS_BRDF_ENERGY_CONSERVATION", this.useEnergyConservation, true);
         defines.setValue("RADIANCEOCCLUSION", this.useRadianceOcclusion, true);
         defines.setValue("HORIZONOCCLUSION", this.useHorizonOcclusion, true);
@@ -1487,7 +1493,7 @@ export class PBRMetallicRoughnessBlock extends NodeMaterialBlock {
                         state.compilationString += `#endif\n`;
                     }
                 } else {
-                    Logger.Error(`There's no remapping for the ${output.name} end point! No code generated`);
+                    state.sharedData.raiseBuildError(`There's no remapping for the ${output.name} end point! No code generated`);
                 }
             }
         }

@@ -3,10 +3,13 @@
 #define BRDF_DIFFUSE_MODEL_EON 0
 #define BRDF_DIFFUSE_MODEL_BURLEY 1
 #define BRDF_DIFFUSE_MODEL_LAMBERT 2
+#define BRDF_DIFFUSE_MODEL_LEGACY 3
 #define DIELECTRIC_SPECULAR_MODEL_GLTF 0
 #define DIELECTRIC_SPECULAR_MODEL_OPENPBR 1
 #define CONDUCTOR_SPECULAR_MODEL_GLTF 0
 #define CONDUCTOR_SPECULAR_MODEL_OPENPBR 1
+
+#ifndef PBR_VERTEX_SHADER
 
 // ______________________________________________________________________
 //
@@ -512,3 +515,5 @@ fn diffuseBRDF_Burley(NdotL: f32, NdotV: f32, VdotH: f32, roughness: f32) -> f32
         return saturate((NdotL + w) * invt2);
     }
 #endif
+
+#endif // PBR_VERTEX_SHADER

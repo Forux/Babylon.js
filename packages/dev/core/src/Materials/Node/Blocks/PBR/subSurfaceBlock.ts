@@ -7,8 +7,7 @@ import { NodeMaterialBlockTargets } from "../../Enums/nodeMaterialBlockTargets";
 import { RegisterClass } from "../../../../Misc/typeStore";
 import { InputBlock } from "../Input/inputBlock";
 import { NodeMaterialConnectionPointCustomObject } from "../../nodeMaterialConnectionPointCustomObject";
-import type { NodeMaterial, NodeMaterialDefines } from "../../nodeMaterial";
-import type { AbstractMesh } from "../../../../Meshes/abstractMesh";
+import type { NodeMaterialDefines } from "../../nodeMaterial";
 import type { ReflectionBlock } from "./reflectionBlock";
 import type { Nullable } from "../../../../types";
 import { RefractionBlock } from "./refractionBlock";
@@ -134,9 +133,7 @@ export class SubSurfaceBlock extends NodeMaterialBlock {
         }
     }
 
-    public override prepareDefines(mesh: AbstractMesh, nodeMaterial: NodeMaterial, defines: NodeMaterialDefines) {
-        super.prepareDefines(mesh, nodeMaterial, defines);
-
+    public override prepareDefines(defines: NodeMaterialDefines) {
         const translucencyEnabled = this.translucencyDiffusionDist.isConnected || this.translucencyIntensity.isConnected;
 
         defines.setValue("SUBSURFACE", translucencyEnabled || this.refraction.isConnected, true);
@@ -189,8 +186,13 @@ export class SubSurfaceBlock extends NodeMaterialBlock {
                 , vTintColor
                 , normalW
             #ifdef LEGACY_SPECULAR_ENERGY_CONSERVATION
-                , vec3(max(cumulativeSpecularEnvironmentReflectance.r, max(cumulativeSpecularEnvironmentReflectance.g, cumulativeSpecularEnvironmentReflectance.b)))
-            #else
+        `;
+
+        code += isWebGPU
+            ? `, vec3f(max(colorSpecularEnvironmentReflectance.r, max(colorSpecularEnvironmentReflectance.g, colorSpecularEnvironmentReflectance.b)))/n`
+            : `, vec3(max(colorSpecularEnvironmentReflectance.r, max(colorSpecularEnvironmentReflectance.g, colorSpecularEnvironmentReflectance.b)))/n`;
+
+        code += `#else
                 , baseSpecularEnvironmentReflectance
             #endif
             #ifdef SS_THICKNESSANDMASK_TEXTURE

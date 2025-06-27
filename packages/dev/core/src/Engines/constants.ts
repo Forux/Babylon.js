@@ -525,6 +525,12 @@ export class Constants {
     public static readonly MATERIAL_DIFFUSE_MODEL_LAMBERT = 2;
 
     /**
+     * Babylon.js version less than 8.x
+     * IBL Lambert + Burley diffuse model type.
+     */
+    public static readonly MATERIAL_DIFFUSE_MODEL_LEGACY = 3;
+
+    /**
      * Specular lighting for dielectric materials follows the logic
      * in the glTF specification and KHR_materials_specular extension.
      * Specular colour is applied only at normal incidence (i.e. F0) while
@@ -777,6 +783,11 @@ export class Constants {
      * using the getIndex(Constants.PREPASS_ALBEDO_TEXTURE_TYPE)
      */
     public static readonly PREPASS_ALBEDO_TEXTURE_TYPE = 12;
+
+    /**
+     * Constant used to retrieve normalized camera view depth geometry texture
+     */
+    public static readonly PREPASS_NORMALIZED_VIEW_DEPTH_TEXTURE_TYPE = 13;
 
     /** Flag to create a readable buffer (the buffer can be the source of a copy) */
     public static readonly BUFFER_CREATIONFLAG_READ = 1;

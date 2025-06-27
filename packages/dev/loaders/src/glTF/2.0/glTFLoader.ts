@@ -850,6 +850,9 @@ export class GLTFLoader implements IGLTFLoader {
                 promises.push(
                     this.loadCameraAsync(`/cameras/${camera.index}`, camera, (babylonCamera) => {
                         babylonCamera.parent = babylonTransformNode;
+                        if (!this._babylonScene.useRightHandedSystem) {
+                            babylonTransformNode.scaling.x = -1; // Cancelling root node scaling for handedness so the view matrix does not end up flipped.
+                        }
                     })
                 );
             }
@@ -1566,11 +1569,10 @@ export class GLTFLoader implements IGLTFLoader {
         const babylonCamera = new FreeCamera(camera.name || `camera${camera.index}`, Vector3.Zero(), this._babylonScene, false);
         babylonCamera._parentContainer = this._assetContainer;
         this._babylonScene._blockEntityCollection = false;
-        babylonCamera.ignoreParentScaling = true;
         camera._babylonCamera = babylonCamera;
 
-        // Rotation by 180 as glTF has a different convention than Babylon.
-        babylonCamera.rotation.set(0, Math.PI, 0);
+        // glTF cameras look towards the local -Z axis.
+        babylonCamera.setTarget(new Vector3(0, 0, -1));
 
         switch (camera.type) {
             case CameraType.PERSPECTIVE: {

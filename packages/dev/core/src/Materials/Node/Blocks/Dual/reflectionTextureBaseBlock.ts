@@ -435,7 +435,6 @@ export abstract class ReflectionTextureBaseBlock extends NodeMaterialBlock {
 
         worldNormalVarName += ".xyz";
 
-        //>> VRNET
         let code = `
             #ifdef ${this._defineMirroredEquirectangularFixedName}
                ${state._declareLocalVar(this._reflectionVectorName, NodeMaterialBlockConnectionPointTypes.Vector3)} = computeMirroredFixedEquirectangularCoords(${worldPos}, ${worldNormalVarName}, ${direction});
@@ -458,8 +457,12 @@ export abstract class ReflectionTextureBaseBlock extends NodeMaterialBlock {
             #endif
 
             #ifdef ${this._defineCubicName}
-                #ifdef ${this._defineLocalCubicName}
-                    ${state._declareLocalVar(this._reflectionVectorName, NodeMaterialBlockConnectionPointTypes.Vector3)} = computeCubicLocalCoords(${worldPos}, ${worldNormalVarName}, ${vEyePosition}.xyz, ${reflectionMatrix}, ${this._reflectionSizeName}, ${this._reflectionPositionName}, vec3(0, 0, 0), vec3(0, 0, 0), vec3(0, 0, 0), false);
+                #ifdef ${this._defineLocalCubicName}`;
+        //>> VRNET
+        code += `
+                    ${state._declareLocalVar(this._reflectionVectorName, NodeMaterialBlockConnectionPointTypes.Vector3)} = computeCubicLocalCoords(${worldPos}, ${worldNormalVarName}, ${vEyePosition}.xyz, ${reflectionMatrix}, ${this._reflectionSizeName}, ${this._reflectionPositionName}, vec3(0, 0, 0), vec3(0, 0, 0), vec3(0, 0, 0), false);`;
+        //<< VRNET
+        code += `
                 #else
                 ${state._declareLocalVar(this._reflectionVectorName, NodeMaterialBlockConnectionPointTypes.Vector3)} = computeCubicCoords(${worldPos}, ${worldNormalVarName}, ${vEyePosition}.xyz, ${reflectionMatrix});
                 #endif
@@ -476,7 +479,6 @@ export abstract class ReflectionTextureBaseBlock extends NodeMaterialBlock {
             #ifdef ${this._defineExplicitName}
                 ${state._declareLocalVar(this._reflectionVectorName, NodeMaterialBlockConnectionPointTypes.Vector3)} = vec3(0, 0, 0);
             #endif\n`;
-        //<< VRNET
 
         if (!doNotEmitInvertZ) {
             code += `#ifdef ${this._defineOppositeZ}

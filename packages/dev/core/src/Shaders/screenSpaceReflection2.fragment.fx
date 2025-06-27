@@ -148,7 +148,7 @@ void main()
     #ifdef SSR_USE_LOCAL_REFLECTIONMAP_CUBIC
         vec4 worldPos = invView * vec4(csPosition, 1.0);
         //>> VRNET
-	    wReflectedVector = parallaxCorrectNormal(worldPos.xyz, normalize(wReflectedVector), vReflectionSize, vReflectionPosition, vec3(0.), vec3(0.), vec3(0.), 0.);
+	    wReflectedVector = parallaxCorrectNormal(worldPos.xyz, normalize(wReflectedVector), vReflectionSize, vReflectionPosition, vec3(0.), vec3(0.), vec3(0.), false);
         //<< VRNET
     #endif
     #ifdef SSR_INVERTCUBICMAP

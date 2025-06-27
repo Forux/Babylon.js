@@ -83,7 +83,7 @@ fn computeCubicLocalCoords(
 	reflectionOffset: vec3f, 
 	boundingBoxMax: vec3f, 
 	boundingBoxMin: vec3f, 
-	useBoundingBox: float
+	useBoundingBox: bool
 ) -> vec3f
 {
     var viewDir: vec3f = normalize(worldPos.xyz - eyePosition);
@@ -150,7 +150,7 @@ fn computeReflectionCoords(worldPos: vec4f, worldNormal: vec3f) -> vec3f
 #ifdef REFLECTIONMAP_CUBIC
 	#ifdef USE_LOCAL_REFLECTIONMAP_CUBIC
 		//>> VRNET
-    	return computeCubicLocalCoords(worldPos, worldNormal, scene.vEyePosition.xyz, uniforms.reflectionMatrix, uniforms.vReflectionSize, uniforms.vReflectionPosition, uniforms.vReflectionOffset, uniforms.vBoundingBoxMax, uniforms.vBoundingBoxMin, 1.0);
+    	return computeCubicLocalCoords(worldPos, worldNormal, scene.vEyePosition.xyz, uniforms.reflectionMatrix, uniforms.vReflectionSize, uniforms.vReflectionPosition, uniforms.vReflectionOffset, uniforms.vBoundingBoxMax, uniforms.vBoundingBoxMin, true);
 		//<< VRNET
 	#else
     	return computeCubicCoords(worldPos, worldNormal, scene.vEyePosition.xyz, uniforms.reflectionMatrix);

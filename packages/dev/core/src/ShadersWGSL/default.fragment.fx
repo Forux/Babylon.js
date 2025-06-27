@@ -210,7 +210,7 @@ fn main(input: FragmentInputs) -> FragmentOutputs {
 	#ifdef REFRACTIONMAP_3D
         #ifdef USE_LOCAL_REFRACTIONMAP_CUBIC
 			//>> VRNET
-            refractionVector = parallaxCorrectNormal(fragmentInputs.vPositionW, refractionVector, uniforms.vRefractionSize, uniforms.vRefractionPosition, vec3f(0.), vec3f(0.), vec3f(0.), 0.);
+            refractionVector = parallaxCorrectNormal(fragmentInputs.vPositionW, refractionVector, uniforms.vRefractionSize, uniforms.vRefractionPosition, vec3f(0.), vec3f(0.), vec3f(0.), false);
 			//<< VRNET
         #endif
 		refractionVector.y = refractionVector.y * uniforms.vRefractionInfos.w;

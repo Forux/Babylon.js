@@ -218,7 +218,7 @@ void main(void) {
 	#ifdef REFRACTIONMAP_3D
         #ifdef USE_LOCAL_REFRACTIONMAP_CUBIC
 			//>> VRNET
-            refractionVector = parallaxCorrectNormal(vPositionW, refractionVector, vRefractionSize, vRefractionPosition, vec3(0.), vec3(0.), vec3(0.), 0.);
+            refractionVector = parallaxCorrectNormal(vPositionW, refractionVector, vRefractionSize, vRefractionPosition, vec3(0.), vec3(0.), vec3(0.), false);
 			//<< VRNET
         #endif
 		refractionVector.y = refractionVector.y * vRefractionInfos.w;

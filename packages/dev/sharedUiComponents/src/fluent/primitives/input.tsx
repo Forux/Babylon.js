@@ -2,21 +2,21 @@ import type { FunctionComponent, KeyboardEvent, ChangeEvent } from "react";
 import { useEffect, useState } from "react";
 
 import { Input as FluentInput, makeStyles } from "@fluentui/react-components";
-import type { BaseComponentProps } from "../hoc/propertyLine";
+import type { PrimitiveProps } from "./primitive";
 
 const useInputStyles = makeStyles({
     text: {
         height: "auto",
         textAlign: "right",
+        minWidth: "100px", // Min width for text input
     },
-    float: {
+    number: {
         height: "auto",
-        width: "80px", // Fixed width for number input
-        flexShrink: 0,
+        minWidth: "40px", // Min width for number input
     },
 });
 
-export type InputProps<T extends string | number> = BaseComponentProps<T> & {
+export type InputProps<T extends string | number> = PrimitiveProps<T> & {
     step?: number;
     placeholder?: string;
     min?: number;
@@ -27,7 +27,7 @@ export type InputProps<T extends string | number> = BaseComponentProps<T> & {
  * @param props
  * @returns
  */
-export const Input: FunctionComponent<InputProps<string | number>> = (props) => {
+const Input: FunctionComponent<InputProps<string | number> & { type: "text" | "number" }> = (props) => {
     const classes = useInputStyles();
     const [value, setValue] = useState(props.value ?? "");
 
@@ -37,8 +37,9 @@ export const Input: FunctionComponent<InputProps<string | number>> = (props) => 
 
     const handleChange = (event: ChangeEvent<HTMLInputElement>, _: unknown) => {
         event.stopPropagation(); // Prevent event propagation
-        props.onChange(event.target.value); // Call the original onChange handler passed as prop
-        setValue(event.target.value); // Update local state with the new value
+        const value = props.type === "number" ? Number(event.target.value) : String(event.target.value);
+        props.onChange(value); // Call the original onChange handler passed as prop
+        setValue(value); // Update local state with the new value
     };
 
     const handleKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
@@ -48,12 +49,17 @@ export const Input: FunctionComponent<InputProps<string | number>> = (props) => 
     return (
         <FluentInput
             {...props}
-            type={typeof props.value === "number" ? "number" : "text"}
             size="small"
             value={value.toString()}
-            className={typeof props.value === "number" ? classes.float : classes.text}
+            className={props.type === "number" ? classes.number : classes.text}
             onChange={handleChange}
             onKeyDown={handleKeyDown}
         />
     );
 };
+
+const NumberInputCast = Input as FunctionComponent<InputProps<number> & { type: "number" }>;
+const TextInputCast = Input as FunctionComponent<InputProps<string> & { type: "text" }>;
+
+export const NumberInput: FunctionComponent<InputProps<number>> = (props) => <NumberInputCast {...props} type="number" />;
+export const TextInput: FunctionComponent<InputProps<string>> = (props) => <TextInputCast {...props} type="text" />;

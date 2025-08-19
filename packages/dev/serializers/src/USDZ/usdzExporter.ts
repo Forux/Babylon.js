@@ -2,7 +2,7 @@
 import { VertexBuffer } from "core/Buffers/buffer";
 import type { Camera } from "core/Cameras/camera";
 import { Constants } from "core/Engines/constants";
-import type { Material } from "core/Materials/material";
+import { Material } from "core/Materials/material";
 import { PBRBaseMaterial } from "core/Materials/PBR/pbrBaseMaterial";
 import { StandardMaterial } from "core/Materials/standardMaterial";
 import type { BaseTexture } from "core/Materials/Textures/baseTexture";
@@ -16,6 +16,7 @@ import { Tools } from "core/Misc/tools";
 import type { Scene } from "core/scene";
 import type { FloatArray, Nullable } from "core/types";
 import { IsNoopNode } from "../exportUtils";
+import { GetTextureDataAsync } from "core/Misc/textureTools";
 
 /**
  * Ported from https://github.com/mrdoob/three.js/blob/master/examples/jsm/exporters/USDZExporter.js
@@ -75,7 +76,7 @@ function BuildHeader() {
     )`;
 }
 
-function BuildSceneStart(options: IUSDZExportOptions) {
+function BuildRootAndSceneStart(options: IUSDZExportOptions) {
     const alignment =
         options.includeAnchoringProperties === true
             ? `
@@ -102,7 +103,11 @@ function BuildSceneStart(options: IUSDZExportOptions) {
 function BuildSceneEnd() {
     return `
             }
-        }
+        }`;
+}
+
+function BuildRootEnd() {
+    return `
     }`;
 }
 
@@ -115,17 +120,16 @@ function BuildMeshVertexCount(geometry: Geometry) {
 }
 
 function BuildMeshVertexIndices(geometry: Geometry) {
-    const index = geometry.getIndices();
-    const array = [];
+    const indices = geometry.getIndices();
+    const count = indices?.length ?? geometry.getTotalVertices();
 
-    if (index !== null) {
-        for (let i = 0; i < index.length; i++) {
-            array.push(index[i]);
+    const array: number[] = [];
+    if (indices !== null) {
+        for (let i = 0; i < count; i++) {
+            array.push(indices[i]);
         }
     } else {
-        const length = geometry.getTotalVertices();
-
-        for (let i = 0; i < length; i++) {
+        for (let i = 0; i < count; i++) {
             array.push(i);
         }
     }
@@ -133,11 +137,11 @@ function BuildMeshVertexIndices(geometry: Geometry) {
     return array.join(", ");
 }
 
-function BuildVector3Array(attribute: FloatArray, options: IUSDZExportOptions, stride = 3) {
-    const array = [];
+function BuildVector3Array(attribute: FloatArray, options: IUSDZExportOptions, stride = 3, convertToRightHanded = false) {
+    const array: string[] = [];
 
     for (let i = 0; i < attribute.length / stride; i++) {
-        const x = attribute[i * stride];
+        const x = attribute[i * stride] * (convertToRightHanded ? -1 : 1);
         const y = attribute[i * stride + 1];
         const z = attribute[i * stride + 2];
 
@@ -148,7 +152,7 @@ function BuildVector3Array(attribute: FloatArray, options: IUSDZExportOptions, s
 }
 
 function BuildVector2Array(attribute: FloatArray, options: IUSDZExportOptions) {
-    const array = [];
+    const array: string[] = [];
 
     for (let i = 0; i < attribute.length / 2; i++) {
         const x = attribute[i * 2];
@@ -189,7 +193,7 @@ function BuildAdditionalAttributes(geometry: Geometry, options: IUSDZExportOptio
     return string;
 }
 
-function BuildMesh(geometry: Geometry, options: IUSDZExportOptions) {
+function BuildMesh(geometry: Geometry, options: IUSDZExportOptions, windingOrder: string, convertToRightHanded: boolean) {
     const name = "Geometry";
     const position = geometry.getVerticesData(VertexBuffer.PositionKind);
     const normal = geometry.getVerticesData(VertexBuffer.NormalKind);
@@ -201,24 +205,25 @@ function BuildMesh(geometry: Geometry, options: IUSDZExportOptions) {
     return `
 	def Mesh "${name}"
 	{
+        uniform token orientation = "${windingOrder}"
 		int[] faceVertexCounts = [${BuildMeshVertexCount(geometry)}]
 		int[] faceVertexIndices = [${BuildMeshVertexIndices(geometry)}]
-		normal3f[] normals = [${BuildVector3Array(normal, options)}] (
+		normal3f[] normals = [${BuildVector3Array(normal, options, undefined, convertToRightHanded)}] (
 			interpolation = "vertex"
 		)
-		point3f[] points = [${BuildVector3Array(position, options)}]
+		point3f[] points = [${BuildVector3Array(position, options, undefined, convertToRightHanded)}]
         ${BuildAdditionalAttributes(geometry, options)}
 		uniform token subdivisionScheme = "none"
 	}
 `;
 }
 
-function BuildMeshObject(geometry: Geometry, options: IUSDZExportOptions) {
-    const mesh = BuildMesh(geometry, options);
+function BuildMeshObject(geometry: Geometry, options: IUSDZExportOptions, windingOrder: string, convertToRightHanded: boolean) {
+    const meshObject = BuildMesh(geometry, options, windingOrder, convertToRightHanded);
     return `
         def "Geometry"
         {
-        ${mesh}
+        ${meshObject}
         }
         `;
 }
@@ -227,29 +232,6 @@ function BuildUSDFileAsString(dataToInsert: string) {
     let output = BuildHeader();
     output += dataToInsert;
     return fflate.strToU8(output);
-}
-
-function GetMeshWorldMatrix(mesh: Mesh) {
-    const matrix = mesh.getWorldMatrix().clone();
-
-    // If there's a LH->RH __root__ conversion node, cancel out its effect
-    const useRightHandedSystem = mesh.getScene().useRightHandedSystem;
-    if (!useRightHandedSystem) {
-        let current = mesh.parent;
-        while (current) {
-            if (IsNoopNode(current, useRightHandedSystem)) {
-                matrix.multiplyToRef(current.getWorldMatrix().invert(), matrix);
-                break;
-            }
-            current = current.parent;
-        }
-    }
-
-    if (matrix.determinant() < 0) {
-        Tools.Warn(`Exporting mesh ${mesh.name} with negative scale. Result may look incorrect in destination engine.`);
-    }
-
-    return matrix;
 }
 
 function BuildMatrix(matrix: Matrix) {
@@ -262,9 +244,8 @@ function BuildMatrixRow(array: number[], offset: number) {
     return `(${array[offset + 0]}, ${array[offset + 1]}, ${array[offset + 2]}, ${array[offset + 3]})`;
 }
 
-function BuildXform(mesh: Mesh) {
+function BuildXform(mesh: Mesh, matrix: Matrix) {
     const name = "Object_" + mesh.uniqueId;
-    const matrix = GetMeshWorldMatrix(mesh);
     const transform = BuildMatrix(matrix);
 
     return `def Xform "${name}" (
@@ -275,14 +256,14 @@ function BuildXform(mesh: Mesh) {
 	matrix4d xformOp:transform = ${transform}
 	uniform token[] xformOpOrder = ["xformOp:transform"]	
 
-    rel material:binding = </Materials/Material_${mesh.material!.uniqueId}>
+    rel material:binding = </Root/Materials/Material_${mesh.material!.uniqueId}>
 }
 
 `;
 }
 
 function BuildMaterials(materials: { [key: string]: Material }, textureToExports: { [key: string]: BaseTexture }, options: IUSDZExportOptions) {
-    const array = [];
+    const array: string[] = [];
 
     for (const uuid in materials) {
         const material = materials[uuid];
@@ -362,7 +343,7 @@ function BuildTexture(
     def Shader "Transform2d_${mapType}"
     {
         uniform token info:id = "UsdTransform2d"
-        token inputs:in.connect = </Materials/Material_${material.uniqueId}/PrimvarReader_${mapType}.outputs:result>
+        token inputs:in.connect = </Root/Materials/Material_${material.uniqueId}/PrimvarReader_${mapType}.outputs:result>
         float inputs:rotation = ${(rotation * (180 / Math.PI)).toFixed(options.precision)}
         float2 inputs:scale = ${BuildVector2(repeat)}
         float2 inputs:translation = ${BuildVector2(offset)}
@@ -373,16 +354,16 @@ function BuildTexture(
     {
         uniform token info:id = "UsdUVTexture"
         asset inputs:file = @textures/Texture_${id}.png@
-        float2 inputs:st.connect = </Materials/Material_${material.uniqueId}/Transform2d_${mapType}.outputs:result>
+        float2 inputs:st.connect = </Root/Materials/Material_${material.uniqueId}/Transform2d_${mapType}.outputs:result>
         ${color ? "float4 inputs:scale = " + BuildColor4(color) : ""}
-        token inputs:sourceColorSpace = "${texture.gammaSpace ? "raw" : "sRGB"}"
+        token inputs:sourceColorSpace = "${texture.gammaSpace ? "sRGB" : "raw"}"
         token inputs:wrapS = "${BuildWrapping(texture.wrapU)}"
         token inputs:wrapT = "${BuildWrapping(texture.wrapV)}"
         float outputs:r
         float outputs:g
         float outputs:b
         float3 outputs:rgb
-        ${material.needAlphaBlending() ? "float outputs:a" : ""}
+        ${material.needAlphaBlending() || material.needAlphaTesting() ? "float outputs:a" : ""}
     }`;
 }
 
@@ -487,12 +468,12 @@ function BuildMaterial(material: Material, textureToExports: { [key: string]: Ba
     } = ExtractTextureInformations(material);
 
     if (diffuseMap !== null) {
-        inputs.push(`${pad}color3f inputs:diffuseColor.connect = </Materials/Material_${material.uniqueId}/Texture_${diffuseMap.uniqueId}_diffuse.outputs:rgb>`);
+        inputs.push(`${pad}color3f inputs:diffuseColor.connect = </Root/Materials/Material_${material.uniqueId}/Texture_${diffuseMap.uniqueId}_diffuse.outputs:rgb>`);
 
         if (material.needAlphaBlending()) {
-            inputs.push(`${pad}float inputs:opacity.connect = </Materials/Material_${material.uniqueId}/Texture_${diffuseMap.uniqueId}_diffuse.outputs:a>`);
+            inputs.push(`${pad}float inputs:opacity.connect = </Root/Materials/Material_${material.uniqueId}/Texture_${diffuseMap.uniqueId}_diffuse.outputs:a>`);
         } else if (material.needAlphaTesting()) {
-            inputs.push(`${pad}float inputs:opacity.connect = </Materials/Material_${material.uniqueId}/Texture_${diffuseMap.uniqueId}_diffuse.outputs:a>`);
+            inputs.push(`${pad}float inputs:opacity.connect = </Root/Materials/Material_${material.uniqueId}/Texture_${diffuseMap.uniqueId}_diffuse.outputs:a>`);
             inputs.push(`${pad}float inputs:opacityThreshold = ${alphaCutOff}`);
         }
 
@@ -502,7 +483,7 @@ function BuildMaterial(material: Material, textureToExports: { [key: string]: Ba
     }
 
     if (emissiveMap !== null) {
-        inputs.push(`${pad}color3f inputs:emissiveColor.connect = </Materials/Material_${material.uniqueId}/Texture_${emissiveMap.uniqueId}_emissive.outputs:rgb>`);
+        inputs.push(`${pad}color3f inputs:emissiveColor.connect = </Root/Materials/Material_${material.uniqueId}/Texture_${emissiveMap.uniqueId}_emissive.outputs:rgb>`);
 
         samplers.push(BuildTexture(emissiveMap as Texture, material, "emissive", emissive, textureToExports, options));
     } else if (emissive && emissive.toLuminance() > 0) {
@@ -510,19 +491,21 @@ function BuildMaterial(material: Material, textureToExports: { [key: string]: Ba
     }
 
     if (normalMap !== null) {
-        inputs.push(`${pad}normal3f inputs:normal.connect = </Materials/Material_${material.uniqueId}/Texture_${normalMap.uniqueId}_normal.outputs:rgb>`);
+        inputs.push(`${pad}normal3f inputs:normal.connect = </Root/Materials/Material_${material.uniqueId}/Texture_${normalMap.uniqueId}_normal.outputs:rgb>`);
 
         samplers.push(BuildTexture(normalMap as Texture, material, "normal", null, textureToExports, options));
     }
 
     if (aoMap !== null) {
-        inputs.push(`${pad}float inputs:occlusion.connect = </Materials/Material_${material.uniqueId}/Texture_${aoMap.uniqueId}_occlusion.outputs:${aoMapChannel}>`);
+        inputs.push(`${pad}float inputs:occlusion.connect = </Root/Materials/Material_${material.uniqueId}/Texture_${aoMap.uniqueId}_occlusion.outputs:${aoMapChannel}>`);
 
         samplers.push(BuildTexture(aoMap as Texture, material, "occlusion", new Color3(aoMapIntensity, aoMapIntensity, aoMapIntensity), textureToExports, options));
     }
 
     if (roughnessMap !== null) {
-        inputs.push(`${pad}float inputs:roughness.connect = </Materials/Material_${material.uniqueId}/Texture_${roughnessMap.uniqueId}_roughness.outputs:${roughnessChannel}>`);
+        inputs.push(
+            `${pad}float inputs:roughness.connect = </Root/Materials/Material_${material.uniqueId}/Texture_${roughnessMap.uniqueId}_roughness.outputs:${roughnessChannel}>`
+        );
 
         samplers.push(BuildTexture(roughnessMap as Texture, material, "roughness", new Color3(roughness, roughness, roughness), textureToExports, options));
     } else {
@@ -530,7 +513,7 @@ function BuildMaterial(material: Material, textureToExports: { [key: string]: Ba
     }
 
     if (metalnessMap !== null) {
-        inputs.push(`${pad}float inputs:metallic.connect = </Materials/Material_${material.uniqueId}/Texture_${metalnessMap.uniqueId}_metallic.outputs:${metalnessChannel}>`);
+        inputs.push(`${pad}float inputs:metallic.connect = </Root/Materials/Material_${material.uniqueId}/Texture_${metalnessMap.uniqueId}_metallic.outputs:${metalnessChannel}>`);
 
         samplers.push(BuildTexture(metalnessMap as Texture, material, "metallic", new Color3(metalness, metalness, metalness), textureToExports, options));
     } else {
@@ -538,7 +521,7 @@ function BuildMaterial(material: Material, textureToExports: { [key: string]: Ba
     }
 
     if (alphaMap !== null) {
-        inputs.push(`${pad}float inputs:opacity.connect = </Materials/Material_${material.uniqueId}/Texture_${alphaMap.uniqueId}_opacity.outputs:r>`);
+        inputs.push(`${pad}float inputs:opacity.connect = </Root/Materials/Material_${material.uniqueId}/Texture_${alphaMap.uniqueId}_opacity.outputs:r>`);
         inputs.push(`${pad}float inputs:opacityThreshold = 0.0001`);
 
         samplers.push(BuildTexture(alphaMap as Texture, material, "opacity", null, textureToExports, options));
@@ -548,7 +531,7 @@ function BuildMaterial(material: Material, textureToExports: { [key: string]: Ba
 
     if (clearCoatEnabled) {
         if (clearCoatMap !== null) {
-            inputs.push(`${pad}float inputs:clearcoat.connect = </Materials/Material_${material.uniqueId}/Texture_${clearCoatMap.uniqueId}_clearcoat.outputs:r>`);
+            inputs.push(`${pad}float inputs:clearcoat.connect = </Root/Materials/Material_${material.uniqueId}/Texture_${clearCoatMap.uniqueId}_clearcoat.outputs:r>`);
             samplers.push(BuildTexture(clearCoatMap as Texture, material, "clearcoat", new Color3(clearCoat, clearCoat, clearCoat), textureToExports, options));
         } else {
             inputs.push(`${pad}float inputs:clearcoat = ${clearCoat}`);
@@ -556,7 +539,7 @@ function BuildMaterial(material: Material, textureToExports: { [key: string]: Ba
 
         if (clearCoatRoughnessMap !== null) {
             inputs.push(
-                `${pad}float inputs:clearcoatRoughness.connect = </Materials/Material_${material.uniqueId}/Texture_${clearCoatRoughnessMap.uniqueId}_clearcoatRoughness.outputs:g>`
+                `${pad}float inputs:clearcoatRoughness.connect = </Root/Materials/Material_${material.uniqueId}/Texture_${clearCoatRoughnessMap.uniqueId}_clearcoatRoughness.outputs:g>`
             );
             samplers.push(
                 BuildTexture(
@@ -586,7 +569,7 @@ ${inputs.join("\n")}
 			token outputs:surface
 		}
 
-		token outputs:surface.connect = </Materials/Material_${material.uniqueId}/PreviewSurface.outputs:surface>
+		token outputs:surface.connect = </Root/Materials/Material_${material.uniqueId}/PreviewSurface.outputs:surface>
 
 ${samplers.join("\n")}
 
@@ -633,6 +616,40 @@ function BuildCamera(camera: Camera, options: IUSDZExportOptions) {
     }
 }
 
+function ExtractMeshInformations(mesh: Mesh) {
+    mesh.computeWorldMatrix(true);
+    const matrix = mesh.getWorldMatrix().clone();
+    const sceneIsRightHanded = mesh.getScene().useRightHandedSystem;
+    let sideOrientation = mesh.material?._getEffectiveOrientation(mesh) ?? mesh.sideOrientation;
+    let convertToRightHanded = !sceneIsRightHanded;
+
+    // Search for a root conversion node from the glTF loader in the mesh's ancestors.
+    let current = mesh.parent;
+    while (current) {
+        if (IsNoopNode(current, sceneIsRightHanded) && current.parent === null) {
+            if (!sceneIsRightHanded) {
+                // If it's a RH->LH node, cancel out its inversion effect on the mesh's matrix and winding order.
+                matrix.multiplyToRef(current.getWorldMatrix().invert(), matrix);
+                sideOrientation = sideOrientation === Material.ClockWiseSideOrientation ? Material.CounterClockWiseSideOrientation : Material.ClockWiseSideOrientation;
+            }
+            convertToRightHanded = false;
+            break;
+        }
+        current = current.parent;
+    }
+
+    if (matrix.determinant() < 0) {
+        // RealityKit doesn't seem to automatically flip faces of a mesh with negative scale, like other engines do (including us).
+        Tools.Warn(`Mesh ${mesh.name} has a negative scale, which may look incorrect in destinations like QuickLook.`);
+    }
+
+    return {
+        matrix,
+        windingOrder: sideOrientation === Material.ClockWiseSideOrientation ? "leftHanded" : "rightHanded",
+        convertToRightHanded,
+    };
+}
+
 /**
  *
  * @param scene scene to export
@@ -668,7 +685,7 @@ export async function USDZExportAsync(scene: Scene, options: Partial<IUSDZExport
     files[localOptions.modelFileName] = null;
 
     let output = BuildHeader();
-    output += BuildSceneStart(localOptions);
+    output += BuildRootAndSceneStart(localOptions);
 
     const materialToExports: { [key: string]: Material } = {};
 
@@ -689,9 +706,10 @@ export async function USDZExportAsync(scene: Scene, options: Partial<IUSDZExport
 
         if (supportedMaterials.indexOf(material.getClassName()) !== -1) {
             const geometryFileName = "geometries/Geometry_" + geometry.uniqueId + ".usda";
+            const { matrix, windingOrder, convertToRightHanded } = ExtractMeshInformations(mesh);
 
             if (!(geometryFileName in files)) {
-                const meshObject = BuildMeshObject(geometry, localOptions);
+                const meshObject = BuildMeshObject(geometry, localOptions, windingOrder, convertToRightHanded);
                 files[geometryFileName] = BuildUSDFileAsString(meshObject);
             }
 
@@ -699,7 +717,7 @@ export async function USDZExportAsync(scene: Scene, options: Partial<IUSDZExport
                 materialToExports[material.uniqueId] = material;
             }
 
-            output += BuildXform(mesh);
+            output += BuildXform(mesh, matrix);
         } else {
             Tools.Warn("USDZExportAsync does not support this material type: " + material.getClassName());
         }
@@ -717,6 +735,9 @@ export async function USDZExportAsync(scene: Scene, options: Partial<IUSDZExport
     const textureToExports: { [key: string]: BaseTexture } = {};
     output += BuildMaterials(materialToExports, textureToExports, localOptions);
 
+    // Close root
+    output += BuildRootEnd();
+
     // Compress
     files[localOptions.modelFileName] = fflate.strToU8(output);
 
@@ -726,11 +747,7 @@ export async function USDZExportAsync(scene: Scene, options: Partial<IUSDZExport
 
         const size = texture.getSize();
         // eslint-disable-next-line no-await-in-loop
-        const textureData = await texture.readPixels();
-
-        if (!textureData) {
-            throw new Error("Texture data is not available");
-        }
+        const textureData = await GetTextureDataAsync(texture);
 
         // eslint-disable-next-line no-await-in-loop
         const fileContent = await DumpTools.DumpDataAsync(size.width, size.height, textureData, "image/png", undefined, false, true);

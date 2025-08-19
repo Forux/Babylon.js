@@ -73,8 +73,9 @@ const FormatMimeTypes: { [key: string]: string } = {
 /** @internal */
 export class _WebAudioEngine extends AudioEngineV2 {
     private _audioContextStarted = false;
+    private _destinationNode: Nullable<AudioNode> = null;
     private _invalidFormats = new Set<string>();
-    private readonly _isUsingOfflineAudioContext: boolean = false;
+    private _isUpdating = false;
     private _listener: Nullable<_SpatialAudioListener> = null;
     private readonly _listenerAutoUpdate: boolean = true;
     private readonly _listenerMinUpdateTime: number = 0;
@@ -87,11 +88,15 @@ export class _WebAudioEngine extends AudioEngineV2 {
     private _resumePromise: Nullable<Promise<void>> = null;
     private _silentHtmlAudio: Nullable<HTMLAudioElement> = null;
     private _unmuteUI: Nullable<_WebAudioUnmuteUI> = null;
+    private _updateObservable: Nullable<Observable<void>> = null;
     private readonly _validFormats = new Set<string>();
     private _volume = 1;
 
     /** @internal */
     public readonly _audioContext: AudioContext;
+
+    /** @internal */
+    public readonly _isUsingOfflineAudioContext: boolean = false;
 
     /** @internal */
     public readonly isReadyPromise: Promise<void> = new Promise((resolve) => {
@@ -189,6 +194,32 @@ export class _WebAudioEngine extends AudioEngineV2 {
 
         if (this._mainOut) {
             this._mainOut.volume = value;
+        }
+    }
+
+    /**
+     * This property should only be used by the legacy audio engine.
+     * @internal
+     * */
+    public get _audioDestination(): AudioNode {
+        return this._destinationNode ? this._destinationNode : (this._destinationNode = this._audioContext.destination);
+    }
+
+    public set _audioDestination(value: Nullable<AudioNode>) {
+        this._destinationNode = value;
+    }
+
+    /**
+     * This property should only be used by the legacy audio engine.
+     * @internal
+     */
+    public get _unmuteUIEnabled(): boolean {
+        return this._unmuteUI ? this._unmuteUI.enabled : false;
+    }
+
+    public set _unmuteUIEnabled(value: boolean) {
+        if (this._unmuteUI) {
+            this._unmuteUI.enabled = value;
         }
     }
 
@@ -293,8 +324,13 @@ export class _WebAudioEngine extends AudioEngineV2 {
 
         this._silentHtmlAudio?.remove();
 
+        this._updateObservable?.clear();
+        this._updateObservable = null;
+
         this._unmuteUI?.dispose();
         this._unmuteUI = null;
+
+        this.stateChangedObservable.clear();
     }
 
     /** @internal */
@@ -377,6 +413,22 @@ export class _WebAudioEngine extends AudioEngineV2 {
         super._removeNode(node);
     }
 
+    /** @internal */
+    public _addUpdateObserver(callback: () => void): void {
+        if (!this._updateObservable) {
+            this._updateObservable = new Observable<void>();
+        }
+
+        this._updateObservable.add(callback);
+        this._startUpdating();
+    }
+
+    public _removeUpdateObserver(callback: () => void): void {
+        if (this._updateObservable) {
+            this._updateObservable.removeCallback(callback);
+        }
+    }
+
     private _initAudioContextAsync: () => Promise<void> = async () => {
         this._audioContext.addEventListener("statechange", this._onAudioContextStateChange);
 
@@ -432,4 +484,34 @@ export class _WebAudioEngine extends AudioEngineV2 {
     };
 
     private _resolveIsReadyPromise: () => void;
+
+    private _startUpdating = () => {
+        if (this._isUpdating) {
+            return;
+        }
+
+        this._isUpdating = true;
+
+        if (this.state === "running") {
+            this._update();
+        } else {
+            const callback = () => {
+                if (this.state === "running") {
+                    this._update();
+                    this.stateChangedObservable.removeCallback(callback);
+                }
+            };
+
+            this.stateChangedObservable.add(callback);
+        }
+    };
+
+    private _update = (): void => {
+        if (this._updateObservable?.hasObservers()) {
+            this._updateObservable.notifyObservers();
+            requestAnimationFrame(this._update);
+        } else {
+            this._isUpdating = false;
+        }
+    };
 }

@@ -1,4 +1,3 @@
-// eslint-disable-next-line import/no-internal-modules
 import type { SmartArray, Nullable, Immutable, Camera, Scene, AbstractMesh, SubMesh, Material, IParticleSystem, InstancedMesh } from "core/index";
 import { Observable } from "../Misc/observable";
 import { RenderingManager } from "../Rendering/renderingManager";
@@ -109,6 +108,11 @@ export class ObjectRenderer {
      * Force checking the layerMask property even if a custom list of meshes is provided (ie. if renderList is not undefined)
      */
     public forceLayerMaskCheck = false;
+
+    /**
+     * Enables the rendering of bounding boxes for meshes (still subject to Mesh.showBoundingBox or scene.forceShowBoundingBoxes). Default is false.
+     */
+    public enableBoundingBoxRendering = false;
 
     /**
      * Define the camera used to render the objects.
@@ -595,6 +599,10 @@ export class ObjectRenderer {
 
         this._renderingManager.reset();
 
+        const boundingBoxRenderer = scene.getBoundingBoxRenderer();
+
+        boundingBoxRenderer && boundingBoxRenderer.reset();
+
         const sceneRenderId = scene.getRenderId();
         const currentFrameId = scene.getFrameId();
         for (let meshIndex = 0; meshIndex < currentRenderListLength; meshIndex++) {
@@ -651,6 +659,9 @@ export class ObjectRenderer {
                     if (meshToRender !== mesh) {
                         meshToRender._activate(sceneRenderId, true);
                     }
+
+                    this.enableBoundingBoxRendering && boundingBoxRenderer && boundingBoxRenderer._preActiveMesh(meshToRender);
+
                     if (mesh._activate(sceneRenderId, true) && mesh.subMeshes.length) {
                         if (!mesh.isAnInstance) {
                             meshToRender._internalAbstractMeshDataInfo._onlyForInstancesIntermediate = false;
@@ -665,6 +676,7 @@ export class ObjectRenderer {
 
                         for (let subIndex = 0; subIndex < meshToRender.subMeshes.length; subIndex++) {
                             const subMesh = meshToRender.subMeshes[subIndex];
+                            this.enableBoundingBoxRendering && boundingBoxRenderer && boundingBoxRenderer._evaluateSubMesh(meshToRender, subMesh);
                             this._renderingManager.dispatch(subMesh, meshToRender);
                         }
                     }

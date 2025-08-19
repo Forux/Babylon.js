@@ -1,4 +1,3 @@
-// eslint-disable-next-line import/no-internal-modules
 import type { IDisposable } from "core/index";
 
 import type { SelectTabData, SelectTabEvent } from "@fluentui/react-components";
@@ -417,7 +416,6 @@ const SidePaneTab: FunctionComponent<{ alignment: "left" | "right"; id: string }
 // This hook provides a side pane container and the tab list.
 // In "compact" mode, the tab list is integrated into the pane itself.
 // In "full" mode, the returned tab list is later injected into the toolbar.
-// eslint-disable-next-line @typescript-eslint/naming-convention
 function usePane(
     alignment: "left" | "right",
     defaultWidth: number,
@@ -543,7 +541,7 @@ function usePane(
             <>
                 {paneComponents.length > 0 && (
                     <div className={`${classes.pane} ${alignment === "left" ? classes.paneLeft : classes.paneRight}`}>
-                        <div className={`${classes.paneContainer} ${resizing ? "" : classes.paneContainerTransitions}}`} style={{ width: `${collapsed ? 0 : width}px` }}>
+                        <div className={`${classes.paneContainer} ${resizing ? "" : classes.paneContainerTransitions}`} style={{ width: `${collapsed ? 0 : width}px` }}>
                             {/* If toolbar mode is "compact" then the top toolbar is embedded at the top of the pane. */}
                             {toolbarMode === "compact" && (paneComponents.length > 1 || topBarComponents.length > 0) && (
                                 <>

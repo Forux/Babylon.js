@@ -1,4 +1,3 @@
-/* eslint-disable import/no-internal-modules */
 import type { Scene, AbstractEngine, FrameGraphTask, Nullable, NodeRenderGraph } from "core/index";
 import { FrameGraphPass } from "./Passes/pass";
 import { FrameGraphRenderPass } from "./Passes/renderPass";
@@ -9,6 +8,8 @@ import { FrameGraphTextureManager } from "./frameGraphTextureManager";
 import { Observable } from "core/Misc/observable";
 import { _RetryWithInterval } from "core/Misc/timingTools";
 import { Logger } from "core/Misc/logger";
+import { UniqueIdGenerator } from "core/Misc/uniqueIdGenerator";
+import { FindMainObjectRenderer } from "./frameGraphUtils";
 
 import "core/Engines/Extensions/engine.multiRender";
 import "core/Engines/WebGPU/Extensions/engine.multiRender";
@@ -41,6 +42,11 @@ export class FrameGraph {
      * Name of the frame graph
      */
     public name = "Frame Graph";
+
+    /**
+     * Gets the unique id of the frame graph
+     */
+    public readonly uniqueId = UniqueIdGenerator.UniqueId;
 
     /**
      * Gets or sets a boolean indicating that texture allocation should be optimized (that is, reuse existing textures when possible to limit GPU memory usage) (default: true)
@@ -98,7 +104,7 @@ export class FrameGraph {
         this._passContext = new FrameGraphContext(this._engine, this.textureManager, scene);
         this._renderContext = new FrameGraphRenderContext(this._engine, this.textureManager, scene);
 
-        this._scene.frameGraphs.push(this);
+        this._scene.addFrameGraph(this);
     }
 
     /**
@@ -116,6 +122,15 @@ export class FrameGraph {
      */
     public getTaskByName<T extends FrameGraphTask>(name: string): T | undefined {
         return this._tasks.find((t) => t.name === name) as T;
+    }
+
+    /**
+     * Gets all tasks of a specific type
+     * @param taskType Type of the task(s) to get
+     * @returns The list of tasks of the specified type
+     */
+    public getTasksByType<T extends FrameGraphTask>(taskType: new (...args: any[]) => T): T[] {
+        return this._tasks.filter((t) => t instanceof taskType) as T[];
     }
 
     /**
@@ -202,6 +217,13 @@ export class FrameGraph {
 
                 this.textureManager._isRecordingTask = false;
                 this._currentProcessedTask = null;
+            }
+
+            // The user expects bouding boxes to render for the main object renderer
+            // It also lets the "show bounding box" option in the inspector work
+            const mainObjectRenderer = FindMainObjectRenderer(this);
+            if (mainObjectRenderer) {
+                mainObjectRenderer.objectRenderer.enableBoundingBoxRendering = true;
             }
 
             this.textureManager._allocateTextures(this.optimizeTextureAllocation ? this._tasks : undefined);
@@ -318,9 +340,6 @@ export class FrameGraph {
         this.textureManager._dispose();
         this._renderContext._dispose();
 
-        const index = this._scene.frameGraphs.indexOf(this);
-        if (index !== -1) {
-            this._scene.frameGraphs.splice(index, 1);
-        }
+        this._scene.removeFrameGraph(this);
     }
 }

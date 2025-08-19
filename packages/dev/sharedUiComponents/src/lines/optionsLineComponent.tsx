@@ -4,7 +4,7 @@ import type { PropertyChangedEvent } from "../propertyChangedEvent";
 import { copyCommandToClipboard, getClassNameWithNamespace } from "../copyCommandToClipboard";
 import type { IInspectableOptions } from "core/Misc/iInspectable";
 import copyIcon from "../imgs/copy.svg";
-import { PropertyLine } from "../fluent/hoc/propertyLine";
+import { PropertyLine } from "../fluent/hoc/propertyLines/propertyLine";
 import { Dropdown } from "../fluent/primitives/dropdown";
 import type { AcceptedDropdownValue } from "../fluent/primitives/dropdown";
 import { ToolContext } from "../fluent/hoc/fluentToolWrapper";
@@ -16,7 +16,7 @@ export interface IOptionsLineProps {
     label: string;
     target: any;
     propertyName: string;
-    options: IInspectableOptions[];
+    options: readonly IInspectableOptions[];
     noDirectUpdate?: boolean;
     onSelect?: (value: number | string) => void;
     extractValue?: (target: any) => number | string;
@@ -125,8 +125,9 @@ export class OptionsLine extends React.Component<IOptionsLineProps, { value: num
             <PropertyLine label={this.props.label} onCopy={() => this.onCopyClickStr()}>
                 <Dropdown
                     options={this.props.options}
-                    onChange={(val: AcceptedDropdownValue | undefined) => {
-                        val !== undefined && this.updateValue(val.toString());
+                    onChange={(val: AcceptedDropdownValue) => {
+                        // val != null captures both null and undefined cases
+                        val != null && this.updateValue(val.toString());
                     }}
                     value={this.state.value}
                 />

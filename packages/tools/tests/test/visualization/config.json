@@ -2,9 +2,24 @@
     "root": "https://cdn.babylonjs.com",
     "tests": [
         {
+            "title": "NPE - Angle align",
+            "playgroundId": "#H5RP91",
+            "referenceImage": "npe-angle-align.png"
+        },
+        {
+            "title": "SPZ v3 - Splat",
+            "playgroundId": "#V7CV8W#3",
+            "referenceImage": "gsplat-spz-v3.png"
+        },
+        {
             "title": "RH billboard",
             "playgroundId": "#PDO1L6#1",
             "referenceImage": "rh-billboard.png"
+        },
+        {
+            "title": "RH billboard2",
+            "playgroundId": "#QDVYS4#4",
+            "referenceImage": "rh-billboard2.png"
         },
         {
             "title": "MSDF",
@@ -976,27 +991,28 @@
         },
         {
             "title": "GLTF Serializer with Negative World Matrix (left handed, once)",
-            "playgroundId": "#KX53VK#77",
+            "playgroundId": "#KX53VK#88",
             "referenceImage": "glTFSerializerNegativeWorldMatrix.png",
+            "replace": "//options//, useRightHandedSystem = false; iterations = 1;",
             "errorRatio": 1.1
         },
         {
             "title": "GLTF Serializer with Negative World Matrix (left handed, twice)",
-            "playgroundId": "#KX53VK#77",
+            "playgroundId": "#KX53VK#88",
             "referenceImage": "glTFSerializerNegativeWorldMatrix.png",
-            "replace": "//options//, iterations = 2;",
+            "replace": "//options//, useRightHandedSystem = false; iterations = 2;",
             "errorRatio": 1.1
         },
         {
             "title": "GLTF Serializer with Negative World Matrix (right handed, once)",
-            "playgroundId": "#KX53VK#76",
+            "playgroundId": "#KX53VK#88",
             "referenceImage": "glTFSerializerNegativeWorldMatrix.png",
-            "replace": "//options//, useRightHandedSystem = true;",
+            "replace": "//options//, useRightHandedSystem = true; iterations = 1;",
             "errorRatio": 1.1
         },
         {
             "title": "GLTF Serializer with Negative World Matrix (right handed, twice)",
-            "playgroundId": "#KX53VK#76",
+            "playgroundId": "#KX53VK#88",
             "referenceImage": "glTFSerializerNegativeWorldMatrix.png",
             "replace": "//options//, useRightHandedSystem = true; iterations = 2;",
             "errorRatio": 1.1
@@ -1110,6 +1126,11 @@
             "playgroundId": "#3A00GJ#42",
             "replace": "//options//, roundtripCount = 1; srcRH = false; destRH = false;",
             "referenceImage": "glTFSerializerCameraRotationAnimation.png"
+        },
+        {
+            "title": "GLTF Serializer compressed and uncompressed texture export",
+            "playgroundId": "#B03GUL#4",
+            "referenceImage": "glTFSerializerTextureExport.png"
         },
         {
             "title": "GLTF Buggy with Draco Mesh Compression",
@@ -2054,7 +2075,7 @@
         },
         {
             "title": "GUI Images in Grid",
-            "playgroundId": "#8Y0XJL#1",
+            "playgroundId": "#8Y0XJL#8",
             "referenceImage": "GUI-Images-in-Grid.png"
         },
         {
@@ -2609,6 +2630,11 @@
             "playgroundId": "#YB006J#753",
             "excludedEngines": ["webgl1"],
             "renderCount": 40
+        },
+        {
+            "title": "FrameGraph nrge bounding boxes",
+            "playgroundId": "#IG8NRC#24",
+            "errorRatio": 14
         },
         {
             "title": "FrameGraph nrg gui bloom",

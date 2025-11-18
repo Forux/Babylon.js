@@ -2,12 +2,13 @@ import { makeStyles, tokens } from "@fluentui/react-components";
 import { ArrowMoveFilled, EyeFilled, EyeOffFilled } from "@fluentui/react-icons";
 import { FontAsset } from "addons/msdfText/fontAsset";
 import { TextRenderer } from "addons/msdfText/textRenderer";
-import type { StandardMaterial } from "core/Materials";
-import type { Color3 } from "core/Maths";
-import { Color4, Matrix } from "core/Maths";
-import type { AbstractMesh } from "core/Meshes";
-import { CreateSphere } from "core/Meshes";
-import type { Attractor } from "core/Particles";
+import type { StandardMaterial } from "core/Materials/standardMaterial";
+import type { Color3 } from "core/Maths/math.color";
+import { Color4 } from "core/Maths/math.color";
+import { Matrix } from "core/Maths/math.vector";
+import type { AbstractMesh } from "core/Meshes/abstractMesh";
+import { CreateSphere } from "core/Meshes/Builders/sphereBuilder";
+import type { Attractor } from "core/Particles/attractor";
 import type { Scene } from "core/scene";
 import { useCallback, useEffect, useState } from "react";
 import type { FunctionComponent } from "react";
@@ -96,8 +97,8 @@ export const AttractorComponent: FunctionComponent<AttractorProps> = (props) => 
             <SyncedSliderInput value={attractor.strength} onChange={(value) => (attractor.strength = value)} min={-10} max={10} step={0.1} />
             <ToggleButton
                 title="Show / hide particle attractor."
-                enabledIcon={EyeFilled}
-                disabledIcon={EyeOffFilled}
+                checkedIcon={EyeFilled}
+                uncheckedIcon={EyeOffFilled}
                 value={shown}
                 onChange={(show: boolean) => {
                     show ? (impostor.visibility = 1) : (impostor.visibility = 0);
@@ -106,7 +107,7 @@ export const AttractorComponent: FunctionComponent<AttractorProps> = (props) => 
             />
             <ToggleButton
                 title="Add / remove position gizmo from particle attractor"
-                enabledIcon={ArrowMoveFilled}
+                checkedIcon={ArrowMoveFilled}
                 value={isControlled(impostor)}
                 onChange={(control: boolean) => onControl(control ? impostor : undefined)}
             />

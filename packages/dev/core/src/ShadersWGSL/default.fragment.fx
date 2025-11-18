@@ -16,6 +16,10 @@ varying vNormalW: vec3f;
 varying vColor: vec4f;
 #endif
 
+#if defined(CLUSTLIGHT_BATCH) && CLUSTLIGHT_BATCH > 0
+varying vViewDepth: f32;
+#endif
+
 #include<mainUVVaryingDeclaration>[1..7]
 
 // Helper functions
@@ -109,7 +113,7 @@ fn main(input: FragmentInputs) -> FragmentOutputs {
 #ifdef NORMAL
 	var normalW: vec3f = normalize(fragmentInputs.vNormalW);
 #else
-	var normalW: vec3f = normalize(-cross(dpdx(fragmentInputs.vPositionW), dpdy(fragmentInputs.vPositionW)));
+	var normalW: vec3f = normalize(cross(dpdx(fragmentInputs.vPositionW), dpdy(fragmentInputs.vPositionW))) *  scene.vEyePosition.w;
 #endif
 
 #include<bumpFragment>

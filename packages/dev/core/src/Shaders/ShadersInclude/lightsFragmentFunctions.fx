@@ -183,13 +183,14 @@ lightingInfo computeAreaLighting(sampler2D ltc1, sampler2D ltc2, vec3 viewDirect
 #if defined(CLUSTLIGHT_BATCH) && CLUSTLIGHT_BATCH > 0
 #include<clusteredLightingFunctions>
 
+#define inline
 lightingInfo computeClusteredLighting(
 	sampler2D lightDataTexture,
 	sampler2D tileMaskTexture,
 	vec3 viewDirectionW,
 	vec3 vNormal,
 	vec4 lightData,
-	int numLights,
+	ivec2 sliceRange,
 	float glossiness
 ) {
 	lightingInfo result;
@@ -197,19 +198,24 @@ lightingInfo computeClusteredLighting(
 	int maskHeight = int(lightData.z);
 	tilePosition.y = min(tilePosition.y, maskHeight - 1);
 
-	int numBatches = (numLights + CLUSTLIGHT_BATCH - 1) / CLUSTLIGHT_BATCH;
-	int batchOffset = 0;
+	ivec2 batchRange = sliceRange / CLUSTLIGHT_BATCH;
+	int batchOffset = batchRange.x * CLUSTLIGHT_BATCH;
+	tilePosition.y += maskHeight * batchRange.x;
 
-	for (int i = 0; i < numBatches; i += 1) {
+	for (int i = batchRange.x; i <= batchRange.y; i += 1) {
 		uint mask = uint(texelFetch(tileMaskTexture, tilePosition, 0).r);
 		tilePosition.y += maskHeight;
+		// Mask out the bits outside the range
+		int maskOffset = max(sliceRange.x - batchOffset, 0);
+		int maskWidth = min(sliceRange.y - batchOffset + 1, CLUSTLIGHT_BATCH);
+		mask = extractBits(mask, maskOffset, maskWidth);
 
 		while (mask != 0u) {
 			// This gets the lowest set bit
 			uint bit = mask & -mask;
 			mask ^= bit;
 			int position = onlyBitPosition(bit);
-			ClusteredLight light = getClusteredLight(lightDataTexture, batchOffset + position);
+			ClusteredLight light = getClusteredLight(lightDataTexture, batchOffset + maskOffset + position);
 
 			lightingInfo info;
 			if (light.vLightDirection.w < 0.0) {

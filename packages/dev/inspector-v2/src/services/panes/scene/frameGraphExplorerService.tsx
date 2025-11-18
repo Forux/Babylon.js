@@ -5,10 +5,10 @@ import type { ISceneExplorerService } from "./sceneExplorerService";
 import { FrameRegular, PlayFilled, PlayRegular } from "@fluentui/react-icons";
 
 import { FrameGraph } from "core/FrameGraph/frameGraph";
-import { Observable } from "core/Misc";
+import { Observable } from "core/Misc/observable";
 import { InterceptProperty } from "../../../instrumentation/propertyInstrumentation";
 import { SceneContextIdentity } from "../../sceneContext";
-import { DefaultSectionsOrder } from "./defaultSectionsMetadata";
+import { DefaultCommandsOrder, DefaultSectionsOrder } from "./defaultSectionsMetadata";
 import { SceneExplorerServiceIdentity } from "./sceneExplorerService";
 
 export const FrameGraphExplorerServiceDefinition: ServiceDefinition<[], [ISceneExplorerService, ISceneContext]> = {
@@ -51,6 +51,7 @@ export const FrameGraphExplorerServiceDefinition: ServiceDefinition<[], [ISceneE
 
         const activeFrameGraphCommandRegistration = sceneExplorerService.addCommand({
             predicate: (entity: unknown) => entity instanceof FrameGraph,
+            order: DefaultCommandsOrder.FrameGraphPlay,
             getCommand: (frameGraph) => {
                 const onChangeObservable = new Observable<void>();
                 const frameGraphHook = InterceptProperty(scene, "frameGraph", {

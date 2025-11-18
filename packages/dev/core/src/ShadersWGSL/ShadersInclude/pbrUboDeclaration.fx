@@ -7,15 +7,6 @@ uniform vEmissiveInfos: vec2f;
 uniform vLightmapInfos: vec2f;
 uniform vReflectivityInfos: vec3f;
 uniform vMicroSurfaceSamplerInfos: vec2f;
-uniform vReflectionInfos: vec2f;
-uniform vReflectionFilteringInfo: vec2f;
-uniform vReflectionPosition: vec3f;
-//>> VRNET
-uniform vReflectionOffset: vec3f;
-uniform vBoundingBoxMax: vec3f;
-uniform vBoundingBoxMin: vec3f;
-//<< VRNET
-uniform vReflectionSize: vec3f;
 uniform vBumpInfos: vec3f;
 uniform albedoMatrix: mat4x4f;
 uniform baseWeightMatrix: mat4x4f;
@@ -28,14 +19,10 @@ uniform reflectivityMatrix: mat4x4f;
 uniform microSurfaceSamplerMatrix: mat4x4f;
 uniform bumpMatrix: mat4x4f;
 uniform vTangentSpaceParams: vec2f;
-uniform reflectionMatrix: mat4x4f;
-uniform vReflectionColor: vec3f;
 uniform vAlbedoColor: vec4f;
 uniform baseWeight: f32;
 uniform baseDiffuseRoughness: f32;
 uniform vLightingIntensity: vec4f;
-uniform vReflectionMicrosurfaceInfos: vec3f;
-uniform vReflectionDominantDirection: vec3f;
 uniform pointSize: f32;
 uniform vReflectivityColor: vec4f;
 uniform vEmissiveColor: vec3f;
@@ -48,6 +35,21 @@ uniform vMetallicReflectanceInfos: vec2f;
 uniform metallicReflectanceMatrix: mat4x4f;
 uniform vReflectanceInfos: vec2f;
 uniform reflectanceMatrix: mat4x4f;
+uniform cameraInfo: vec4f;
+
+uniform vReflectionInfos: vec2f;
+uniform reflectionMatrix: mat4x4f;
+uniform vReflectionMicrosurfaceInfos: vec3f;
+uniform vReflectionPosition: vec3f;
+//>> VRNET
+uniform vReflectionOffset: vec3f;
+uniform vBoundingBoxMax: vec3f;
+uniform vBoundingBoxMin: vec3f;
+//<< VRNET
+uniform vReflectionSize: vec3f;
+uniform vReflectionFilteringInfo: vec2f;
+uniform vReflectionDominantDirection: vec3f;
+uniform vReflectionColor: vec3f;
 
 uniform vSphericalL00: vec3f;
 uniform vSphericalL1_1: vec3f;
@@ -68,8 +70,6 @@ uniform vSphericalZZ: vec3f;
 uniform vSphericalXY: vec3f;
 uniform vSphericalYZ: vec3f;
 uniform vSphericalZX: vec3f;
-
-uniform cameraInfo: vec4f;
 
 #define ADDITIONAL_UBO_DECLARATION
 

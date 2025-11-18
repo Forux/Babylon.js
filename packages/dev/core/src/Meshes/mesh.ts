@@ -1260,26 +1260,7 @@ export class Mesh extends AbstractMesh implements IGetSetVerticesData {
         }
     }
 
-    /**
-     * Returns the mesh VertexBuffer object from the requested `kind`
-     * @param kind defines which buffer to read from (positions, indices, normals, etc). Possible `kind` values :
-     * - VertexBuffer.PositionKind
-     * - VertexBuffer.NormalKind
-     * - VertexBuffer.UVKind
-     * - VertexBuffer.UV2Kind
-     * - VertexBuffer.UV3Kind
-     * - VertexBuffer.UV4Kind
-     * - VertexBuffer.UV5Kind
-     * - VertexBuffer.UV6Kind
-     * - VertexBuffer.ColorKind
-     * - VertexBuffer.MatricesIndicesKind
-     * - VertexBuffer.MatricesIndicesExtraKind
-     * - VertexBuffer.MatricesWeightsKind
-     * - VertexBuffer.MatricesWeightsExtraKind
-     * @param bypassInstanceData defines a boolean indicating that the function should not take into account the instance data (applies only if the mesh has instances). Default: false
-     * @returns a FloatArray or null if the mesh has no vertex buffer for this kind.
-     */
-    public getVertexBuffer(kind: string, bypassInstanceData?: boolean): Nullable<VertexBuffer> {
+    public override getVertexBuffer(kind: string, bypassInstanceData?: boolean): Nullable<VertexBuffer> {
         if (!this._geometry) {
             return null;
         }
@@ -1680,7 +1661,7 @@ export class Mesh extends AbstractMesh implements IGetSetVerticesData {
         }
 
         this.releaseSubMeshes();
-        return new SubMesh(0, 0, totalVertices, 0, this.getTotalIndices() || totalVertices, this); // getTotalIndices() can be zero if the mesh is unindexed
+        return new SubMesh(0, 0, totalVertices, 0, this.getTotalIndices() || (this.isUnIndexed ? totalVertices : 0), this); // getTotalIndices() can be zero if the mesh is unindexed
     }
 
     /**
@@ -2170,6 +2151,7 @@ export class Mesh extends AbstractMesh implements IGetSetVerticesData {
         let instancesCount = 0;
 
         const renderSelf = batch.renderSelf[subMesh._id];
+        const floatingOriginOffset = this._scene.floatingOriginOffset;
 
         const needUpdateBuffer =
             !instancesBuffer ||
@@ -2189,6 +2171,12 @@ export class Mesh extends AbstractMesh implements IGetSetVerticesData {
                     }
                 }
                 world.copyToArray(instanceStorage.instancesData, offset);
+
+                // Apply floatingOriginOffset to underlying data sent to buffer
+                instanceStorage.instancesData[offset + 12] -= floatingOriginOffset.x;
+                instanceStorage.instancesData[offset + 13] -= floatingOriginOffset.y;
+                instanceStorage.instancesData[offset + 14] -= floatingOriginOffset.z;
+
                 offset += 16;
                 instancesCount++;
             }
@@ -2218,6 +2206,11 @@ export class Mesh extends AbstractMesh implements IGetSetVerticesData {
                             instance._previousWorldMatrix.copyFrom(matrix);
                         }
                     }
+
+                    // Apply floatingOriginOffset to underlying data sent to buffer
+                    instanceStorage.instancesData[offset + 12] -= floatingOriginOffset.x;
+                    instanceStorage.instancesData[offset + 13] -= floatingOriginOffset.y;
+                    instanceStorage.instancesData[offset + 14] -= floatingOriginOffset.z;
 
                     offset += 16;
                     instancesCount++;
@@ -2696,7 +2689,7 @@ export class Mesh extends AbstractMesh implements IGetSetVerticesData {
             !instanceDataStorage.isFrozen &&
             (this._internalMeshDataInfo._effectiveMaterial.backFaceCulling ||
                 this._internalMeshDataInfo._effectiveMaterial.sideOrientation !== null ||
-                (this._internalMeshDataInfo._effectiveMaterial as any).twoSidedLighting)
+                (this._internalMeshDataInfo._effectiveMaterial as any)._twoSidedLighting)
         ) {
             // Note: if two sided lighting is enabled, we need to ensure that the normal will point in the right direction even if the determinant of the world matrix is negative
             const mainDeterminant = effectiveMesh._getWorldMatrixDeterminant();
@@ -4896,8 +4889,8 @@ export class Mesh extends AbstractMesh implements IGetSetVerticesData {
 
             const boundingBox = boundingInfo.boundingBox;
             if (!minVector || !maxVector) {
-                minVector = boundingBox.minimumWorld;
-                maxVector = boundingBox.maximumWorld;
+                minVector = boundingBox.minimumWorld.clone();
+                maxVector = boundingBox.maximumWorld.clone();
             } else {
                 minVector.minimizeInPlace(boundingBox.minimumWorld);
                 maxVector.maximizeInPlace(boundingBox.maximumWorld);
@@ -5008,7 +5001,7 @@ export class Mesh extends AbstractMesh implements IGetSetVerticesData {
         const materialArray: Array<Material> = new Array<Material>();
         const materialIndexArray: Array<number> = new Array<number>();
         // Merge
-        const indiceArray: Array<number> = new Array<number>();
+        const indiceArray: Array<{ start: number; count: number }> = new Array<{ start: number; count: number }>();
         const currentsideOrientation = meshes[0].sideOrientation;
 
         for (index = 0; index < meshes.length; index++) {
@@ -5024,10 +5017,14 @@ export class Mesh extends AbstractMesh implements IGetSetVerticesData {
             }
 
             if (subdivideWithSubMeshes) {
-                indiceArray.push(mesh.getTotalIndices());
+                indiceArray.push({ start: 0, count: mesh.getTotalIndices() });
             }
 
             if (multiMultiMaterials) {
+                const indexOffset = indiceArray.reduce((accumulator, currentValue) => {
+                    return Math.max(accumulator, currentValue.start + currentValue.count);
+                }, 0);
+
                 if (mesh.material) {
                     const material = mesh.material;
                     if (material instanceof MultiMaterial) {
@@ -5038,7 +5035,7 @@ export class Mesh extends AbstractMesh implements IGetSetVerticesData {
                         }
                         for (let subIndex = 0; subIndex < mesh.subMeshes.length; subIndex++) {
                             materialIndexArray.push(materialArray.indexOf(<Material>material.subMaterials[mesh.subMeshes[subIndex].materialIndex]));
-                            indiceArray.push(mesh.subMeshes[subIndex].indexCount);
+                            indiceArray.push({ start: indexOffset + mesh.subMeshes[subIndex].indexStart, count: mesh.subMeshes[subIndex].indexCount });
                         }
                     } else {
                         if (materialArray.indexOf(material) < 0) {
@@ -5046,13 +5043,13 @@ export class Mesh extends AbstractMesh implements IGetSetVerticesData {
                         }
                         for (let subIndex = 0; subIndex < mesh.subMeshes.length; subIndex++) {
                             materialIndexArray.push(materialArray.indexOf(material));
-                            indiceArray.push(mesh.subMeshes[subIndex].indexCount);
+                            indiceArray.push({ start: indexOffset + mesh.subMeshes[subIndex].indexStart, count: mesh.subMeshes[subIndex].indexCount });
                         }
                     }
                 } else {
                     for (let subIndex = 0; subIndex < mesh.subMeshes.length; subIndex++) {
                         materialIndexArray.push(0);
-                        indiceArray.push(mesh.subMeshes[subIndex].indexCount);
+                        indiceArray.push({ start: indexOffset + mesh.subMeshes[subIndex].indexStart, count: mesh.subMeshes[subIndex].indexCount });
                     }
                 }
             }
@@ -5118,12 +5115,10 @@ export class Mesh extends AbstractMesh implements IGetSetVerticesData {
             //-- removal of global submesh
             meshSubclass.releaseSubMeshes();
             index = 0;
-            let offset = 0;
 
             //-- apply subdivision according to index table
             while (index < indiceArray.length) {
-                SubMesh.CreateFromIndices(0, offset, indiceArray[index], meshSubclass, undefined, false);
-                offset += indiceArray[index];
+                SubMesh.CreateFromIndices(0, indiceArray[index].start, indiceArray[index].count, meshSubclass, undefined, false);
                 index++;
             }
 

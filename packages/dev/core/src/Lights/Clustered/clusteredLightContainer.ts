@@ -1,18 +1,20 @@
 import { StorageBuffer } from "core/Buffers/storageBuffer";
-import { Constants } from "core/Engines/constants";
+import type { Camera } from "core/Cameras/camera";
 import type { AbstractEngine } from "core/Engines/abstractEngine";
+import { Constants } from "core/Engines/constants";
 import type { WebGPUEngine } from "core/Engines/webgpuEngine";
 import type { Effect } from "core/Materials/effect";
 import { ShaderLanguage } from "core/Materials/shaderLanguage";
 import { ShaderMaterial } from "core/Materials/shaderMaterial";
 import { RawTexture } from "core/Materials/Textures/rawTexture";
 import { RenderTargetTexture } from "core/Materials/Textures/renderTargetTexture";
+import { UniformBuffer } from "core/Materials/uniformBuffer";
 import { TmpColors } from "core/Maths/math.color";
 import { TmpVectors, Vector3 } from "core/Maths/math.vector";
 import { CreatePlane } from "core/Meshes/Builders/planeBuilder";
 import type { Mesh } from "core/Meshes/mesh";
-import { _WarnImport } from "core/Misc/devTools";
 import { serialize } from "core/Misc/decorators";
+import { _WarnImport } from "core/Misc/devTools";
 import { Logger } from "core/Misc/logger";
 import { RegisterClass } from "core/Misc/typeStore";
 import { Node } from "core/node";
@@ -23,12 +25,15 @@ import { Light } from "../light";
 import { LightConstants } from "../lightConstants";
 import type { PointLight } from "../pointLight";
 import type { SpotLight } from "../spotLight";
+import type { RenderTargetWrapper } from "../../Engines/renderTargetWrapper";
 
 import "core/Meshes/thinInstanceMesh";
 
 Node.AddNodeConstructor("Light_Type_5", (name, scene) => {
     return () => new ClusteredLightContainer(name, [], scene);
 });
+
+const DefaultDepthSlices = 16;
 
 /**
  * A special light that renders all its associated spot or point lights using a clustered or forward+ system.
@@ -95,7 +100,7 @@ export class ClusteredLightContainer extends Light {
         return this._batchSize > 0;
     }
 
-    private readonly _lights: (PointLight | SpotLight)[] = [];
+    private readonly _lights: Light[] = [];
     /**
      * Gets the current list of lights added to this clustering system.
      */
@@ -103,8 +108,14 @@ export class ClusteredLightContainer extends Light {
         return this._lights;
     }
 
+    private _camera: Nullable<Camera> = null;
+
+    // The lights sorted by depth
+    private readonly _sortedLights: (PointLight | SpotLight)[] = [];
+
     private _lightDataBuffer: Float32Array;
     private _lightDataTexture: RawTexture;
+    private _lightDataRenderId = -1;
 
     private _tileMaskBatches = -1;
     private _tileMaskTexture: RenderTargetTexture;
@@ -146,6 +157,32 @@ export class ClusteredLightContainer extends Light {
         this._verticalTiles = vertical;
         // Force the batch data to be recreated
         this._tileMaskBatches = -1;
+    }
+
+    private _sliceScale = 0;
+    private _sliceBias = 0;
+    // List of vec2's that keep track of the min and max index per slice
+    private _sliceRanges: Float32Array;
+
+    private _depthSlices = DefaultDepthSlices;
+    /**
+     * The number of slices to split the depth range by and cluster lights into.
+     */
+    public get depthSlices(): number {
+        return this._depthSlices;
+    }
+
+    public set depthSlices(slices: number) {
+        if (this._depthSlices === slices) {
+            return;
+        }
+        this._depthSlices = slices;
+        this._sliceRanges = new Float32Array(slices * 2);
+
+        // UBO size depends on the number of depth slices
+        this._uniformBuffer.dispose();
+        this._uniformBuffer = new UniformBuffer(this.getEngine(), undefined, undefined, this.name);
+        this._buildUniformLayout();
     }
 
     private readonly _proxyMaterial: ShaderMaterial;
@@ -210,6 +247,8 @@ export class ClusteredLightContainer extends Light {
 
         this._updateBatches();
 
+        this._sliceRanges = new Float32Array(this._depthSlices * 2);
+
         if (this._batchSize > 0) {
             ClusteredLightContainer._SceneComponentInitialization(this._scene);
             for (const light of lights) {
@@ -228,13 +267,14 @@ export class ClusteredLightContainer extends Light {
     }
 
     /** @internal */
-    public _updateBatches(): RenderTargetTexture {
-        this._proxyMesh.isVisible = this._lights.length > 0;
+    public _updateBatches(camera: Nullable<Camera> = null): RenderTargetTexture {
+        this._camera = camera;
+        this._proxyMesh.isVisible = this._sortedLights.length > 0;
 
         // Ensure space for atleast 1 batch
-        const batches = Math.max(Math.ceil(this._lights.length / this._batchSize), 1);
+        const batches = Math.max(Math.ceil(this._sortedLights.length / this._batchSize), 1);
         if (this._tileMaskBatches >= batches) {
-            this._proxyMesh.thinInstanceCount = this._lights.length;
+            this._proxyMesh.thinInstanceCount = this._sortedLights.length;
             return this._tileMaskTexture;
         }
         const engine = this.getEngine();
@@ -254,6 +294,7 @@ export class ClusteredLightContainer extends Light {
             Constants.TEXTURE_NEAREST_SAMPLINGMODE,
             Constants.TEXTURETYPE_FLOAT
         );
+        this._lightDataTexture.name = "LightDataTexture_clustered_" + this.name;
         this._proxyMaterial.setTexture("lightDataTexture", this._lightDataTexture);
 
         this._tileMaskTexture?.dispose();
@@ -274,8 +315,21 @@ export class ClusteredLightContainer extends Light {
         this._tileMaskTexture.noPrePassRenderer = true;
         this._tileMaskTexture.renderList = [this._proxyMesh];
 
+        let currentRenderTarget: Nullable<RenderTargetWrapper> = null;
+
         this._tileMaskTexture.onBeforeBindObservable.add(() => {
+            currentRenderTarget = engine._currentRenderTarget;
             this._updateLightData();
+        });
+
+        this._tileMaskTexture.onAfterUnbindObservable.add(() => {
+            if (engine._currentRenderTarget !== currentRenderTarget) {
+                if (!currentRenderTarget) {
+                    engine.restoreDefaultFramebuffer();
+                } else {
+                    engine.bindFramebuffer(currentRenderTarget);
+                }
+            }
         });
 
         this._tileMaskTexture.onClearObservable.add(() => {
@@ -300,15 +354,50 @@ export class ClusteredLightContainer extends Light {
 
         // We don't actually use the matrix data but we need enough capacity for the lights
         this._proxyMesh.thinInstanceSetBuffer("matrix", new Float32Array(maxLights * 16));
-        this._proxyMesh.thinInstanceCount = this._lights.length;
+        this._proxyMesh.thinInstanceCount = this._sortedLights.length;
         this._tileMaskBatches = batches;
         return this._tileMaskTexture;
     }
 
+    private _getSliceIndex(camera: Camera, depth: number): number {
+        if (depth < camera.minZ) {
+            // Prevent calling log on small or negative values
+            return -1;
+        }
+        return Math.floor(Math.log(depth) * this._sliceScale + this._sliceBias);
+    }
+
     private _updateLightData(): void {
+        const camera = this._camera || this._scene.activeCamera;
+        const renderId = this._scene.getRenderId();
+        if (!camera || this._lightDataRenderId === renderId) {
+            return;
+        }
+        this._lightDataRenderId = renderId;
+
+        // Resort lights based on distance from camera
+        const view = camera.getViewMatrix();
+        for (const light of this._sortedLights) {
+            const position = light.computeTransformedInformation() ? light.transformedPosition : light.position;
+            const viewPosition = Vector3.TransformCoordinatesToRef(position, view, TmpVectors.Vector3[0]);
+            light._currentViewDepth = viewPosition.z;
+        }
+        this._sortedLights.sort((a, b) => a._currentViewDepth - b._currentViewDepth);
+
+        // DOOM 2016 subdivision scheme, copied from: https://www.aortiz.me/2018/12/21/CG.html
+        const logFarNear = Math.log(camera.maxZ / camera.minZ);
+        this._sliceScale = this._depthSlices / logFarNear;
+        this._sliceBias = -(this._depthSlices * Math.log(camera.minZ)) / logFarNear;
+
+        this._sliceRanges.fill(0);
+        // Last slice which had had its min index updated
+        let minSlice = -1;
+
         const buf = this._lightDataBuffer;
-        for (let i = 0; i < this._lights.length; i += 1) {
-            const light = this._lights[i];
+        const offset = this._scene.floatingOriginOffset;
+
+        for (let i = 0; i < this._sortedLights.length; i += 1) {
+            const light = this._sortedLights[i];
             const off = i * 20;
             const computed = light.computeTransformedInformation();
             const scaledIntensity = light.getScaledIntensity();
@@ -320,9 +409,9 @@ export class ClusteredLightContainer extends Light {
             const inverseSquaredRange = Math.max(light._inverseSquaredRange, this._minInverseSquaredRange);
 
             // vLightData
-            buf[off + 0] = position.x;
-            buf[off + 1] = position.y;
-            buf[off + 2] = position.z;
+            buf[off + 0] = position.x - offset.x;
+            buf[off + 1] = position.y - offset.y;
+            buf[off + 2] = position.z - offset.z;
             buf[off + 3] = 0;
             // vLightDiffuse
             buf[off + 4] = diffuse.r;
@@ -360,6 +449,28 @@ export class ClusteredLightContainer extends Light {
                 buf[off + 18] = spotLight._lightAngleScale;
                 buf[off + 19] = spotLight._lightAngleOffset;
             }
+
+            // Update the depth slices that include this light
+            const firstSlice = this._getSliceIndex(camera, light._currentViewDepth - range);
+            const lastSlice = this._getSliceIndex(camera, light._currentViewDepth + range);
+            for (let j = firstSlice; j <= lastSlice; j += 1) {
+                if (j < 0 || j >= this._depthSlices) {
+                    continue;
+                } else if (j > minSlice) {
+                    // Update min index
+                    this._sliceRanges[j * 2] = i;
+                    minSlice = j;
+                }
+                // Update max index
+                this._sliceRanges[j * 2 + 1] = i;
+            }
+        }
+
+        const engine = this.getEngine();
+        if (engine.isWebGPU) {
+            // Whenever the light data changes we have to flush pending WebGPU command buffers so that
+            // previous render passes use the old data and later render passes use the new data.
+            engine.flushFramebuffer();
         }
         this._lightDataTexture.update(this._lightDataBuffer);
     }
@@ -385,10 +496,11 @@ export class ClusteredLightContainer extends Light {
             return;
         }
         this._scene.removeLight(light);
-        this._lights.push(<PointLight | SpotLight>light);
+        this._lights.push(light);
+        this._sortedLights.push(<PointLight | SpotLight>light);
 
         this._proxyMesh.isVisible = true;
-        this._proxyMesh.thinInstanceCount = this._lights.length;
+        this._proxyMesh.thinInstanceCount = this._sortedLights.length;
     }
 
     /**
@@ -397,16 +509,23 @@ export class ClusteredLightContainer extends Light {
      * @returns the index where the light was in the light list
      */
     public removeLight(light: Light): number {
-        const index = this.lights.indexOf(light);
-        if (index === -1) {
-            return index;
-        }
-        this._lights.splice(index, 1);
-        this._scene.addLight(light);
+        // Convert to `Light` array without cast so `indexOf` has correct typing
+        const sortedLights: Light[] = this._sortedLights;
+        const sortedIndex = sortedLights.indexOf(light);
+        if (sortedIndex !== -1) {
+            sortedLights.splice(sortedIndex, 1);
 
-        this._proxyMesh.thinInstanceCount = this._lights.length;
-        if (this._lights.length === 0) {
-            this._proxyMesh.isVisible = false;
+            this._proxyMesh.thinInstanceCount = sortedLights.length;
+            if (sortedLights.length === 0) {
+                this._proxyMesh.isVisible = false;
+            }
+        }
+
+        const index = this._lights.indexOf(light);
+        if (index !== -1) {
+            this._lights.splice(index, 1);
+            // We treat the unsorted array as the "real" one so only add back to the scene if it was found in that
+            this._scene.addLight(light);
         }
         return index;
     }
@@ -415,7 +534,9 @@ export class ClusteredLightContainer extends Light {
         this._uniformBuffer.addUniform("vLightData", 4);
         this._uniformBuffer.addUniform("vLightDiffuse", 4);
         this._uniformBuffer.addUniform("vLightSpecular", 4);
-        this._uniformBuffer.addUniform("vNumLights", 1);
+        this._uniformBuffer.addUniform("vSliceData", 2);
+        // _depthSlices might not be initialized yet
+        this._uniformBuffer.addUniform("vSliceRanges", 2, this._depthSlices ?? DefaultDepthSlices);
         this._uniformBuffer.addUniform("shadowsInfo", 3);
         this._uniformBuffer.addUniform("depthValues", 2);
         this._uniformBuffer.create();
@@ -426,7 +547,8 @@ export class ClusteredLightContainer extends Light {
         const hscale = this._horizontalTiles / engine.getRenderWidth();
         const vscale = this._verticalTiles / engine.getRenderHeight();
         this._uniformBuffer.updateFloat4("vLightData", hscale, vscale, this._verticalTiles, this._tileMaskBatches, lightIndex);
-        this._uniformBuffer.updateFloat("vNumLights", this._lights.length, lightIndex);
+        this._uniformBuffer.updateFloat2("vSliceData", this._sliceScale, this._sliceBias, lightIndex);
+        this._uniformBuffer.updateFloatArray("vSliceRanges", this._sliceRanges, lightIndex);
         return this;
     }
 
@@ -441,14 +563,14 @@ export class ClusteredLightContainer extends Light {
         return this;
     }
 
-    public override transferToNodeMaterialEffect(): Light {
-        // TODO: ????
+    public override transferToNodeMaterialEffect(_effect: Effect): Light {
         return this;
     }
 
     public override prepareLightSpecificDefines(defines: any, lightIndex: number): void {
         defines["CLUSTLIGHT" + lightIndex] = true;
         defines["CLUSTLIGHT_BATCH"] = this._batchSize;
+        defines["CLUSTLIGHT_SLICES"] = this._depthSlices;
     }
 
     public override _isReady(): boolean {

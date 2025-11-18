@@ -44,6 +44,11 @@ export class Particle {
     public initialColor = new Color4(0, 0, 0, 0);
 
     /**
+     * The color used when the end of life of the particle.
+     */
+    public colorDead = new Color4(0, 0, 0, 0);
+
+    /**
      * Defines how long will the life of the particle be.
      */
     public lifeTime = 1.0;
@@ -126,6 +131,12 @@ export class Particle {
     public _currentVelocity1 = 0;
     /** @internal */
     public _currentVelocity2 = 0;
+
+    /** @internal */
+    public _directionScale: number;
+
+    /** @internal */
+    public _scaledDirection = Vector3.Zero();
 
     /** @internal */
     public _currentLimitVelocityGradient: Nullable<FactorGradient>;
@@ -272,6 +283,7 @@ export class Particle {
         other.color.copyFrom(this.color);
         other.colorStep.copyFrom(this.colorStep);
         other.initialColor.copyFrom(this.initialColor);
+        other.colorDead.copyFrom(this.colorDead);
         other.lifeTime = this.lifeTime;
         other.age = this.age;
         other._randomCellOffset = this._randomCellOffset;

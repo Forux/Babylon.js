@@ -37,6 +37,7 @@ import {
     _CreateAngleData,
     _CreateAngleGradientsData,
     _CreateColorData,
+    _CreateColorDeadData,
     _CreateColorGradientsData,
     _CreateCustomDirectionData,
     _CreateCustomPositionData,
@@ -196,8 +197,6 @@ export class ThinParticleSystem extends BaseParticleSystem implements IDisposabl
     /** @internal */
     public _colorDiff = new Color4(0, 0, 0, 0);
     /** @internal */
-    public _scaledDirection = Vector3.Zero();
-    /** @internal */
     public _scaledGravity = Vector3.Zero();
     private _currentRenderId = -1;
     private _alive: boolean;
@@ -275,13 +274,13 @@ export class ThinParticleSystem extends BaseParticleSystem implements IDisposabl
     private _dragCreation: _IExecutionQueueItem;
     /** @internal */
     public _colorCreation: _IExecutionQueueItem;
+    /** @internal */
+    public _colorDeadCreation: _IExecutionQueueItem;
     private _sheetCreation: _IExecutionQueueItem;
     private _rampCreation: _IExecutionQueueItem;
     private _noiseCreation: _IExecutionQueueItem;
     private _createQueueStart: Nullable<_IExecutionQueueItem> = null;
 
-    /** @internal */
-    public _directionScale: number;
     /** @internal */
     public _tempScaledUpdateSpeed: number;
     /** @internal */
@@ -317,7 +316,7 @@ export class ThinParticleSystem extends BaseParticleSystem implements IDisposabl
                 previousItem: null,
                 nextItem: null,
             };
-            _ConnectAfter(this._rampCreation, this._colorCreation);
+            _ConnectAfter(this._rampCreation, this._colorDeadCreation);
             this._remapGradientProcessing = {
                 process: _ProcessRemapGradients,
                 previousItem: null,
@@ -398,7 +397,7 @@ export class ThinParticleSystem extends BaseParticleSystem implements IDisposabl
                 nextItem: null,
             };
 
-            _ConnectAfter(this._sheetCreation, this._colorCreation);
+            _ConnectAfter(this._sheetCreation, this._colorDeadCreation);
         } else {
             _RemoveFromQueue(this._sheetCreation);
         }
@@ -513,7 +512,7 @@ export class ThinParticleSystem extends BaseParticleSystem implements IDisposabl
             previousItem: null,
             nextItem: null,
         };
-        _ConnectAfter(this._noiseCreation, this._colorCreation);
+        _ConnectAfter(this._noiseCreation, this._colorDeadCreation);
 
         this._noiseProcessing = {
             process: _ProcessNoise,
@@ -615,6 +614,13 @@ export class ThinParticleSystem extends BaseParticleSystem implements IDisposabl
         };
         _ConnectAfter(this._colorCreation, this._angleCreation);
 
+        this._colorDeadCreation = {
+            process: _CreateColorDeadData,
+            previousItem: null,
+            nextItem: null,
+        };
+        _ConnectAfter(this._colorDeadCreation, this._colorCreation);
+
         this._createQueueStart = this._lifeTimeCreation;
 
         // Processing queue
@@ -706,7 +712,7 @@ export class ThinParticleSystem extends BaseParticleSystem implements IDisposabl
                 }
 
                 this._ratio = particle.age / particle.lifeTime;
-                this._directionScale = this._tempScaledUpdateSpeed;
+                particle._directionScale = this._tempScaledUpdateSpeed;
 
                 // Processing queue
                 let currentQueueItem = this._updateQueueStart;
@@ -744,11 +750,11 @@ export class ThinParticleSystem extends BaseParticleSystem implements IDisposabl
     }
 
     /** @internal */
-    public _emitFromParticle: (particle: Particle) => void = (particle) => {
+    public _emitFromParticle: (particle: Particle) => void = (_particle) => {
         // Do nothing
     };
 
-    serialize(serializeTexture: boolean) {
+    serialize(_serializeTexture: boolean) {
         throw new Error("Method not implemented.");
     }
 
@@ -756,9 +762,9 @@ export class ThinParticleSystem extends BaseParticleSystem implements IDisposabl
      * Clones the particle system.
      * @param name The name of the cloned object
      * @param newEmitter The new emitter to use
-     * @param cloneTexture Also clone the textures if true
+     * @param _cloneTexture Also clone the textures if true
      */
-    public clone(name: string, newEmitter: any, cloneTexture = false): ThinParticleSystem {
+    public clone(name: string, newEmitter: any, _cloneTexture = false): ThinParticleSystem {
         throw new Error("Method not implemented.");
     }
 
@@ -1128,7 +1134,7 @@ export class ThinParticleSystem extends BaseParticleSystem implements IDisposabl
                 previousItem: null,
                 nextItem: null,
             };
-            _ConnectBefore(this._dragCreation, this._colorCreation);
+            _ConnectBefore(this._dragCreation, this._colorDeadCreation);
 
             this._dragGradientProcessing = {
                 process: _ProcessDragGradients,
@@ -1564,6 +1570,7 @@ export class ThinParticleSystem extends BaseParticleSystem implements IDisposabl
             throw "Particle system started with a targetStopDuration dependant gradient (eg. startSizeGradients) but no targetStopDuration set";
         }
         if (delay) {
+            this.startDelay = delay;
             setTimeout(() => {
                 this.start(0);
             }, delay);
@@ -1666,9 +1673,10 @@ export class ThinParticleSystem extends BaseParticleSystem implements IDisposabl
     public _appendParticleVertex(index: number, particle: Particle, offsetX: number, offsetY: number): void {
         let offset = index * this._vertexBufferSize;
 
-        this._vertexData[offset++] = particle.position.x + this.worldOffset.x;
-        this._vertexData[offset++] = particle.position.y + this.worldOffset.y;
-        this._vertexData[offset++] = particle.position.z + this.worldOffset.z;
+        const floatingOriginOffset = TmpVectors.Vector3[0].copyFrom(this._scene?.floatingOriginOffset || Vector3.ZeroReadOnly);
+        this._vertexData[offset++] = particle.position.x + this.worldOffset.x - floatingOriginOffset.x;
+        this._vertexData[offset++] = particle.position.y + this.worldOffset.y - floatingOriginOffset.y;
+        this._vertexData[offset++] = particle.position.z + this.worldOffset.z - floatingOriginOffset.z;
         this._vertexData[offset++] = particle.color.r;
         this._vertexData[offset++] = particle.color.g;
         this._vertexData[offset++] = particle.color.b;
@@ -2235,10 +2243,10 @@ export class ThinParticleSystem extends BaseParticleSystem implements IDisposabl
                 engine.bindBuffers(this._vertexBuffers, this._linesIndexBufferUseInstancing, effect);
             } else {
                 if (!this._vertexArrayObject) {
-                    this._vertexArrayObject = (this._engine as ThinEngine).recordVertexArrayObject(this._vertexBuffers, null, effect);
+                    this._vertexArrayObject = (this._engine as ThinEngine).recordVertexArrayObject(this._vertexBuffers, this._indexBuffer, effect);
                 }
 
-                (this._engine as ThinEngine).bindVertexArrayObject(this._vertexArrayObject, this._scene?.forceWireframe ? this._linesIndexBufferUseInstancing : this._indexBuffer);
+                (this._engine as ThinEngine).bindVertexArrayObject(this._vertexArrayObject, this._indexBuffer);
             }
         } else {
             if (!this._indexBuffer) {

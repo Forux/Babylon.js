@@ -22,13 +22,16 @@ import { NodeParticleSystemSet } from "./nodeParticleSystemSet";
 import { NodeParticleContextualSources } from "./Enums/nodeParticleContextualSources";
 import { NodeParticleSystemSources } from "./Enums/nodeParticleSystemSources";
 import { ParticleConverterBlock } from "./Blocks/particleConverterBlock";
+import { ParticleFloatToIntBlock, ParticleFloatToIntBlockOperations } from "./Blocks/particleFloatToIntBlock";
 import { ParticleGradientBlock } from "./Blocks/particleGradientBlock";
 import { ParticleGradientValueBlock } from "./Blocks/particleGradientValueBlock";
 import { ParticleInputBlock } from "./Blocks/particleInputBlock";
 import { ParticleMathBlock, ParticleMathBlockOperations } from "./Blocks/particleMathBlock";
 import { ParticleRandomBlock, ParticleRandomBlockLocks } from "./Blocks/particleRandomBlock";
 import { ParticleTextureSourceBlock } from "./Blocks/particleSourceTextureBlock";
+import { ParticleVectorLengthBlock } from "./Blocks/particleVectorLengthBlock";
 import { SystemBlock } from "./Blocks/systemBlock";
+import { ParticleConditionBlock, ParticleConditionBlockTests } from "./Blocks/Conditions/particleConditionBlock";
 import { CreateParticleBlock } from "./Blocks/Emitters/createParticleBlock";
 import { BoxShapeBlock } from "./Blocks/Emitters/boxShapeBlock";
 import { ConeShapeBlock } from "./Blocks/Emitters/coneShapeBlock";
@@ -99,44 +102,10 @@ async function _ExtractDatafromParticleSystemAsync(newSet: NodeParticleSystemSet
     newSet.systemBlocks.push(newSystem);
 }
 
-// ------------- SYSTEM FUNCTIONS -------------
-
-function _SystemBlockGroup(oldSystem: ParticleSystem, context: RuntimeConversionContext): SystemBlock {
-    const newSystem = new SystemBlock(oldSystem.name);
-
-    _CreateAndConnectInput("Translation pivot", oldSystem.translationPivot, newSystem.translationPivot);
-    _CreateAndConnectInput("Texture mask", oldSystem.textureMask, newSystem.textureMask);
-    _CreateTargetStopDurationInputBlock(oldSystem, context).connectTo(newSystem.targetStopDuration);
-
-    newSystem.emitRate = oldSystem.emitRate;
-    newSystem.manualEmitCount = oldSystem.manualEmitCount;
-    newSystem.blendMode = oldSystem.blendMode;
-    newSystem.capacity = oldSystem.getCapacity();
-    newSystem.startDelay = oldSystem.startDelay;
-    newSystem.updateSpeed = oldSystem.updateSpeed;
-    newSystem.preWarmCycles = oldSystem.preWarmCycles;
-    newSystem.preWarmStepOffset = oldSystem.preWarmStepOffset;
-    newSystem.isBillboardBased = oldSystem.isBillboardBased;
-    newSystem.isLocal = oldSystem.isLocal;
-    newSystem.disposeOnStop = oldSystem.disposeOnStop;
-
-    // Texture
-    const textureBlock = new ParticleTextureSourceBlock("Texture");
-    const url = (oldSystem.particleTexture as Texture).url || "";
-    if (url) {
-        textureBlock.url = url;
-    } else {
-        textureBlock.sourceTexture = oldSystem.particleTexture;
-    }
-    textureBlock.texture.connectTo(newSystem.texture);
-
-    return newSystem;
-}
-
 // ------------- CREATE PARTICLE FUNCTIONS -------------
 
 // The creation of the different properties follows the order they are added to the CreationQueue in ThinParticleSystem:
-// Lifetime, Emit Power, Size, Scale/StartSize, Angle, VelocityLimit, Color, Drag, Noise, ColorDead, Ramp, Sheet
+// Lifetime, Emit Power, Size, Scale/StartSize, Angle, Color, Noise, ColorDead, Ramp, Sheet
 function _CreateParticleBlockGroup(oldSystem: ParticleSystem, context: RuntimeConversionContext): CreateParticleBlock {
     // Create particle block
     const createParticleBlock = new CreateParticleBlock("Create Particle");
@@ -457,10 +426,18 @@ function _UpdateParticleBlockGroup(inputParticle: NodeParticleConnectionPoint, o
     updateBlockGroupOutput = _UpdateParticleAngleBlockGroup(updateBlockGroupOutput, oldSystem, context);
 
     if (oldSystem._velocityGradients && oldSystem._velocityGradients.length > 0) {
-        context.scaledDirection = _UpdateParticleVelocityGradientBlockGroup(updateBlockGroupOutput, oldSystem._velocityGradients, context);
+        context.scaledDirection = _UpdateParticleVelocityGradientBlockGroup(oldSystem._velocityGradients, context);
+    }
+
+    if (oldSystem._dragGradients && oldSystem._dragGradients.length > 0) {
+        context.scaledDirection = _UpdateParticleDragGradientBlockGroup(oldSystem._dragGradients, context);
     }
 
     updateBlockGroupOutput = _UpdateParticlePositionBlockGroup(updateBlockGroupOutput, oldSystem.isLocal, context);
+
+    if (oldSystem._limitVelocityGradients && oldSystem._limitVelocityGradients.length > 0 && oldSystem.limitVelocityDamping !== 0) {
+        updateBlockGroupOutput = _UpdateParticleVelocityLimitGradientBlockGroup(updateBlockGroupOutput, oldSystem._limitVelocityGradients, oldSystem.limitVelocityDamping, context);
+    }
 
     if (oldSystem._sizeGradients && oldSystem._sizeGradients.length > 0) {
         updateBlockGroupOutput = _UpdateParticleSizeGradientBlockGroup(updateBlockGroupOutput, oldSystem._sizeGradients, context);
@@ -548,16 +525,11 @@ function _UpdateParticleAngleBlockGroup(inputParticle: NodeParticleConnectionPoi
 
 /**
  * Creates the group of blocks that represent the particle velocity update
- * @param inputParticle The input particle to update
- * @param velocityGradients The velocity gradients (if any)
+ * @param velocityGradients The velocity gradients
  * @param context The context of the current conversion
  * @returns The output of the group of blocks that represent the particle velocity update
  */
-function _UpdateParticleVelocityGradientBlockGroup(
-    inputParticle: NodeParticleConnectionPoint,
-    velocityGradients: Array<FactorGradient>,
-    context: RuntimeConversionContext
-): NodeParticleConnectionPoint {
+function _UpdateParticleVelocityGradientBlockGroup(velocityGradients: Array<FactorGradient>, context: RuntimeConversionContext): NodeParticleConnectionPoint {
     context.ageToLifeTimeRatioBlockGroupOutput = _CreateAgeToLifeTimeRatioBlockGroup(context);
 
     // Generate the gradient
@@ -570,10 +542,93 @@ function _UpdateParticleVelocityGradientBlockGroup(
     _CreateAndConnectContextualSource("Direction Scale", NodeParticleContextualSources.DirectionScale, multiplyScaleByVelocity.right);
 
     // Update the particle direction scale
-    const multiplyDirection = new ParticleMathBlock("Multiply Direction");
+    const multiplyDirection = new ParticleMathBlock("Scaled Direction");
     multiplyDirection.operation = ParticleMathBlockOperations.Multiply;
     multiplyScaleByVelocity.output.connectTo(multiplyDirection.left);
     _CreateAndConnectContextualSource("Direction", NodeParticleContextualSources.Direction, multiplyDirection.right);
+
+    // Store the new calculation of the scaled direction in the context
+    context.scaledDirection = multiplyDirection.output;
+    return multiplyDirection.output;
+}
+
+/**
+ * Creates the group of blocks that represent the particle velocity limit update
+ * @param inputParticle The input particle to update
+ * @param velocityLimitGradients The velocity limit gradients
+ * @param limitVelocityDamping The limit velocity damping factor
+ * @param context The context of the current conversion
+ * @returns The output of the group of blocks that represent the particle velocity limit update
+ */
+function _UpdateParticleVelocityLimitGradientBlockGroup(
+    inputParticle: NodeParticleConnectionPoint,
+    velocityLimitGradients: Array<FactorGradient>,
+    limitVelocityDamping: number,
+    context: RuntimeConversionContext
+): NodeParticleConnectionPoint {
+    context.ageToLifeTimeRatioBlockGroupOutput = _CreateAgeToLifeTimeRatioBlockGroup(context);
+
+    // Calculate the current speed
+    const currentSpeedBlock = new ParticleVectorLengthBlock("Current Speed");
+    _CreateAndConnectContextualSource("Direction", NodeParticleContextualSources.Direction, currentSpeedBlock.input);
+
+    // Calculate the velocity limit from the gradient
+    const velocityLimitValueOutput = _CreateGradientBlockGroup(
+        context.ageToLifeTimeRatioBlockGroupOutput,
+        velocityLimitGradients,
+        ParticleRandomBlockLocks.OncePerParticle,
+        "Velocity Limit"
+    );
+
+    // Blocks that will calculate the new velocity if over the limit
+    const damped = new ParticleMathBlock("Damped Speed");
+    damped.operation = ParticleMathBlockOperations.Multiply;
+    _CreateAndConnectContextualSource("Direction", NodeParticleContextualSources.Direction, damped.left);
+    _CreateAndConnectInput("Limit Velocity Damping", limitVelocityDamping, damped.right);
+
+    // Compare current speed and limit
+    const compareSpeed = new ParticleConditionBlock("Compare Speed to Limit");
+    compareSpeed.test = ParticleConditionBlockTests.GreaterThan;
+    currentSpeedBlock.output.connectTo(compareSpeed.left);
+    velocityLimitValueOutput.connectTo(compareSpeed.right);
+    damped.output.connectTo(compareSpeed.ifTrue);
+    _CreateAndConnectContextualSource("Direction", NodeParticleContextualSources.Direction, compareSpeed.ifFalse);
+
+    // Update the direction based on the calculted value
+    const updateDirection = new UpdateDirectionBlock("Direction Update");
+    inputParticle.connectTo(updateDirection.particle);
+    compareSpeed.output.connectTo(updateDirection.direction);
+
+    return updateDirection.output;
+}
+
+/**
+ * Creates the group of blocks that represent the particle drag update
+ * @param dragGradients The drag gradients
+ * @param context The context of the current conversion
+ * @returns The output of the group of blocks that represent the particle drag update
+ */
+function _UpdateParticleDragGradientBlockGroup(dragGradients: Array<FactorGradient>, context: RuntimeConversionContext): NodeParticleConnectionPoint {
+    context.ageToLifeTimeRatioBlockGroupOutput = _CreateAgeToLifeTimeRatioBlockGroup(context);
+
+    // Generate the gradient
+    const dragValueOutput = _CreateGradientBlockGroup(context.ageToLifeTimeRatioBlockGroupOutput, dragGradients, ParticleRandomBlockLocks.OncePerParticle, "Drag");
+
+    // Calculate drag factor
+    const oneMinusDragBlock = new ParticleMathBlock("1 - Drag");
+    oneMinusDragBlock.operation = ParticleMathBlockOperations.Subtract;
+    _CreateAndConnectInput("One", 1, oneMinusDragBlock.left);
+    dragValueOutput.connectTo(oneMinusDragBlock.right);
+
+    // Multiply the scaled direction by drag factor
+    const multiplyDirection = new ParticleMathBlock("Scaled Direction with Drag");
+    multiplyDirection.operation = ParticleMathBlockOperations.Multiply;
+    oneMinusDragBlock.output.connectTo(multiplyDirection.left);
+    if (context.scaledDirection === undefined) {
+        _CreateAndConnectContextualSource("Scaled Direction", NodeParticleContextualSources.ScaledDirection, multiplyDirection.right);
+    } else {
+        context.scaledDirection.connectTo(multiplyDirection.right);
+    }
 
     // Store the new calculation of the scaled direction in the context
     context.scaledDirection = multiplyDirection.output;
@@ -713,6 +768,72 @@ function _ClampUpdateColorAlpha(colorCalculationOutput: NodeParticleConnectionPo
     maxAlphaBlock.output.connectTo(composeColorBlock.wIn);
 
     return composeColorBlock.colorOut;
+}
+
+// ------------- SYSTEM FUNCTIONS -------------
+
+function _SystemBlockGroup(oldSystem: ParticleSystem, context: RuntimeConversionContext): SystemBlock {
+    const newSystem = new SystemBlock(oldSystem.name);
+
+    newSystem.translationPivot.value = oldSystem.translationPivot;
+    newSystem.textureMask.value = oldSystem.textureMask;
+    newSystem.manualEmitCount = oldSystem.manualEmitCount;
+    newSystem.blendMode = oldSystem.blendMode;
+    newSystem.capacity = oldSystem.getCapacity();
+    newSystem.startDelay = oldSystem.startDelay;
+    newSystem.updateSpeed = oldSystem.updateSpeed;
+    newSystem.preWarmCycles = oldSystem.preWarmCycles;
+    newSystem.preWarmStepOffset = oldSystem.preWarmStepOffset;
+    newSystem.isBillboardBased = oldSystem.isBillboardBased;
+    newSystem.isLocal = oldSystem.isLocal;
+    newSystem.disposeOnStop = oldSystem.disposeOnStop;
+
+    _SystemEmitRateValue(oldSystem, newSystem, context);
+    _SystemTextureBlock(oldSystem).connectTo(newSystem.texture);
+    _SystemTargetStopDuration(oldSystem, newSystem, context);
+
+    return newSystem;
+}
+
+function _SystemEmitRateValue(oldSystem: ParticleSystem, newSystem: SystemBlock, context: RuntimeConversionContext): void {
+    const emitGradients = oldSystem.getEmitRateGradients();
+    if (emitGradients && emitGradients.length > 0 && oldSystem.targetStopDuration > 0) {
+        // Create the emit gradients
+        context.timeToStopTimeRatioBlockGroupOutput = _CreateTimeToStopTimeRatioBlockGroup(oldSystem, context);
+        const gradientValue = _CreateGradientBlockGroup(context.timeToStopTimeRatioBlockGroupOutput, emitGradients, ParticleRandomBlockLocks.PerSystem, "Emit Rate");
+
+        // Round the value to an int
+        const roundBlock = new ParticleFloatToIntBlock("Round to Int");
+        roundBlock.operation = ParticleFloatToIntBlockOperations.Round;
+        gradientValue.connectTo(roundBlock.input);
+        roundBlock.output.connectTo(newSystem.emitRate);
+    } else {
+        newSystem.emitRate.value = oldSystem.emitRate;
+    }
+}
+
+function _SystemTextureBlock(oldSystem: ParticleSystem): NodeParticleConnectionPoint {
+    // Texture
+    const textureBlock = new ParticleTextureSourceBlock("Texture");
+    const url = (oldSystem.particleTexture as Texture).url || "";
+    if (url) {
+        textureBlock.url = url;
+    } else {
+        textureBlock.sourceTexture = oldSystem.particleTexture;
+    }
+
+    return textureBlock.texture;
+}
+
+function _SystemTargetStopDuration(oldSystem: ParticleSystem, newSystem: SystemBlock, context: RuntimeConversionContext): void {
+    // If something else uses the target stop duration (like a gradient),
+    // then the block is already created and stored in the context
+    if (context.targetStopDurationBlockOutput) {
+        context.targetStopDurationBlockOutput.connectTo(newSystem.targetStopDuration);
+    } else {
+        // If no one used it, do not create a block just set the value
+        newSystem.targetStopDuration.value = oldSystem.targetStopDuration;
+    }
 }
 
 // ------------- UTILITY FUNCTIONS -------------

@@ -83,6 +83,13 @@ export class GeospatialCameraPointersInput extends OrbitCameraPointersInput {
         }
     }
 
+    public override onDoubleTap(type: string): void {
+        const pickResult = this.camera._scene.pick(this.camera._scene.pointerX, this.camera._scene.pointerY, this.camera.pickPredicate);
+        if (pickResult.pickedPoint) {
+            void this.camera.flyToPointAsync(pickResult.pickedPoint);
+        }
+    }
+
     public override onMultiTouch(
         pointA: Nullable<PointerTouch>,
         pointB: Nullable<PointerTouch>,

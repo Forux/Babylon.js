@@ -6,10 +6,13 @@ import type { Scene } from "../scene";
 import type { MeshPredicate } from "../Culling/ray.core";
 import type { DeepImmutable } from "../types";
 import { GeospatialLimits } from "./Limits/geospatialLimits";
-import { ComputeLocalBasisToRefs, GeospatialCameraMovement } from "./geospatialCameraMovement";
+import { ClampCenterFromPolesInPlace, ComputeLocalBasisToRefs, GeospatialCameraMovement } from "./geospatialCameraMovement";
 import type { IVector3Like } from "../Maths/math.like";
 import { Vector3CopyToRef, Vector3Dot } from "../Maths/math.vector.functions";
 import { Clamp } from "../Maths/math.scalar.functions";
+import type { AllowedAnimValue } from "../Behaviors/Cameras/interpolatingBehavior";
+import { InterpolatingBehavior } from "../Behaviors/Cameras/interpolatingBehavior";
+import type { EasingFunction } from "../Animations/easing";
 
 type CameraOptions = {
     planetRadius: number; // Radius of the planet
@@ -32,16 +35,24 @@ export class GeospatialCamera extends Camera {
 
     // Temp vars
     private _tempPosition: Vector3 = new Vector3();
+    private _tempCenter = new Vector3();
 
     private _viewMatrix = new Matrix();
     private _isViewMatrixDirty: boolean;
     private _lookAtVector: Vector3 = new Vector3();
+
+    /** Behavior used for smooth flying animations */
+    private _flyingBehavior: InterpolatingBehavior<GeospatialCamera>;
+    private _flyToTargets: Map<keyof GeospatialCamera, AllowedAnimValue> = new Map();
 
     constructor(name: string, scene: Scene, options: CameraOptions, pickPredicate?: MeshPredicate) {
         super(name, new Vector3(), scene);
 
         this._limits = new GeospatialLimits(options.planetRadius);
         this._resetToDefault(this._limits);
+
+        this._flyingBehavior = new InterpolatingBehavior();
+        this.addBehavior(this._flyingBehavior);
 
         this.movement = new GeospatialCameraMovement(scene, this._limits, this.position, this.center, this._lookAtVector, pickPredicate);
 
@@ -51,7 +62,7 @@ export class GeospatialCamera extends Camera {
     }
 
     private _center: Vector3 = new Vector3();
-    /** The point on the globe that we are anchoring around. If no alternate rotation point is present, this will represent the center of screen*/
+    /** The point on the globe that we are anchoring around. If no alternate rotation point is supplied, this will represent the center of screen*/
     public get center(): Vector3 {
         return this._center;
     }
@@ -120,6 +131,7 @@ export class GeospatialCamera extends Camera {
         this._yaw = Clamp(this._yaw, limits.yawMin, limits.yawMax);
         this._pitch = Clamp(this._pitch, limits.pitchMin, limits.pitchMax);
         this._radius = Clamp(this._radius, limits.radiusMin, limits.radiusMax);
+        this._center = ClampCenterFromPolesInPlace(this._center);
     }
 
     private _tempVect = new Vector3();
@@ -178,6 +190,68 @@ export class GeospatialCamera extends Camera {
     /** The point around which the camera will geocentrically rotate. Uses center (pt we are anchored to) if no alternateRotationPt is defined */
     private get _geocentricRotationPt(): Vector3 {
         return this.movement.alternateRotationPt ?? this.center;
+    }
+
+    /**
+     * If camera is actively in flight, will update the target properties and use up the remaining duration from original flyTo call
+     *
+     * To start a new flyTo curve entirely, call into flyToAsync again (it will stop the inflight animation)
+     * @param targetYaw
+     * @param targetPitch
+     * @param targetRadius
+     * @param targetCenter
+     */
+    public updateFlyToDestination(targetYaw?: number, targetPitch?: number, targetRadius?: number, targetCenter?: Vector3): void {
+        this._flyToTargets.clear();
+
+        this._flyToTargets.set("yaw", targetYaw);
+        this._flyToTargets.set("pitch", targetPitch);
+        this._flyToTargets.set("radius", targetRadius);
+        this._flyToTargets.set("center", targetCenter);
+
+        this._flyingBehavior.updateProperties(this._flyToTargets);
+    }
+
+    /**
+     * Animate camera towards passed in property values. If undefined, will use current value
+     * @param targetYaw
+     * @param targetPitch
+     * @param targetRadius
+     * @param targetCenter
+     * @param flightDurationMs
+     * @param easingFunction
+     * @returns Promise that will return when the animation is complete (or interuppted by pointer input)
+     */
+    public async flyToAsync(
+        targetYaw?: number,
+        targetPitch?: number,
+        targetRadius?: number,
+        targetCenter?: Vector3,
+        flightDurationMs: number = 1000,
+        easingFunction?: EasingFunction
+    ): Promise<void> {
+        this._flyToTargets.clear();
+
+        this._flyToTargets.set("yaw", targetYaw);
+        this._flyToTargets.set("pitch", targetPitch);
+        this._flyToTargets.set("radius", targetRadius);
+        this._flyToTargets.set("center", targetCenter);
+
+        return await this._flyingBehavior.animatePropertiesAsync(this._flyToTargets, flightDurationMs, easingFunction);
+    }
+
+    /**
+     * Helper function to move camera towards a given point by radiusScale% of radius (by default 50%)
+     * @param destination point to move towards
+     * @param radiusScale value between 0 and 1, % of radius to move
+     * @param durationMs duration of flight, default 1s
+     * @param easingFn optional easing function for flight interpolation of properties
+     */
+    public async flyToPointAsync(destination: Vector3, radiusScale: number = 0.5, durationMs: number = 1000, easingFn?: EasingFunction) {
+        const direction = destination.subtractToRef(this.position, this._tempPosition).normalize();
+        // Zoom to radiusScale% of radius towards the given destination point
+        const newRadius = this._getRadiusAndCenterFromZoomTowards(direction, this.radius * radiusScale, this._tempCenter);
+        await this.flyToAsync(undefined, undefined, newRadius, this._tempCenter, durationMs, easingFn);
     }
 
     private _limits: GeospatialLimits;
@@ -250,17 +324,17 @@ export class GeospatialCamera extends Camera {
      * This rotation keeps the camera oriented towards the globe as it orbits around it. This is different from cameraCentricRotation which is when the camera rotates around its own axis
      */
     private _applyGeocentricRotation(): void {
-        const currentFrameRotationDelta = this.movement.rotationDeltaCurrentFrame;
-        if (currentFrameRotationDelta.x !== 0 || currentFrameRotationDelta.y !== 0) {
-            const pitch = currentFrameRotationDelta.x !== 0 ? Clamp(this._pitch + currentFrameRotationDelta.x, 0, 0.5 * Math.PI - Epsilon) : this._pitch;
-            const yaw = currentFrameRotationDelta.y !== 0 ? this._yaw + currentFrameRotationDelta.y : this._yaw;
+        const rotationDeltaCurrentFrame = this.movement.rotationDeltaCurrentFrame;
+        if (rotationDeltaCurrentFrame.x !== 0 || rotationDeltaCurrentFrame.y !== 0) {
+            const pitch = rotationDeltaCurrentFrame.x !== 0 ? Clamp(this._pitch + rotationDeltaCurrentFrame.x, 0, 0.5 * Math.PI - Epsilon) : this._pitch;
+            const yaw = rotationDeltaCurrentFrame.y !== 0 ? this._yaw + rotationDeltaCurrentFrame.y : this._yaw;
 
             // TODO: If _geocentricRotationPt is not the center, this will need to be adjusted.
             this._setOrientation(yaw, pitch, this._radius, this._geocentricRotationPt);
         }
     }
 
-    private _applyZoom(zoomVector: Vector3, distance: number) {
+    private _getRadiusAndCenterFromZoomTowards(zoomVector: Vector3, distance: number, centerRef: Vector3): number {
         // TODO this function will be re-worked shortly after checkin, becuase today it breaks down if you zoom to a point past the center
         // (ex: tilted view zooming towards cursor near horizon where the center is closer than the cursor point).
 
@@ -284,8 +358,18 @@ export class GeospatialCamera extends Camera {
         const newCenterRescale = currentCenterRadius / newCenterRadius;
         newCenter.scaleInPlace(newCenterRescale);
 
+        // Copy new center to ref
+        Vector3CopyToRef(newCenter, centerRef);
+
+        // Return new radius
+        return newRadius;
+    }
+
+    private _applyZoom(zoomVector: Vector3, distance: number) {
+        const newRadius = this._getRadiusAndCenterFromZoomTowards(zoomVector, distance, this._tempVect);
+
         // Apply changes
-        this._setOrientation(this._yaw, this._pitch, newRadius, newCenter);
+        this._setOrientation(this._yaw, this._pitch, newRadius, this._tempVect);
     }
 
     override _checkInputs(): void {

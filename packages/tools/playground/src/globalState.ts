@@ -36,6 +36,7 @@ export class GlobalState {
     public mobileDefaultMode = EditionMode.RenderingOnly;
     public runtimeMode = RuntimeMode.Editor;
     public version: string = "";
+    public bundles: string[] = [];
 
     public currentSnippetTitle = "";
     public currentSnippetDescription = "";
@@ -76,7 +77,7 @@ export class GlobalState {
     public onMetadataUpdatedObservable = new Observable<void>();
     public onMetadataWindowHiddenObservable = new Observable<boolean>();
     public onDownloadRequiredObservable = new Observable<void>();
-    public onInspectorRequiredObservable = new Observable<"refresh" | "toggle" | "enable" | "disable">();
+    public onInspectorRequiredObservable = new Observable<void>();
     public onFormatCodeRequiredObservable = new Observable<void>();
     public onFullcreenRequiredObservable = new Observable<void>();
     public onEditorFullcreenRequiredObservable = new Observable<void>();

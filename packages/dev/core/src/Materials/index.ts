@@ -38,11 +38,14 @@ export * from "./GreasedLine/greasedLineMaterialInterfaces";
 export * from "./GreasedLine/greasedLineMaterialDefaults";
 export * from "./meshDebugPluginMaterial";
 export * from "./GaussianSplatting/gaussianSplattingMaterial";
+export * from "./GaussianSplatting/gaussianSplattingSolidColorMaterialPlugin";
+export * from "./GaussianSplatting/gaussianSplattingGpuPickingMaterialPlugin";
 export * from "./materialHelper.functions";
 export * from "./materialHelper.geometryrendering";
 export * from "./materialStencilState";
 export * from "./uv.defines";
 export * from "./floatingOriginMatrixOverrides";
+export * from "./vertexPullingHelper.functions";
 import "./material.decalMap";
 
 // async-loaded shaders

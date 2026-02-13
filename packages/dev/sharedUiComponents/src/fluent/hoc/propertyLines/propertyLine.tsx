@@ -1,14 +1,16 @@
-import { Body1, InfoLabel, Checkbox, makeStyles, Body1Strong, tokens, mergeClasses } from "@fluentui/react-components";
+import { Body1, Checkbox, makeStyles, tokens, mergeClasses } from "@fluentui/react-components";
 import {
     ChevronCircleDown20Regular,
     ChevronCircleDown16Regular,
     ChevronCircleRight16Regular,
     ChevronCircleRight20Regular,
+    CopyRegular,
     Copy16Regular,
-    Copy20Regular,
 } from "@fluentui/react-icons";
-import type { FunctionComponent, HTMLProps, PropsWithChildren } from "react";
-import { useContext, useState, forwardRef, cloneElement, isValidElement, useRef } from "react";
+import type { FunctionComponent, HTMLProps, PropsWithChildren, MouseEvent } from "react";
+import type { AccordionSectionItemProps } from "../../primitives/accordion";
+import { AccordionSectionItem } from "../../primitives/accordion";
+import { useContext, useState, forwardRef, cloneElement, isValidElement, useRef, useCallback } from "react";
 import { Collapse } from "../../primitives/collapse";
 import { copyCommandToClipboard } from "../../../copyCommandToClipboard";
 import { ToolContext } from "../fluentToolWrapper";
@@ -16,7 +18,10 @@ import type { PrimitiveProps } from "../../primitives/primitive";
 import { Link } from "../../primitives/link";
 import { ToggleButton } from "../../primitives/toggleButton";
 import { Button } from "../../primitives/button";
-import { CustomTokens } from "../../primitives/utils";
+import { CustomTokens, TokenMap } from "../../primitives/utils";
+import { InfoLabel } from "../../primitives/infoLabel";
+import { Tooltip } from "../../primitives/tooltip";
+import { useToast } from "../../primitives/toast";
 
 const usePropertyLineStyles = makeStyles({
     baseLine: {
@@ -31,20 +36,19 @@ const usePropertyLineStyles = makeStyles({
         minWidth: CustomTokens.labelMinWidth,
         textAlign: "left",
     },
-    labelSlot: {
-        display: "flex",
-        minWidth: 0,
-    },
-    labelText: {
-        whiteSpace: "nowrap",
-        overflow: "hidden",
-        textOverflow: "ellipsis",
-    },
     rightContent: {
         flex: "0 1 auto",
+        minWidth: 0,
+        overflow: "hidden",
         display: "flex",
         alignItems: "center",
         justifyContent: "flex-end",
+    },
+    childWrapper: {
+        minWidth: 0,
+        overflow: "hidden",
+        textOverflow: "ellipsis",
+        whiteSpace: "nowrap",
     },
     infoPopup: {
         whiteSpace: "normal",
@@ -55,6 +59,17 @@ const usePropertyLineStyles = makeStyles({
     },
     expandedContentDiv: {
         overflow: "hidden",
+        paddingLeft: tokens.spacingHorizontalM,
+    },
+    checkbox: {
+        display: "flex",
+        alignItems: "center",
+        marginRight: tokens.spacingHorizontalXS,
+    },
+    checkboxIndicator: {
+        margin: TokenMap.px2,
+        width: TokenMap.px12,
+        height: TokenMap.px12,
     },
 });
 
@@ -63,6 +78,13 @@ type BasePropertyLineProps = {
      * The name of the property to display in the property line.
      */
     label: string;
+    /**
+     * The ID of the property line to be used when the label cannot be used as a persistent ID.
+     *
+     * Note that when a property line is used within an accordion section, this ID must be unique within that section in order
+     * for property pinning and filtering to work correctly. If not, error will be shown in console.
+     */
+    uniqueId?: string;
     /**
      * Optional description for the property, shown on hover of the info icon
      */
@@ -130,14 +152,31 @@ export type PropertyLineProps<ValueT> = BasePropertyLineProps &
  */
 export const PropertyLine = forwardRef<HTMLDivElement, PropsWithChildren<PropertyLineProps<any>>>((props, ref) => {
     PropertyLine.displayName = "PropertyLine";
-    const { disableCopy, size } = useContext(ToolContext);
+    const { size } = useContext(ToolContext);
     const classes = usePropertyLineStyles();
-    const { label, onCopy, expandedContent, children, nullable, ignoreNullable } = props;
+    const { label, uniqueId, onCopy, expandedContent, children, nullable, ignoreNullable } = props;
 
     const [expanded, setExpanded] = useState("expandByDefault" in props ? props.expandByDefault : false);
     const cachedVal = useRef(nullable ? props.value : null);
 
-    const description = props.docLink ? <Link url={props.docLink} value={props.description ?? "Docs"} /> : props.description;
+    const { showToast } = useToast();
+
+    const handleCopy = useCallback(() => {
+        if (onCopy) {
+            copyCommandToClipboard(onCopy());
+            showToast("Copied property to clipboard");
+        }
+    }, [onCopy, showToast]);
+
+    const handleContextMenu = useCallback(
+        (e: MouseEvent) => {
+            e.preventDefault();
+            handleCopy();
+        },
+        [handleCopy]
+    );
+
+    const description = props.docLink ? <Link url={props.docLink} value={props.description ?? "Docs"} /> : props.description ? <Body1>{props.description}</Body1> : undefined;
 
     // Process children to handle nullable state -- creating component in disabled state with default value in lieu of null value
     const processedChildren =
@@ -151,18 +190,10 @@ export const PropertyLine = forwardRef<HTMLDivElement, PropsWithChildren<Propert
             : children;
 
     return (
-        <LineContainer ref={ref}>
+        <LineContainer ref={ref} uniqueId={uniqueId ?? label} label={label}>
             <div className={classes.baseLine}>
-                <InfoLabel
-                    size={size}
-                    className={classes.infoLabel}
-                    label={{ className: classes.labelSlot }}
-                    info={description ? <div className={classes.infoPopup}>{description}</div> : undefined}
-                    title={label}
-                >
-                    <Body1Strong className={classes.labelText}>{label}</Body1Strong>
-                </InfoLabel>
-                <div className={classes.rightContent}>
+                <InfoLabel className={classes.infoLabel} htmlFor="property" info={description} label={label} flexLabel onContextMenu={onCopy ? handleContextMenu : undefined} />
+                <div className={classes.rightContent} id="property">
                     {expandedContent && (
                         <ToggleButton
                             title="Expand/Collapse property"
@@ -176,31 +207,26 @@ export const PropertyLine = forwardRef<HTMLDivElement, PropsWithChildren<Propert
 
                     {nullable && !ignoreNullable && (
                         // If this is a nullableProperty and ignoreNullable was not sent, display a checkbox used to toggle null ('checked' means 'non null')
-                        <Checkbox
-                            checked={!(props.value == null)}
-                            onChange={(_, data) => {
-                                if (data.checked) {
-                                    // if checked this means we are returning to non-null, use cached value if exists. If no cached value, use default value
-                                    cachedVal.current != null ? props.onChange(cachedVal.current) : props.onChange(props.defaultValue);
-                                } else {
-                                    // if moving to un-checked state, this means moving to null value. Cache the old value and tell props.onChange(null)
-                                    cachedVal.current = props.value;
-                                    props.onChange(null);
-                                }
-                            }}
-                            title="Toggle null state"
-                        />
+                        <Tooltip content={props.value == null ? "Enable property" : "Disable property (set to null)"}>
+                            <Checkbox
+                                className={classes.checkbox}
+                                indicator={{ className: classes.checkboxIndicator }}
+                                checked={!(props.value == null)}
+                                onChange={(_, data) => {
+                                    if (data.checked) {
+                                        // if checked this means we are returning to non-null, use cached value if exists. If no cached value, use default value
+                                        cachedVal.current != null ? props.onChange(cachedVal.current) : props.onChange(props.defaultValue);
+                                    } else {
+                                        // if moving to un-checked state, this means moving to null value. Cache the old value and tell props.onChange(null)
+                                        cachedVal.current = props.value;
+                                        props.onChange(null);
+                                    }
+                                }}
+                            />
+                        </Tooltip>
                     )}
-                    {processedChildren}
-                    {onCopy && !disableCopy && (
-                        <Button
-                            className={classes.copy}
-                            title="Copy to clipboard"
-                            appearance="transparent"
-                            icon={size === "small" ? Copy16Regular : Copy20Regular}
-                            onClick={() => copyCommandToClipboard(onCopy())}
-                        />
-                    )}
+                    <div className={classes.childWrapper}>{processedChildren}</div>
+                    {onCopy && <CopyButton onCopy={handleCopy} />}
                 </div>
             </div>
             {expandedContent && (
@@ -222,22 +248,51 @@ const useLineStyles = makeStyles({
         justifyContent: "center",
         paddingTop: tokens.spacingVerticalXXS,
         paddingBottom: tokens.spacingVerticalXXS,
+        borderTop: `1px solid transparent`,
+        borderBottom: `1px solid transparent`,
+        ":hover": {
+            borderTopColor: tokens.colorNeutralStroke2,
+            borderBottomColor: tokens.colorNeutralStroke2,
+        },
     },
     containerSmall: {
         minHeight: CustomTokens.lineHeightSmall,
     },
 });
 
-export const LineContainer = forwardRef<HTMLDivElement, PropsWithChildren<HTMLProps<HTMLDivElement>>>((props, ref) => {
+export const LineContainer = forwardRef<HTMLDivElement, PropsWithChildren<HTMLProps<HTMLDivElement> & AccordionSectionItemProps>>((props, ref) => {
     const { size } = useContext(ToolContext);
+    const { children, uniqueId, label, ...rest } = props;
     const classes = useLineStyles();
 
     return (
-        <div ref={ref} className={mergeClasses(classes.container, size == "small" ? classes.containerSmall : undefined)} {...props}>
-            {props.children}
-        </div>
+        <AccordionSectionItem uniqueId={uniqueId} label={label}>
+            <div ref={ref} className={mergeClasses(classes.container, size == "small" ? classes.containerSmall : undefined)} {...rest}>
+                {children}
+            </div>
+        </AccordionSectionItem>
     );
 });
+
+/**
+ * Copy button that reads ToolContext at its own position in the tree.
+ * This allows AccordionSectionItem's ToolContext.Provider override (e.g. ctrl+hover) to control visibility.
+ * @returns The copy button element.
+ */
+const CopyButton: FunctionComponent<{ onCopy: () => void }> = ({ onCopy }) => {
+    const { disableCopy, size } = useContext(ToolContext);
+    const classes = usePropertyLineStyles();
+
+    if (disableCopy) {
+        return null;
+    }
+
+    return (
+        <Tooltip content="Copy to Clipboard">
+            <Button className={classes.copy} appearance="transparent" icon={size === "small" ? Copy16Regular : CopyRegular} onClick={onCopy} />
+        </Tooltip>
+    );
+};
 
 export const PlaceholderPropertyLine: FunctionComponent<PrimitiveProps<any> & PropertyLineProps<any>> = (props) => {
     return (

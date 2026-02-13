@@ -1,6 +1,6 @@
 import type { AdvancedDynamicTexture } from "gui/2D/advancedDynamicTexture";
 import type { ServiceDefinition } from "../../../modularity/serviceDefinition";
-import type { ISettingsContext } from "../../settingsContext";
+import type { ITextureEditorService } from "../../textureEditor/textureEditorService";
 import type { IPropertiesService } from "./propertiesService";
 
 import { BaseTexture } from "core/Materials/Textures/baseTexture";
@@ -9,7 +9,7 @@ import { MultiRenderTarget } from "core/Materials/Textures/multiRenderTarget";
 import { RenderTargetTexture } from "core/Materials/Textures/renderTargetTexture";
 import { Texture } from "core/Materials/Textures/texture";
 import { ThinTexture } from "core/Materials/Textures/thinTexture";
-import { AdvancedDynamicTextureGeneralProperties } from "../../../components/properties/textures/advancedDynamicTextureProperties";
+import { AdvancedDynamicTextureGeneralProperties, AdvancedDynamicTexturePreviewProperties } from "../../../components/properties/textures/advancedDynamicTextureProperties";
 import {
     BaseTextureCharacteristicProperties,
     BaseTextureGeneralProperties,
@@ -21,7 +21,7 @@ import { MultiRenderTargetGeneralProperties } from "../../../components/properti
 import { RenderTargetTextureGeneralProperties } from "../../../components/properties/textures/renderTargetTextureProperties";
 import { TextureGeneralProperties, TexturePreviewProperties, TextureTransformProperties } from "../../../components/properties/textures/textureProperties";
 import { ThinTextureGeneralProperties, ThinTextureSamplingProperties } from "../../../components/properties/textures/thinTextureProperties";
-import { SettingsContextIdentity } from "../../settingsContext";
+import { TextureEditorServiceIdentity } from "../../textureEditor/textureEditorService";
 import { PropertiesServiceIdentity } from "./propertiesService";
 
 // Don't use instanceof in this case as we don't want to bring in the gui package just to check if the entity is an AdvancedDynamicTexture.
@@ -29,17 +29,17 @@ function IsAdvancedDynamicTexture(entity: unknown): entity is AdvancedDynamicTex
     return (entity as AdvancedDynamicTexture)?.getClassName?.() === "AdvancedDynamicTexture";
 }
 
-export const TexturePropertiesServiceDefinition: ServiceDefinition<[], [IPropertiesService, ISettingsContext]> = {
+export const TexturePropertiesServiceDefinition: ServiceDefinition<[], [IPropertiesService, ITextureEditorService]> = {
     friendlyName: "Texture Properties",
-    consumes: [PropertiesServiceIdentity, SettingsContextIdentity],
-    factory: (propertiesService, settingsContext) => {
+    consumes: [PropertiesServiceIdentity, TextureEditorServiceIdentity],
+    factory: (propertiesService, textureEditorService) => {
         const baseTextureContentRegistration = propertiesService.addSectionContent({
             key: "Base Texture Properties",
             predicate: (entity: unknown) => entity instanceof BaseTexture,
             content: [
                 {
                     section: "Preview",
-                    component: ({ context }) => <BaseTexturePreviewProperties texture={context} />,
+                    component: ({ context }) => <BaseTexturePreviewProperties texture={context} textureEditor={textureEditorService.component} />,
                 },
                 {
                     section: "General",
@@ -82,6 +82,7 @@ export const TexturePropertiesServiceDefinition: ServiceDefinition<[], [IPropert
                 {
                     section: "Preview",
                     component: ({ context }) => <TexturePreviewProperties texture={context} />,
+                    order: 200,
                 },
                 {
                     section: "General",
@@ -97,7 +98,7 @@ export const TexturePropertiesServiceDefinition: ServiceDefinition<[], [IPropert
             content: [
                 {
                     section: "Transform",
-                    component: ({ context }) => <TextureTransformProperties texture={context} settings={settingsContext} />,
+                    component: ({ context }) => <TextureTransformProperties texture={context} />,
                 },
             ],
         });
@@ -108,7 +109,7 @@ export const TexturePropertiesServiceDefinition: ServiceDefinition<[], [IPropert
             content: [
                 {
                     section: "Transform",
-                    component: ({ context }) => <CubeTextureTransformProperties texture={context} settings={settingsContext} />,
+                    component: ({ context }) => <CubeTextureTransformProperties texture={context} />,
                 },
             ],
         });
@@ -144,6 +145,11 @@ export const TexturePropertiesServiceDefinition: ServiceDefinition<[], [IPropert
                     section: "Advanced Dynamic Texture",
                     order: 100,
                     component: ({ context }) => <AdvancedDynamicTextureGeneralProperties texture={context} />,
+                },
+                {
+                    section: "Preview",
+                    order: 100,
+                    component: ({ context }) => <AdvancedDynamicTexturePreviewProperties texture={context} />,
                 },
             ],
         });

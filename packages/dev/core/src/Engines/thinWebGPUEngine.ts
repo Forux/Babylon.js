@@ -1,4 +1,5 @@
 import type { InternalTexture } from "core/Materials/Textures/internalTexture";
+import { InternalTextureSource } from "core/Materials/Textures/internalTexture";
 import { AbstractEngine } from "./abstractEngine";
 import type { WebGPUCacheRenderPipeline } from "./WebGPU/webgpuCacheRenderPipeline";
 import type { WebGPUTextureManager } from "./WebGPU/webgpuTextureManager";
@@ -56,9 +57,6 @@ export abstract class ThinWebGPUEngine extends AbstractEngine {
     /** @internal */
     public _timestampIndex = 0;
 
-    /** @internal */
-    public _debugStackRenderPass: string[] = [];
-
     /**
      * Gets the GPU time spent in the main render pass for the last frame rendered (in nanoseconds).
      * You have to enable the "timestamp-query" extension in the engine constructor options and set engine.enableGPUTimingMeasurements = true.
@@ -98,12 +96,6 @@ export abstract class ThinWebGPUEngine extends AbstractEngine {
             return 0;
         }
 
-        if (this._debugStackRenderPass.length !== 0) {
-            for (let i = 0; i < this._debugStackRenderPass.length; ++i) {
-                this._currentRenderPass.popDebugGroup();
-            }
-        }
-
         const currentPassIndex = this._currentPassIsMainPass() ? 2 : 1;
 
         if (!this._snapshotRendering.endRenderPass(this._currentRenderPass) && !this.compatibilityMode) {
@@ -135,7 +127,6 @@ export abstract class ThinWebGPUEngine extends AbstractEngine {
                 );
             }
         }
-        this._debugPopGroup?.(0);
         this._currentRenderPass = null;
 
         return currentPassIndex;
@@ -158,7 +149,6 @@ export abstract class ThinWebGPUEngine extends AbstractEngine {
             this._endCurrentRenderPass();
         }
 
-        const format = (texture._hardwareTexture as WebGPUHardwareTexture).format;
         const mipmapCount = WebGPUTextureHelper.ComputeNumMipmapLevels(texture.width, texture.height);
 
         if (this.dbgVerboseLogsForFirstFrames) {
@@ -182,9 +172,11 @@ export abstract class ThinWebGPUEngine extends AbstractEngine {
         }
 
         if (texture.isCube) {
-            this._textureHelper.generateCubeMipmaps(gpuHardwareTexture, format, mipmapCount, commandEncoder);
+            this._textureHelper.generateCubeMipmaps(gpuHardwareTexture, mipmapCount, commandEncoder);
+        } else if (texture._source === InternalTextureSource.Raw || texture._source === InternalTextureSource.Raw2DArray) {
+            this._textureHelper.generateMipmaps(gpuHardwareTexture, texture.mipLevelCount, 0, commandEncoder);
         } else {
-            this._textureHelper.generateMipmaps(gpuHardwareTexture, format, mipmapCount, 0, texture.is3D, commandEncoder);
+            this._textureHelper.generateMipmaps(gpuHardwareTexture, mipmapCount, 0, commandEncoder);
         }
     }
 }

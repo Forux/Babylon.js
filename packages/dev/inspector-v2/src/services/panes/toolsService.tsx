@@ -62,19 +62,23 @@ export const ToolsServiceDefinition: ServiceDefinition<[IToolsService], [IShellS
                         const sectionContent = useObservableCollection(sectionContentCollection);
                         const scene = useObservableState(() => sceneContext.currentScene, sceneContext.currentSceneObservable);
 
-                        return scene && <ToolsPane sections={sections} sectionContent={sectionContent} context={scene} />;
+                        return (
+                            scene && (
+                                <ToolsPane
+                                    uniqueId="Tools"
+                                    sections={sections}
+                                    sectionContent={sectionContent}
+                                    context={scene}
+                                    enablePinnedItems
+                                    enableHiddenItems
+                                    enableSearchItems
+                                />
+                            )
+                        );
                     },
                 });
             }
         });
-
-        /**
-         * Left TODO: Implement the following sections from toolsTabComponent.tsx
-         * - GLTF Validator (see glTFComponent.tsx) (consider putting in Import tools)
-         * - Reflector
-         * - GIF (consider putting in Capture Tools)
-         * - Replay (consider putting in Capture Tools)
-         */
 
         return {
             addSection: (section) => sectionsCollection.add(section),

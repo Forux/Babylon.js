@@ -1,4 +1,4 @@
-import type { IDisposable, Node, Nullable } from "core/index";
+import type { IDisposable, Nullable } from "core/index";
 import type { ServiceDefinition } from "../../../modularity/serviceDefinition";
 import type { IGizmoService } from "../../gizmoService";
 import type { ISceneContext } from "../../sceneContext";
@@ -8,6 +8,7 @@ import {
     BorderNoneRegular,
     BorderOutsideRegular,
     CameraRegular,
+    EditRegular,
     EyeOffRegular,
     EyeRegular,
     FlashlightOffRegular,
@@ -19,12 +20,16 @@ import {
 } from "@fluentui/react-icons";
 
 import { Camera } from "core/Cameras/camera";
+import { ClusteredLightContainer } from "core/Lights/Clustered/clusteredLightContainer";
 import { Light } from "core/Lights/light";
 import { AbstractMesh } from "core/Meshes/abstractMesh";
+import { Mesh } from "core/Meshes/mesh";
 import { TransformNode } from "core/Meshes/transformNode";
 import { Observable } from "core/Misc/observable";
+import { Node } from "core/node";
 import { MeshIcon } from "shared-ui-components/fluent/icons";
 import { InterceptProperty } from "../../../instrumentation/propertyInstrumentation";
+import { EditNodeGeometry, GetNodeGeometry } from "../../../misc/nodeGeometryEditor";
 import { GizmoServiceIdentity } from "../../gizmoService";
 import { SceneContextIdentity } from "../../sceneContext";
 import { DefaultCommandsOrder, DefaultSectionsOrder } from "./defaultSectionsMetadata";
@@ -46,7 +51,38 @@ export const NodeExplorerServiceDefinition: ServiceDefinition<[], [ISceneExplore
         const sectionRegistration = sceneExplorerService.addSection({
             displayName: "Nodes",
             order: DefaultSectionsOrder.Nodes,
-            getRootEntities: () => scene.rootNodes,
+            getRootEntities: () => {
+                const rootNodes = [...scene.rootNodes];
+
+                // If any non-root node has a parent and that parent is not one of the node types shown in the Nodes section,
+                // then we should treat it as a root node, otherwise it won't show up anywhere in scene explorer.
+                // An example of this is when a Mesh or a TransformNode is parented under a Bone.
+                for (const node of [...scene.meshes, ...scene.transformNodes, ...scene.cameras, ...scene.lights]) {
+                    if (
+                        node.parent &&
+                        !(node.parent instanceof AbstractMesh) &&
+                        !(node.parent instanceof TransformNode) &&
+                        !(node.parent instanceof Camera) &&
+                        !(node.parent instanceof Light)
+                    ) {
+                        rootNodes.push(node);
+                    }
+                }
+
+                // Lights within a clustered light container are not included in Scene.lights or Scene.rootNodes.
+                // If they also have no parent, then they won't show up anywhere, so show them as root nodes.
+                for (const light of scene.lights) {
+                    if (light instanceof ClusteredLightContainer) {
+                        for (const childLight of light.lights) {
+                            if (!childLight.parent && !rootNodes.includes(childLight)) {
+                                rootNodes.push(childLight);
+                            }
+                        }
+                    }
+                }
+
+                return rootNodes;
+            },
             getEntityChildren: (node) => node.getChildren(),
             getEntityDisplayInfo: (node) => {
                 const onChangeObservable = new Observable<void>();
@@ -98,6 +134,35 @@ export const NodeExplorerServiceDefinition: ServiceDefinition<[], [ISceneExplore
                 scene.onLightRemovedObservable,
             ],
             getEntityMovedObservables: () => [nodeMovedObservable],
+            dragDropConfig: {
+                canDrag: (node) => node instanceof Node,
+                canDrop: (draggedNode, targetNode) => {
+                    // Can't drop on self
+                    if (targetNode === draggedNode) {
+                        return false;
+                    }
+                    // Can't drop on a descendant
+                    if (targetNode !== null && targetNode.isDescendantOf(draggedNode)) {
+                        return false;
+                    }
+                    // Can drop onto section root (null) only if node has a parent
+                    if (targetNode === null) {
+                        return draggedNode.parent !== null;
+                    }
+                    return true;
+                },
+                onDrop: (draggedNode, targetNode) => {
+                    if (draggedNode.parent === targetNode) {
+                        return;
+                    }
+                    // Use setParent for TransformNodes to preserve world transform
+                    if (draggedNode instanceof TransformNode) {
+                        draggedNode.setParent(targetNode);
+                    } else {
+                        draggedNode.parent = targetNode;
+                    }
+                },
+            },
         });
 
         const abstractMeshBoundingBoxCommandRegistration = sceneExplorerService.addEntityCommand({
@@ -145,6 +210,10 @@ export const NodeExplorerServiceDefinition: ServiceDefinition<[], [ISceneExplore
                         return `${mesh.isVisible ? "Hide" : "Show"} Mesh`;
                     },
                     icon: () => (mesh.isVisible ? <EyeRegular /> : <EyeOffRegular />),
+                    hotKey: {
+                        keyCode: "Space",
+                        control: true,
+                    },
                     get isEnabled() {
                         return !mesh.isVisible;
                     },
@@ -259,6 +328,25 @@ export const NodeExplorerServiceDefinition: ServiceDefinition<[], [ISceneExplore
 
         const lightGizmoCommandRegistration = addGizmoCommand(Light, gizmoService.getLightGizmo.bind(gizmoService));
 
+        const editNodeGeometryCommandRegistration = sceneExplorerService.addEntityCommand({
+            predicate: (entity: unknown): entity is Mesh => entity instanceof Mesh && !!GetNodeGeometry(entity),
+            order: DefaultCommandsOrder.EditNodeGeometry,
+            getCommand: (mesh) => {
+                return {
+                    type: "action",
+                    displayName: "Edit in Node Geometry Editor",
+                    icon: () => <EditRegular />,
+                    // eslint-disable-next-line @typescript-eslint/naming-convention
+                    execute: async () => {
+                        const nodeGeometry = GetNodeGeometry(mesh);
+                        if (nodeGeometry) {
+                            await EditNodeGeometry(nodeGeometry, mesh.getScene());
+                        }
+                    },
+                };
+            },
+        });
+
         return {
             dispose: () => {
                 sectionRegistration.dispose();
@@ -268,6 +356,7 @@ export const NodeExplorerServiceDefinition: ServiceDefinition<[], [ISceneExplore
                 cameraGizmoCommandRegistration.dispose();
                 lightEnabledCommandRegistration.dispose();
                 lightGizmoCommandRegistration.dispose();
+                editNodeGeometryCommandRegistration.dispose();
             },
         };
     },

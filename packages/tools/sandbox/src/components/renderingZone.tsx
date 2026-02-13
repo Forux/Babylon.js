@@ -86,7 +86,6 @@ export class RenderingZone extends React.Component<IRenderingZoneProps> {
                 premultipliedAlpha: false,
                 preserveDrawingBuffer: true,
                 antialias: antialias,
-                forceSRGBBufferSupportState: this.props.globalState.commerceMode,
             });
         }
 
@@ -177,6 +176,7 @@ export class RenderingZone extends React.Component<IRenderingZoneProps> {
         filesInput.monitorElementForDragNDrop(this._canvas);
 
         this.props.globalState.filesInput = filesInput;
+        this.props.globalState.onFilesInputReady.notifyObservers();
 
         window.addEventListener("keydown", (event) => {
             // Press R to reload
@@ -316,8 +316,13 @@ export class RenderingZone extends React.Component<IRenderingZoneProps> {
 
         this._scene.executeWhenReady(() => {
             this._engine.runRenderLoop(() => {
+                // NOTE: this logic to adjust camera parameters based on radius is copied in viewer.ts.
+                // Please keep them in sync.
                 // Adapt the camera sensibility based on the distance to the object
                 camera.panningSensibility = 5000 / camera.radius;
+                // Update the camera speed based on the camera's distance from the target.
+                // TODO: This makes mouse wheel zooming behave well, but makes mouse based rotation a bit worse.
+                camera.speed = camera.radius * 0.2;
                 this._scene.render();
             });
         });

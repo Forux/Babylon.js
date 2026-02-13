@@ -174,7 +174,7 @@ declare module "../scene" {
          * @internal
          * Backing field
          */
-        _debugLayer: DebugLayer;
+        _debugLayer?: DebugLayer;
 
         /**
          * Gets the debug layer (aka Inspector) associated with the scene
@@ -352,9 +352,16 @@ export class DebugLayer {
                 }
             }
             if (!this.BJSINSPECTOR.Inspector.IsVisible) {
-                setTimeout(() => {
-                    this.select(entity, lineContainerTitles);
-                }, 100);
+                const waitAndCheck = () => {
+                    setTimeout(() => {
+                        if (this.BJSINSPECTOR.Inspector.IsVisible) {
+                            this.select(entity, lineContainerTitles);
+                        } else {
+                            waitAndCheck();
+                        }
+                    }, 100);
+                };
+                waitAndCheck();
             } else {
                 this.BJSINSPECTOR.Inspector.OnSelectionChangeObservable.notifyObservers(entity);
             }

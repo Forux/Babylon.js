@@ -1,12 +1,11 @@
-/* eslint-disable @typescript-eslint/naming-convention */
-
 import type { BrandVariants, Theme } from "@fluentui/react-components";
 
 import { createDarkTheme, createLightTheme } from "@fluentui/react-components";
 
 // Generated from https://react.fluentui.dev/?path=/docs/theme-theme-designer--docs
 // Key color: #3A94FC
-const babylonRamp: BrandVariants = {
+/* eslint-disable @typescript-eslint/naming-convention */
+const BabylonRamp: BrandVariants = {
     10: "#020305",
     20: "#121721",
     30: "#1A263A",
@@ -24,11 +23,18 @@ const babylonRamp: BrandVariants = {
     150: "#AFC9FF",
     160: "#C6D8FF",
 };
+/* eslint-enable @typescript-eslint/naming-convention */
 
+const BaseLightTheme = createLightTheme(BabylonRamp);
 export const LightTheme: Theme = {
-    ...createLightTheme(babylonRamp),
+    ...BaseLightTheme,
+    // Reduce the max contrast between foreground and background by just replacing the most intense foreground color with the second most intense one.
+    colorNeutralForeground1: BaseLightTheme.colorNeutralForeground2,
 };
 
+const BaseDarkTheme = createDarkTheme(BabylonRamp);
 export const DarkTheme: Theme = {
-    ...createDarkTheme(babylonRamp),
+    ...BaseDarkTheme,
+    // Reduce the max contrast between foreground and background by just replacing the most intense foreground color with the second most intense one.
+    colorNeutralForeground1: BaseDarkTheme.colorNeutralForeground2,
 };

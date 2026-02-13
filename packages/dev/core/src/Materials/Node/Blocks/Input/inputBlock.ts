@@ -187,6 +187,9 @@ export class InputBlock extends NodeMaterialBlock {
                     case NodeMaterialSystemValues.CameraPosition:
                         this._type = NodeMaterialBlockConnectionPointTypes.Vector3;
                         return this._type;
+                    case NodeMaterialSystemValues.CameraForward:
+                        this._type = NodeMaterialBlockConnectionPointTypes.Vector3;
+                        return this._type;
                     case NodeMaterialSystemValues.FogColor:
                         this._type = NodeMaterialBlockConnectionPointTypes.Color3;
                         return this._type;
@@ -564,6 +567,9 @@ export class InputBlock extends NodeMaterialBlock {
         if (this.isAttribute) {
             this.associatedVariableName = remapAttributeName[this.name] ?? this.name;
 
+            if (this.name === "particle_positionw") {
+                state.sharedData.defines["POSITIONW_AS_VARYING"] = "true";
+            }
             if (this.target === NodeMaterialBlockTargets.Vertex && state._vertexState) {
                 // Attribute for fragment need to be carried over by varyings
                 if (attributeInFragmentOnly[this.name]) {
@@ -690,6 +696,18 @@ export class InputBlock extends NodeMaterialBlock {
                     break;
                 case NodeMaterialSystemValues.CameraPosition:
                     scene.bindEyePosition(effect, variableName, true);
+                    break;
+                case NodeMaterialSystemValues.CameraForward:
+                    if (scene.activeCamera) {
+                        const transform = scene.activeCamera.getWorldMatrix();
+                        const forward = TmpVectors.Vector3[2];
+                        forward.set(0, 0, scene.useRightHandedSystem ? -1 : 1);
+                        const worldForward = new Vector3();
+                        Vector3.TransformNormalToRef(forward, transform, worldForward);
+                        worldForward.normalize();
+
+                        effect.setVector3(variableName, worldForward);
+                    }
                     break;
                 case NodeMaterialSystemValues.FogColor:
                     effect.setColor3(variableName, scene.fogColor);

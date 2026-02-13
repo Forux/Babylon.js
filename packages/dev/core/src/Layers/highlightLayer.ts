@@ -238,6 +238,7 @@ export class HighlightLayer extends EffectLayer {
             camera: null,
             renderingGroupId: -1,
             mainTextureType: Constants.TEXTURETYPE_UNSIGNED_BYTE,
+            mainTextureFormat: Constants.TEXTUREFORMAT_RGBA,
             forceGLSL: false,
             isStroke: false,
             ...options,
@@ -391,6 +392,9 @@ export class HighlightLayer extends EffectLayer {
         this._postProcesses.map((pp) => {
             pp.autoClear = false;
         });
+
+        this._mainTextureCreatedSize.width = this._mainTextureDesiredSize.width;
+        this._mainTextureCreatedSize.height = this._mainTextureDesiredSize.height;
     }
 
     /**

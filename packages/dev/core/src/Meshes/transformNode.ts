@@ -168,7 +168,7 @@ export class TransformNode extends Node {
      */
     public extras?: any;
     // << VRNET
-
+    /** @internal */
     constructor(name: string, scene: Nullable<Scene> = null, isPure = true) {
         super(name, scene, false);
 
@@ -434,7 +434,6 @@ export class TransformNode extends Node {
      * Instantiate (when possible) or clone that node with its hierarchy
      * @param newParent defines the new parent to use for the instance (or clone)
      * @param options defines options to configure how copy is done
-     * @param options.doNotInstantiate defines if the model must be instantiated or just cloned
      * @param onNewNodeCreated defines an option callback to call when a clone or an instance is created
      * @returns an instance (or a clone) of the current node with its hierarchy
      */

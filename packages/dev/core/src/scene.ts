@@ -99,7 +99,7 @@ import type { Sound } from "./Audio/sound";
 import type { Layer } from "./Layers/layer";
 import type { LensFlareSystem } from "./LensFlares/lensFlareSystem";
 import type { ProceduralTexture } from "./Materials/Textures/Procedurals/proceduralTexture";
-import { FrameGraphObjectRendererTask } from "./FrameGraph/Tasks/Rendering/objectRendererTask";
+import type { FrameGraphObjectRendererTask } from "./FrameGraph/Tasks/Rendering/objectRendererTask";
 import { _RetryWithInterval } from "./Misc/timingTools";
 import type { ObjectRenderer } from "./Rendering/objectRenderer";
 import type { BoundingBoxRenderer } from "./Rendering/boundingBoxRenderer";
@@ -141,7 +141,6 @@ export interface SceneOptions {
     useClonedMeshMap?: boolean;
 
     /**
-     * @experimental
      * When enabled, the scene can handle large world coordinate rendering without jittering caused by floating point imprecision on the GPU.
      * This mode offsets matrices and position-related attribute values before passing to shaders, centering camera at origin and offsetting other scene objects by camera active position.
      *
@@ -2028,6 +2027,7 @@ export class Scene implements IAnimatable, IClipPlanesHolder, IAssetContainer {
         if (engine.getCreationOptions().useLargeWorldRendering || options?.useFloatingOrigin) {
             OverrideMatrixFunctions();
             this._floatingOriginScene = this;
+            FloatingOriginCurrentScene.getScene = this._getFloatingOriginScene;
         }
 
         this._uid = null;
@@ -2646,22 +2646,52 @@ export class Scene implements IAnimatable, IClipPlanesHolder, IAssetContainer {
     }
 
     /**
+     * An event triggered when the scene ready checks has timed out.
+     */
+    public onReadyTimeoutObservable = new Observable<Scene>();
+
+    /**
+     * Duration in milliseconds to wait before triggering the onReadyTimeoutObservable event.
+     */
+    public onReadyTimeoutDuration = 2 * 60 * 1000; // 2 minutes by default
+
+    private _timeoutChecksStartTime: number = 0;
+
+    private _clearReadynessChecksData() {
+        this._timeoutChecksStartTime = 0;
+        this.onReadyTimeoutObservable.clear();
+
+        this.onReadyObservable.clear();
+        this._executeWhenReadyTimeoutId = null;
+    }
+
+    /**
      * @internal
      */
     public _checkIsReady(checkRenderTargets = false) {
         this._registerTransientComponents();
 
-        if (this.isReady(checkRenderTargets)) {
-            this.onReadyObservable.notifyObservers(this);
-
-            this.onReadyObservable.clear();
-            this._executeWhenReadyTimeoutId = null;
+        // Starts counting time from the first check for timeout purposes
+        if (this._timeoutChecksStartTime === 0) {
+            this._timeoutChecksStartTime = PrecisionDate.Now;
+        }
+        // Check for timeout
+        else if (this.onReadyTimeoutDuration > 0 && PrecisionDate.Now - this._timeoutChecksStartTime > this.onReadyTimeoutDuration) {
+            this.onReadyTimeoutObservable.notifyObservers(this);
+            this._clearReadynessChecksData();
             return;
         }
 
+        // Check for readyness
+        if (this.isReady(checkRenderTargets)) {
+            this.onReadyObservable.notifyObservers(this);
+            this._clearReadynessChecksData();
+            return;
+        }
+
+        // Clean up if the scene was disposed in the meantime
         if (this._isDisposed) {
-            this.onReadyObservable.clear();
-            this._executeWhenReadyTimeoutId = null;
+            this._clearReadynessChecksData();
             return;
         }
 
@@ -2789,7 +2819,6 @@ export class Scene implements IAnimatable, IClipPlanesHolder, IAssetContainer {
 
     private _floatingOriginScene: Scene | undefined = undefined;
     /**
-     * @experimental
      * True if floatingOriginMode was passed to engine or this scene creation otions.
      * This mode avoids floating point imprecision in huge coordinate system by offsetting uniform values before passing to shader, centering camera at origin and displacing rest of scene by camera position
      */
@@ -2798,7 +2827,6 @@ export class Scene implements IAnimatable, IClipPlanesHolder, IAssetContainer {
     }
 
     /**
-     * @experimental
      * When floatingOriginMode is enabled, offset is equal to the eye position. Default to ZeroReadonly when mode is disabled.
      */
     public get floatingOriginOffset(): Vector3 {
@@ -2978,8 +3006,9 @@ export class Scene implements IAnimatable, IClipPlanesHolder, IAssetContainer {
             if (!toRemove.parent) {
                 toRemove._removeFromSceneRootNodes();
             }
+
+            this.onLightRemovedObservable.notifyObservers(toRemove);
         }
-        this.onLightRemovedObservable.notifyObservers(toRemove);
         return index;
     }
 
@@ -3994,7 +4023,7 @@ export class Scene implements IAnimatable, IClipPlanesHolder, IAssetContainer {
     }
 
     /**
-     * Gets a the last added node (Mesh, Camera, Light) using a given Id
+     * Gets a the last added node (Mesh, Camera, Light, Bone) using a given Id
      * @param id defines the Id to search for
      * @returns the found node or null if not found at all
      */
@@ -4024,11 +4053,20 @@ export class Scene implements IAnimatable, IClipPlanesHolder, IAssetContainer {
             }
         }
 
+        for (index = this.skeletons.length - 1; index >= 0; index--) {
+            const skeleton = this.skeletons[index];
+            for (let boneIndex = skeleton.bones.length - 1; boneIndex >= 0; boneIndex--) {
+                if (skeleton.bones[boneIndex].id === id) {
+                    return skeleton.bones[boneIndex];
+                }
+            }
+        }
+
         return null;
     }
 
     /**
-     * Gets a node (Mesh, Camera, Light) using a given Id
+     * Gets a node (Mesh, Camera, Light, Bone) using a given Id
      * @param id defines the Id to search for
      * @returns the found node or null if not found at all
      */
@@ -4470,7 +4508,7 @@ export class Scene implements IAnimatable, IClipPlanesHolder, IAssetContainer {
             this._renderWithFrameGraph(true, false, true);
 
             // Freeze all active meshes of all object renderers in the graph
-            const objectRendererTasks = this.frameGraph.getTasksByType(FrameGraphObjectRendererTask);
+            const objectRendererTasks = this.frameGraph.getTasksByClassName<FrameGraphObjectRendererTask>(["FrameGraphObjectRendererTask", "FrameGraphGeometryRendererTask"]);
             for (const task of objectRendererTasks) {
                 task.objectRenderer._freezeActiveMeshes(freezeMeshes);
             }
@@ -4582,7 +4620,7 @@ export class Scene implements IAnimatable, IClipPlanesHolder, IAssetContainer {
         this._freezeActiveMeshesCancel = null;
 
         if (this.frameGraph) {
-            const objectRendererTasks = this.frameGraph.getTasksByType(FrameGraphObjectRendererTask);
+            const objectRendererTasks = this.frameGraph.getTasksByClassName<FrameGraphObjectRendererTask>(["FrameGraphObjectRendererTask", "FrameGraphGeometryRendererTask"]);
             for (const task of objectRendererTasks) {
                 task.objectRenderer._unfreezeActiveMeshes();
             }
@@ -4941,13 +4979,13 @@ export class Scene implements IAnimatable, IClipPlanesHolder, IAssetContainer {
         if (this.renderTargetsEnabled) {
             this._intermediateRendering = true;
 
+            let currentBoundingBoxMeshList: Array<BoundingBox> | undefined;
+
             if (this._renderTargets.length > 0) {
                 Tools.StartPerformanceCounter("Render targets", this._renderTargets.length > 0);
 
                 // The cast to "any" is to avoid an error in ES6 in case you don't import boundingBoxRenderer
                 const boundingBoxRenderer = (this as any).getBoundingBoxRenderer?.() as Nullable<BoundingBoxRenderer>;
-
-                let currentBoundingBoxMeshList: Array<BoundingBox> | undefined;
 
                 for (let renderIndex = 0; renderIndex < this._renderTargets.length; renderIndex++) {
                     const renderTarget = this._renderTargets.data[renderIndex];
@@ -4974,8 +5012,25 @@ export class Scene implements IAnimatable, IClipPlanesHolder, IAssetContainer {
                 this._renderId++;
             }
 
-            for (const step of this._cameraDrawRenderTargetStage) {
-                needRebind = step.action(this.activeCamera) || needRebind;
+            if (this._cameraDrawRenderTargetStage.length > 0) {
+                // The cast to "any" is to avoid an error in ES6 in case you don't import boundingBoxRenderer
+                const boundingBoxRenderer = (this as any).getBoundingBoxRenderer?.() as Nullable<BoundingBoxRenderer>;
+
+                if (boundingBoxRenderer && !currentBoundingBoxMeshList) {
+                    // Saves the current bounding box mesh list (potentially built by the call to _evaluateActiveMeshes above), which can be reset/updated during the loop below
+                    currentBoundingBoxMeshList = boundingBoxRenderer.renderList.length > 0 ? boundingBoxRenderer.renderList.data.slice() : [];
+                    currentBoundingBoxMeshList.length = boundingBoxRenderer.renderList.length;
+                }
+
+                for (const step of this._cameraDrawRenderTargetStage) {
+                    // effect layer call object renderer in this step so bounding box render list must be restored
+                    needRebind = step.action(this.activeCamera) || needRebind;
+                }
+
+                if (boundingBoxRenderer && currentBoundingBoxMeshList) {
+                    boundingBoxRenderer.renderList.data = currentBoundingBoxMeshList;
+                    boundingBoxRenderer.renderList.length = currentBoundingBoxMeshList.length;
+                }
             }
 
             this._intermediateRendering = false;
@@ -5852,10 +5907,12 @@ export class Scene implements IAnimatable, IClipPlanesHolder, IAssetContainer {
             Vector3.CheckExtends(maxBox, min, max);
         }
 
-        return {
-            min: min,
-            max: max,
-        };
+        return min.x === Number.MAX_VALUE
+            ? { min: Vector3.Zero(), max: Vector3.Zero() }
+            : {
+                  min: min,
+                  max: max,
+              };
     }
 
     // Picking

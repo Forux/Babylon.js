@@ -254,7 +254,8 @@ export class LightBlock extends NodeMaterialBlock {
                 uniformBuffers,
                 onlyUpdateBuffersList,
                 defines["IESLIGHTTEXTURE" + lightIndex],
-                defines["CLUSTLIGHT" + lightIndex]
+                defines["CLUSTLIGHT" + lightIndex],
+                defines["RECTAREALIGHTEMISSIONTEXTURE" + lightIndex]
             );
         }
     }
@@ -276,6 +277,7 @@ export class LightBlock extends NodeMaterialBlock {
     private _injectVertexCode(state: NodeMaterialBuildState) {
         const worldPos = this.worldPosition;
         const comments = `//${this.name}`;
+        const scene = state.sharedData.nodeMaterial.getScene();
 
         // Declaration
         if (!this.light) {
@@ -321,7 +323,7 @@ export class LightBlock extends NodeMaterialBlock {
                 state._emitVaryingFromString("vViewDepth", NodeMaterialBlockConnectionPointTypes.Float);
                 state.compilationString +=
                     (state.shaderLanguage === ShaderLanguage.WGSL ? "vertexOutputs." : "") +
-                    `vViewDepth = (${this.view.associatedVariableName} * ${worldPos.associatedVariableName}).z;\n`;
+                    `vViewDepth = ${scene.useRightHandedSystem ? "-" : ""}(${this.view.associatedVariableName} * ${worldPos.associatedVariableName}).z;\n`;
             }
             state.compilationString += state._emitCodeFromInclude("shadowsVertex", comments, {
                 repeatKey: "maxSimultaneousLights",

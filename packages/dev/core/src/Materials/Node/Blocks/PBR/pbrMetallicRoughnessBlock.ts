@@ -848,7 +848,8 @@ export class PBRMetallicRoughnessBlock extends NodeMaterialBlock {
                 uniformBuffers,
                 onlyUpdateBuffersList,
                 defines["IESLIGHTTEXTURE" + lightIndex],
-                defines["CLUSTLIGHT" + lightIndex]
+                defines["CLUSTLIGHT" + lightIndex],
+                defines["RECTAREALIGHTEMISSIONTEXTURE" + lightIndex]
             );
         }
     }
@@ -911,6 +912,7 @@ export class PBRMetallicRoughnessBlock extends NodeMaterialBlock {
         const worldNormal = this.worldNormal;
         const comments = `//${this.name}`;
         const isWebGPU = state.shaderLanguage === ShaderLanguage.WGSL;
+        const scene = state.sharedData.nodeMaterial.getScene();
 
         // Declaration
         if (!this.light) {
@@ -974,7 +976,7 @@ export class PBRMetallicRoughnessBlock extends NodeMaterialBlock {
                 state._emitVaryingFromString("vViewDepth", NodeMaterialBlockConnectionPointTypes.Float);
                 state.compilationString +=
                     (state.shaderLanguage === ShaderLanguage.WGSL ? "vertexOutputs." : "") +
-                    `vViewDepth = (${this.view.associatedVariableName} * ${worldPos.associatedVariableName}).z;\n`;
+                    `vViewDepth = ${scene.useRightHandedSystem ? "-" : ""}(${this.view.associatedVariableName} * ${worldPos.associatedVariableName}).z;\n`;
             }
             state.compilationString += state._emitCodeFromInclude("shadowsVertex", comments, {
                 repeatKey: "maxSimultaneousLights",

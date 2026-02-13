@@ -1,41 +1,47 @@
 import { GeospatialCameraInputsManager } from "./geospatialCameraInputsManager";
 import { Vector3, Matrix, TmpVectors } from "../Maths/math.vector";
+import type { Vector2 } from "../Maths/math.vector";
 import { Epsilon } from "../Maths/math.constants";
 import { Camera } from "./camera";
+import { serialize, serializeAsVector3 } from "../Misc/decorators";
 import type { Scene } from "../scene";
 import type { MeshPredicate } from "../Culling/ray.core";
 import type { DeepImmutable } from "../types";
 import { GeospatialLimits } from "./Limits/geospatialLimits";
 import { ClampCenterFromPolesInPlace, ComputeLocalBasisToRefs, GeospatialCameraMovement } from "./geospatialCameraMovement";
 import type { IVector3Like } from "../Maths/math.like";
-import { Vector3CopyToRef, Vector3Dot } from "../Maths/math.vector.functions";
-import { Clamp } from "../Maths/math.scalar.functions";
+import { Vector3CopyToRef, Vector3Distance, Vector3Dot, Vector3SubtractToRef } from "../Maths/math.vector.functions";
+import { Clamp, NormalizeRadians } from "../Maths/math.scalar.functions";
 import type { AllowedAnimValue } from "../Behaviors/Cameras/interpolatingBehavior";
 import { InterpolatingBehavior } from "../Behaviors/Cameras/interpolatingBehavior";
+import type { Collider } from "../Collisions/collider";
 import type { EasingFunction } from "../Animations/easing";
+import type { Animation } from "../Animations/animation";
+import { RegisterClass } from "../Misc/typeStore";
 
-type CameraOptions = {
-    planetRadius: number; // Radius of the planet
+export type GeospatialCameraOptions = {
+    /**
+     * Radius of the planet being orbited
+     */
+    planetRadius: number;
+    /**
+     * If supplied, will be used by the movement class when picking the globe. Can later update camera.movement.pickPredicate directly
+     */
+    pickPredicate?: MeshPredicate;
 };
 
 /**
- * @experimental
- * This camera's movements are limited to a camera orbiting a globe, and as the API evolves it will introduce conversions between cartesian coordinates and true lat/long/alt
- *
- * Please note this is marked as experimental and the API (including the constructor!) will change until we remove that flag
+ * Camera equipped to orbit a spherical planet centered at world origin
  */
 export class GeospatialCamera extends Camera {
     override inputs: GeospatialCameraInputsManager;
-
-    /** If supplied, will be used when picking the globe */
-    public pickPredicate?: MeshPredicate;
 
     /** Movement controller that turns input pixelDeltas into currentFrameDeltas used by camera*/
     public readonly movement: GeospatialCameraMovement;
 
     // Temp vars
     private _tempPosition: Vector3 = new Vector3();
-    private _tempCenter = new Vector3();
+    private _tempCenter: Vector3 = new Vector3();
 
     private _viewMatrix = new Matrix();
     private _isViewMatrixDirty: boolean;
@@ -45,7 +51,16 @@ export class GeospatialCamera extends Camera {
     private _flyingBehavior: InterpolatingBehavior<GeospatialCamera>;
     private _flyToTargets: Map<keyof GeospatialCamera, AllowedAnimValue> = new Map();
 
-    constructor(name: string, scene: Scene, options: CameraOptions, pickPredicate?: MeshPredicate) {
+    // Collision properties
+    private _collider?: Collider;
+    private _collisionVelocity: Vector3 = new Vector3();
+    /** Public option to customize the collision offset applied each frame - vs the one calculated using internal CollisionCoordinator */
+    public perFrameCollisionOffset: Vector3 = new Vector3();
+    /** Enable or disable collision checking for this camera. Default is false. */
+    @serialize()
+    public checkCollisions: boolean = false;
+
+    constructor(name: string, scene: Scene, options: GeospatialCameraOptions) {
         super(name, new Vector3(), scene);
 
         this._limits = new GeospatialLimits(options.planetRadius);
@@ -54,13 +69,13 @@ export class GeospatialCamera extends Camera {
         this._flyingBehavior = new InterpolatingBehavior();
         this.addBehavior(this._flyingBehavior);
 
-        this.movement = new GeospatialCameraMovement(scene, this._limits, this.position, this.center, this._lookAtVector, pickPredicate, this._flyingBehavior);
+        this.movement = new GeospatialCameraMovement(scene, this._limits, this.position, this.center, this._lookAtVector, options.pickPredicate, this._flyingBehavior);
 
-        this.pickPredicate = pickPredicate;
         this.inputs = new GeospatialCameraInputsManager(this);
         this.inputs.addMouse().addMouseWheel().addKeyboard();
     }
 
+    @serializeAsVector3()
     private _center: Vector3 = new Vector3();
     /** The point on the globe that we are anchoring around. If no alternate rotation point is supplied, this will represent the center of screen*/
     public get center(): Vector3 {
@@ -76,6 +91,7 @@ export class GeospatialCamera extends Camera {
         this._setOrientation(this._yaw, this._pitch, this._radius, this._center);
     }
 
+    @serialize()
     private _yaw: number = 0;
     /**
      * Gets the camera's yaw (rotation around the geocentric normal) in radians
@@ -85,13 +101,14 @@ export class GeospatialCamera extends Camera {
     }
 
     /**
-     * Sets the camera's yaw (rotation around the geocentric normal)
+     * Sets the camera's yaw (rotation around the geocentric normal). Will wrap value to [-π, π)
      * @param yaw The desired yaw angle in radians (0 = north, π/2 = east)
      */
     public set yaw(yaw: number) {
-        this._setOrientation(yaw, this.pitch, this.radius, this.center);
+        yaw !== this._yaw && this._setOrientation(yaw, this.pitch, this.radius, this.center);
     }
 
+    @serialize()
     private _pitch: number = 0;
 
     /**
@@ -106,13 +123,14 @@ export class GeospatialCamera extends Camera {
     }
 
     /**
-     * Sets the camera's pitch (angle from looking straight at globe)
+     * Sets the camera's pitch (angle from looking straight at globe). Will wrap value to [-π, π)
      * @param pitch The desired pitch angle in radians (0 = looking at planet center, π/2 = looking at horizon)
      */
     public set pitch(pitch: number) {
-        this._setOrientation(this.yaw, pitch, this.radius, this.center);
+        pitch !== this._pitch && this._setOrientation(this.yaw, pitch, this.radius, this.center);
     }
 
+    @serialize()
     private _radius: number = 0;
     public get radius(): number {
         return this._radius;
@@ -123,15 +141,16 @@ export class GeospatialCamera extends Camera {
      * @param radius The desired radius
      */
     public set radius(radius: number) {
-        this._setOrientation(this.yaw, this.pitch, radius, this.center);
+        radius !== this._radius && this._setOrientation(this.yaw, this.pitch, radius, this.center);
     }
 
     protected _checkLimits() {
         const limits = this.limits;
         this._yaw = Clamp(this._yaw, limits.yawMin, limits.yawMax);
-        this._pitch = Clamp(this._pitch, limits.pitchMin, limits.pitchMax);
+        const effectivePitchMax = limits.getEffectivePitchMax(this._radius);
+        this._pitch = Clamp(this._pitch, limits.pitchMin, effectivePitchMax);
         this._radius = Clamp(this._radius, limits.radiusMin, limits.radiusMax);
-        this._center = ClampCenterFromPolesInPlace(this._center);
+        ClampCenterFromPolesInPlace(this._center);
     }
 
     private _tempVect = new Vector3();
@@ -140,8 +159,9 @@ export class GeospatialCamera extends Camera {
     private _tempUp = new Vector3();
 
     private _setOrientation(yaw: number, pitch: number, radius: number, center: DeepImmutable<IVector3Like>): void {
-        this._yaw = yaw;
-        this._pitch = pitch;
+        // Wrap yaw and pitch to [-π, π)
+        this._yaw = NormalizeRadians(yaw);
+        this._pitch = NormalizeRadians(pitch);
         this._radius = radius;
 
         Vector3CopyToRef(center, this._center);
@@ -150,46 +170,45 @@ export class GeospatialCamera extends Camera {
         this._checkLimits();
 
         // Refresh local basis at center (treat these as read-only for the whole call)
-        ComputeLocalBasisToRefs(this._center, this._tempEast, this._tempNorth, this._tempUp);
+        ComputeLocalBasisToRefs(this._center, this._tempEast, this._tempNorth, this._tempUp, this._scene.useRightHandedSystem);
 
-        // Trig
-        const yawScale = this._scene.useRightHandedSystem ? 1 : -1;
-        const cosYaw = Math.cos(this._yaw * yawScale);
-        const sinYaw = Math.sin(this._yaw * yawScale);
-        const sinPitch = Math.sin(this._pitch); // horizontal weight
-        const cosPitch = Math.cos(this._pitch); // vertical weight (toward center)
-
-        // Temps
-        const horiz = TmpVectors.Vector3[0];
-        const t1 = TmpVectors.Vector3[1];
-        const t2 = TmpVectors.Vector3[2];
-        const right = TmpVectors.Vector3[3];
-
-        // horizontalDirection = North*cosYaw + East*sinYaw  (avoids mutating _temp basis vectors)
-        horiz.copyFrom(this._tempNorth).scaleInPlace(cosYaw).addInPlace(t1.copyFrom(this._tempEast).scaleInPlace(sinYaw));
-
-        // look = horiz*sinPitch - Up*cosPitch
-        this._lookAtVector.copyFrom(horiz).scaleInPlace(sinPitch).addInPlace(t2.copyFrom(this._tempUp).scaleInPlace(-cosPitch)).normalize(); // keep it unit
+        // Compute lookAt from yaw/pitch
+        ComputeLookAtFromYawPitchToRef(this._yaw, this._pitch, this._center, this._scene.useRightHandedSystem, this._lookAtVector);
 
         // Build an orthonormal up aligned with geocentric Up
-        // right = normalize(cross(upRef, look))
+        // When looking straight down (pitch ≈ 0), lookAt is parallel to Up, so use the horizontal direction as the camera's up.
+        const right = TmpVectors.Vector3[10];
         Vector3.CrossToRef(this._tempUp, this._lookAtVector, right);
+        if (right.lengthSquared() < Epsilon) {
+            // horiz = north * cos(yaw) + east * sin(yaw)
+            // Using tempEast directly ensures handedness is taken into account
+            const horiz = TmpVectors.Vector3[11];
+            const t1 = TmpVectors.Vector3[12];
+            horiz
+                .copyFrom(this._tempNorth)
+                .scaleInPlace(Math.cos(this._yaw))
+                .addInPlace(t1.copyFrom(this._tempEast).scaleInPlace(Math.sin(this._yaw)));
+            // right = cross(horiz, lookAt)
+            Vector3.CrossToRef(horiz, this._lookAtVector, right);
+        }
+        right.normalize();
 
         // up = normalize(cross(look, right))
         Vector3.CrossToRef(this._lookAtVector, right, this.upVector);
+        this.upVector.normalize();
 
         // Position = center - look * radius  (preserve unit look)
         this._tempVect.copyFrom(this._lookAtVector).scaleInPlace(-this._radius);
         this._tempPosition.copyFrom(this._center).addInPlace(this._tempVect);
 
+        // Recalculate collisionOffset to be applied later when viewMatrix is calculated (allowing camera users to modify the value in afterCheckInputsObservable)
+        if (this.checkCollisions) {
+            this.perFrameCollisionOffset = this._getCollisionOffset(this._tempPosition);
+        }
+
         this._position.copyFrom(this._tempPosition);
 
         this._isViewMatrixDirty = true;
-    }
-
-    /** The point around which the camera will geocentrically rotate. Uses center (pt we are anchored to) if no alternateRotationPt is defined */
-    private get _geocentricRotationPt(): Vector3 {
-        return this.movement.alternateRotationPt ?? this.center;
     }
 
     /**
@@ -204,10 +223,12 @@ export class GeospatialCamera extends Camera {
     public updateFlyToDestination(targetYaw?: number, targetPitch?: number, targetRadius?: number, targetCenter?: Vector3): void {
         this._flyToTargets.clear();
 
-        this._flyToTargets.set("yaw", targetYaw);
-        this._flyToTargets.set("pitch", targetPitch);
+        // For yaw, use shortest path to target.
+        const deltaYaw = targetYaw !== undefined ? NormalizeRadians(NormalizeRadians(targetYaw) - this._yaw) : 0;
+        this._flyToTargets.set("yaw", deltaYaw === 0 ? undefined : this._yaw + deltaYaw);
+        this._flyToTargets.set("pitch", targetPitch != undefined ? NormalizeRadians(targetPitch) : undefined);
         this._flyToTargets.set("radius", targetRadius);
-        this._flyToTargets.set("center", targetCenter);
+        this._flyToTargets.set("center", targetCenter?.clone());
 
         this._flyingBehavior.updateProperties(this._flyToTargets);
     }
@@ -220,6 +241,7 @@ export class GeospatialCamera extends Camera {
      * @param targetCenter
      * @param flightDurationMs
      * @param easingFunction
+     * @param centerHopScale If supplied, will define the parabolic hop height scale for center animation to create a "bounce" effect
      * @returns Promise that will return when the animation is complete (or interuppted by pointer input)
      */
     public async flyToAsync(
@@ -228,30 +250,63 @@ export class GeospatialCamera extends Camera {
         targetRadius?: number,
         targetCenter?: Vector3,
         flightDurationMs: number = 1000,
-        easingFunction?: EasingFunction
+        easingFunction?: EasingFunction,
+        centerHopScale?: number
     ): Promise<void> {
         this._flyToTargets.clear();
 
-        this._flyToTargets.set("yaw", targetYaw);
-        this._flyToTargets.set("pitch", targetPitch);
+        // For yaw, use shortest path to target.
+        const deltaYaw = targetYaw !== undefined ? NormalizeRadians(NormalizeRadians(targetYaw) - this._yaw) : 0;
+        this._flyToTargets.set("yaw", deltaYaw === 0 ? undefined : this._yaw + deltaYaw);
+        this._flyToTargets.set("pitch", targetPitch !== undefined ? NormalizeRadians(targetPitch) : undefined);
         this._flyToTargets.set("radius", targetRadius);
-        this._flyToTargets.set("center", targetCenter);
+        this._flyToTargets.set("center", targetCenter?.clone());
 
-        return await this._flyingBehavior.animatePropertiesAsync(this._flyToTargets, flightDurationMs, easingFunction);
+        let overrideAnimationFunction;
+        if (targetCenter !== undefined && !targetCenter.equals(this.center)) {
+            // Animate center directly with custom interpolation
+            overrideAnimationFunction = (key: string, animation: Animation): void => {
+                if (key === "center") {
+                    // Override the Vector3 interpolation to use SLERP + hop
+                    animation.vector3InterpolateFunction = (startValue, endValue, gradient) => {
+                        // gradient is the eased value (0 to 1) after easing function is applied
+
+                        // Slerp between start and end
+                        const newCenter = Vector3.SlerpToRef(startValue, endValue, gradient, this._tempCenter);
+
+                        // Apply parabolic hop if requested
+                        if (centerHopScale && centerHopScale > 0) {
+                            // Parabolic formula: peaks at t=0.5, returns to 0 at gradient=0 and gradient=1
+                            // if hopPeakT = .5 the denominator would be hopPeakT * hopPeakT - hopPeakT, which = -.25
+                            const hopPeakOffset = centerHopScale * Vector3Distance(startValue, endValue);
+                            const hopOffset = hopPeakOffset * Clamp((gradient * gradient - gradient) / -0.25);
+                            // Scale the center outward (away from origin)
+                            newCenter.scaleInPlace(1 + hopOffset / newCenter.length());
+                        }
+
+                        return newCenter;
+                    };
+                }
+            };
+        }
+
+        return await this._flyingBehavior.animatePropertiesAsync(this._flyToTargets, flightDurationMs, easingFunction, overrideAnimationFunction);
     }
 
     /**
-     * Helper function to move camera towards a given point by radiusScale% of radius (by default 50%)
+     * Helper function to move camera towards a given point by `distanceScale` of the current camera-to-destination distance (by default 50%).
      * @param destination point to move towards
-     * @param radiusScale value between 0 and 1, % of radius to move
+     * @param distanceScale value between 0 and 1, % of distance to move
      * @param durationMs duration of flight, default 1s
      * @param easingFn optional easing function for flight interpolation of properties
+     * @param centerHopScale If supplied, will define the parabolic hop height scale for center animation to create a "bounce" effect
      */
-    public async flyToPointAsync(destination: Vector3, radiusScale: number = 0.5, durationMs: number = 1000, easingFn?: EasingFunction) {
-        const direction = destination.subtractToRef(this.position, this._tempPosition).normalize();
-        // Zoom to radiusScale% of radius towards the given destination point
-        const newRadius = this._getRadiusAndCenterFromZoomTowards(direction, this.radius * radiusScale, this._tempCenter);
-        await this.flyToAsync(undefined, undefined, newRadius, this._tempCenter, durationMs, easingFn);
+    public async flyToPointAsync(destination: Vector3, distanceScale: number = 0.5, durationMs: number = 1000, easingFn?: EasingFunction, centerHopScale?: number) {
+        // Move by a fraction of the camera-to-destination distance
+        const zoomDistance = Vector3Distance(this.position, destination) * distanceScale;
+        const newRadius = this._getCenterAndRadiusFromZoomToPoint(destination, zoomDistance, this._tempCenter);
+        await this.flyToAsync(undefined, undefined, newRadius, this._tempCenter, durationMs, easingFn, centerHopScale);
+        !this.isDisposed() && this._recalculateCenter(false, true /** force */);
     }
 
     private _limits: GeospatialLimits;
@@ -261,8 +316,7 @@ export class GeospatialCamera extends Camera {
 
     private _resetToDefault(limits: GeospatialLimits): void {
         // Camera configuration vars
-        const maxCameraRadius = limits.altitudeMax !== undefined ? limits.planetRadius + limits.altitudeMax : undefined;
-        const restingAltitude = maxCameraRadius ?? limits.planetRadius * 4;
+        const restingAltitude = limits.radiusMax !== Infinity ? limits.radiusMax : limits.planetRadius * 4;
         this.position.copyFromFloats(restingAltitude, 0, 0);
         this._center.copyFromFloats(limits.planetRadius, 0, 0);
         this._radius = Vector3.Distance(this.position, this.center);
@@ -289,6 +343,11 @@ export class GeospatialCamera extends Camera {
         // Ensure vectors are normalized
         this.upVector.normalize();
         this._lookAtVector.normalize();
+
+        // Apply the same offset to both position and center to preserve orbital relationship
+        // This keeps yaw/pitch/radius intact - just lifts the whole "rig"
+        this._position.addInPlace(this.perFrameCollisionOffset);
+        this._center.addInPlace(this.perFrameCollisionOffset);
 
         // Calculate view matrix with camera position and center
         if (this.getScene().useRightHandedSystem) {
@@ -329,70 +388,176 @@ export class GeospatialCamera extends Camera {
             const pitch = rotationDeltaCurrentFrame.x !== 0 ? Clamp(this._pitch + rotationDeltaCurrentFrame.x, 0, 0.5 * Math.PI - Epsilon) : this._pitch;
             const yaw = rotationDeltaCurrentFrame.y !== 0 ? this._yaw + rotationDeltaCurrentFrame.y : this._yaw;
 
-            // TODO: If _geocentricRotationPt is not the center, this will need to be adjusted.
-            this._setOrientation(yaw, pitch, this._radius, this._geocentricRotationPt);
+            this._setOrientation(yaw, pitch, this._radius, this._center);
         }
     }
 
-    private _getRadiusAndCenterFromZoomTowards(zoomVector: Vector3, distance: number, centerRef: Vector3): number {
-        // TODO this function will be re-worked shortly after checkin, becuase today it breaks down if you zoom to a point past the center
-        // (ex: tilted view zooming towards cursor near horizon where the center is closer than the cursor point).
+    private _getCenterAndRadiusFromZoomToPoint(targetPoint: DeepImmutable<IVector3Like>, distance: number, newCenterResult: Vector3): number {
+        const directionToTarget = Vector3SubtractToRef(targetPoint, this._position, TmpVectors.Vector3[0]);
+        const distanceToTarget = directionToTarget.length();
 
-        // Project zoom vector onto lookAt vector to find the amount the camera-to-center distance should change.
-        // - zoom vector is normalized
-        // - distance is how much to move in this call
-        const directionDotLookAt = Vector3Dot(zoomVector, this._lookAtVector);
-        const hasRadialComponent = Math.abs(directionDotLookAt) > Epsilon;
-        const requestedRadius = hasRadialComponent ? this._radius - distance * directionDotLookAt : this._radius;
-        const newRadius = Clamp(requestedRadius, this.limits.radiusMin, this.limits.radiusMax);
-        const actualRadiusChange = newRadius - this._radius;
-        const actualDistanceChange = hasRadialComponent ? actualRadiusChange / directionDotLookAt : 0;
+        // Don't zoom past the min radius limit.
+        if (distanceToTarget < this.limits.radiusMin) {
+            newCenterResult.copyFrom(this._center);
+            const requestedRadius = this._radius - distance;
+            const newRadius = Clamp(requestedRadius, this.limits.radiusMin, this.limits.radiusMax);
+            return newRadius;
+        }
 
-        // Use this to compute new camera position and new center position.
-        const newCameraPosition = this._position.add(zoomVector.scale(-actualDistanceChange));
-        const newCenter = newCameraPosition.add(this._lookAtVector.scaleToRef(newRadius, TmpVectors.Vector3[3]));
+        // Move the camera position towards targetPoint by distanceToTarget
+        directionToTarget.scaleInPlace(distance / distanceToTarget);
+        const newPosition = this._position.addToRef(directionToTarget, TmpVectors.Vector3[1]);
 
-        // Rescale new center to maintain same altitude as the old center.
-        const currentCenterRadius = this._center.length();
-        const newCenterRadius = newCenter.length();
-        const newCenterRescale = currentCenterRadius / newCenterRadius;
-        newCenter.scaleInPlace(newCenterRescale);
+        // Project the movement onto the look vector to derive the new center/radius.
+        const projectedDistance = Vector3Dot(directionToTarget, this._lookAtVector);
+        const newRadius = this._radius - projectedDistance;
+        const newRadiusClamped = Clamp(newRadius, this.limits.radiusMin, this.limits.radiusMax);
+        newCenterResult.copyFrom(newPosition).addInPlace(this._lookAtVector.scale(newRadiusClamped));
 
-        // Copy new center to ref
-        Vector3CopyToRef(newCenter, centerRef);
-
-        // Return new radius
-        return newRadius;
+        return newRadiusClamped;
     }
 
-    private _applyZoom(zoomVector: Vector3, distance: number) {
-        const newRadius = this._getRadiusAndCenterFromZoomTowards(zoomVector, distance, this._tempVect);
+    /**
+     * Apply zoom by moving the camera toward/away from a target point.
+     */
+    private _applyZoom() {
+        let zoomDelta = this.movement.zoomDeltaCurrentFrame;
+        const pickedPoint = this.movement.computedPerFrameZoomPickPoint;
 
-        // Apply changes
-        this._setOrientation(this._yaw, this._pitch, newRadius, this._tempVect);
+        // Clamp zoom delta to limits before applying
+        zoomDelta = this._clampZoomDelta(zoomDelta, pickedPoint);
+
+        if (Math.abs(zoomDelta) < Epsilon) {
+            return;
+        }
+        if (pickedPoint) {
+            // Zoom toward the picked point under cursor
+            this.zoomToPoint(pickedPoint, zoomDelta);
+        } else {
+            // Zoom along lookAt vector (fallback when no surface under cursor)
+            this.zoomAlongLookAt(zoomDelta);
+        }
+    }
+
+    private _clampZoomDelta(zoomDelta: number, pickedPoint?: Vector3): number {
+        if (Math.abs(zoomDelta) < Epsilon) {
+            return 0;
+        }
+
+        const distanceToTarget = pickedPoint ? Vector3Distance(this._position, pickedPoint) : undefined;
+        return this.limits.clampZoomDistance(zoomDelta, this._radius, distanceToTarget);
+    }
+
+    public zoomToPoint(targetPoint: DeepImmutable<IVector3Like>, distance: number) {
+        const newRadius = this._getCenterAndRadiusFromZoomToPoint(targetPoint, distance, this._tempCenter);
+        // Apply the new orientation
+        this._setOrientation(this._yaw, this._pitch, newRadius, this._tempCenter);
+    }
+
+    public zoomAlongLookAt(distance: number) {
+        // Clamp radius to limits
+        const requestedRadius = this._radius - distance;
+        const newRadius = Clamp(requestedRadius, this.limits.radiusMin, this.limits.radiusMax);
+
+        // Simply change radius without moving center
+        this._setOrientation(this._yaw, this._pitch, newRadius, this._center);
     }
 
     override _checkInputs(): void {
         this.inputs.checkInputs();
+        this.perFrameCollisionOffset.setAll(0);
 
         // Let movement class handle all per-frame logic
         this.movement.computeCurrentFrameDeltas();
 
+        let isCenterMoving = false;
         if (this.movement.panDeltaCurrentFrame.lengthSquared() > 0) {
             this._applyGeocentricTranslation();
-            this._isViewMatrixDirty = true;
+            // After a drag, recalculate the center point to ensure it's still on the surface.
+            isCenterMoving = true;
         }
         if (this.movement.rotationDeltaCurrentFrame.lengthSquared() > 0) {
             this._applyGeocentricRotation();
-            this._isViewMatrixDirty = true;
         }
 
         if (Math.abs(this.movement.zoomDeltaCurrentFrame) > Epsilon) {
-            this._applyZoom(this.movement.computedPerFrameZoomVector, this.movement.zoomDeltaCurrentFrame);
-            this._isViewMatrixDirty = true;
+            this._applyZoom();
+            isCenterMoving = true;
         }
 
+        // After a movement impacting center or radius, recalculate the center point to ensure it's still on the surface.
+        this._recalculateCenter(isCenterMoving);
+
         super._checkInputs();
+    }
+
+    private _wasCenterMovingLastFrame = false;
+
+    private _recalculateCenter(isCenterMoving: boolean, forceRecalculate: boolean = false): void {
+        const shouldRecalculateCenterAfterMove = this._wasCenterMovingLastFrame && !isCenterMoving;
+        this._wasCenterMovingLastFrame = isCenterMoving;
+
+        // Wait until movement impacting center is complete to avoid wasted raycasting
+        if (shouldRecalculateCenterAfterMove || forceRecalculate) {
+            const newCenter = this.movement.pickAlongVector(this._lookAtVector);
+            if (newCenter?.pickedPoint) {
+                // Direction from new center to origin
+                const centerToOrigin = TmpVectors.Vector3[4];
+                centerToOrigin.copyFrom(newCenter.pickedPoint).negateInPlace().normalize();
+
+                // Check if this direction aligns with camera's lookAt vector
+                const dotProduct = Vector3Dot(this._lookAtVector, centerToOrigin);
+
+                // Only update if the center is looking toward the origin (dot product > 0) to avoid a center on the opposite side of globe
+                if (dotProduct > 0) {
+                    // Compute the new radius as distance from camera position to new center
+                    const newRadius = Vector3Distance(this._position, newCenter.pickedPoint);
+
+                    // Only update if the new center is in front of the camera
+                    if (newRadius > Epsilon) {
+                        // Compute yaw/pitch that correspond to current lookAt at new center
+                        const yawPitch = TmpVectors.Vector2[0];
+                        ComputeYawPitchFromLookAtToRef(this._lookAtVector, newCenter.pickedPoint, this._scene.useRightHandedSystem, this._yaw, yawPitch);
+
+                        // Call _setOrientation with the computed yaw/pitch and new center
+                        this._setOrientation(yawPitch.x, yawPitch.y, newRadius, newCenter.pickedPoint);
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * Allows extended classes to override how collision offset is calculated
+     * @param newPosition
+     * @returns
+     */
+    protected _getCollisionOffset(newPosition: Vector3): Vector3 {
+        const collisionOffset = TmpVectors.Vector3[6].setAll(0);
+        if (!this.checkCollisions || !this._scene.collisionsEnabled) {
+            return collisionOffset;
+        }
+
+        const coordinator = this.getScene().collisionCoordinator;
+        if (!coordinator) {
+            return collisionOffset;
+        }
+
+        if (!this._collider) {
+            this._collider = coordinator.createCollider();
+        }
+        this._collider._radius.setAll(this.limits.radiusMin);
+
+        // Calculate velocity from old position to new position
+        newPosition.subtractToRef(this._position, this._collisionVelocity);
+
+        // Get the collision-adjusted position
+        const adjustedPosition = coordinator.getNewPosition(this._position, this._collisionVelocity, this._collider, 3, null, () => {}, this.uniqueId);
+
+        // Calculate the collision offset (how much the position was pushed)
+        adjustedPosition.subtractToRef(newPosition, collisionOffset);
+
+        return collisionOffset;
     }
 
     override attachControl(noPreventDefault?: boolean): void {
@@ -402,4 +567,106 @@ export class GeospatialCamera extends Camera {
     override detachControl(): void {
         this.inputs.detachElement();
     }
+
+    /**
+     * Gets the class name of the camera.
+     * @returns the class name
+     */
+    public override getClassName(): string {
+        return "GeospatialCamera";
+    }
+}
+
+// Register Class Name
+RegisterClass("BABYLON.GeospatialCamera", GeospatialCamera);
+
+/**
+ * Compute the lookAt direction vector from yaw and pitch angles at a given center point.
+ * This is the forward formula used by GeospatialCamera._setOrientation.
+ * @param yaw - The yaw angle in radians (0 = north, π/2 = east)
+ * @param pitch - The pitch angle in radians (0 = looking at planet center, π/2 = looking at horizon)
+ * @param center - The center point on the globe
+ * @param useRightHandedSystem - Whether the scene uses a right-handed coordinate system
+ * @param result - The vector to store the result in
+ * @returns The normalized lookAt direction vector (same as result)
+ */
+export function ComputeLookAtFromYawPitchToRef(yaw: number, pitch: number, center: Vector3, useRightHandedSystem: boolean, result: Vector3): Vector3 {
+    const east = TmpVectors.Vector3[0];
+    const north = TmpVectors.Vector3[1];
+    const up = TmpVectors.Vector3[2];
+    ComputeLocalBasisToRefs(center, east, north, up, useRightHandedSystem);
+
+    const sinPitch = Math.sin(pitch);
+    const cosPitch = Math.cos(pitch);
+
+    // horiz = north * cos(yaw) + east * sin(yaw)
+    // Handedness is taken into account when defining east vector via ComputeLocalBasisToRefs.
+    const horiz = TmpVectors.Vector3[3];
+    const t1 = TmpVectors.Vector3[4];
+    horiz
+        .copyFrom(north)
+        .scaleInPlace(Math.cos(yaw))
+        .addInPlace(t1.copyFrom(east).scaleInPlace(Math.sin(yaw)));
+
+    // lookAt = horiz * sinPitch - up * cosPitch
+    const t2 = TmpVectors.Vector3[5];
+    result.copyFrom(horiz).scaleInPlace(sinPitch).addInPlace(t2.copyFrom(up).scaleInPlace(-cosPitch));
+    return result.normalize();
+}
+
+/**
+ * Given a lookAt direction and center, compute the yaw and pitch angles that would produce that lookAt.
+ * This is the inverse of ComputeLookAtFromYawPitchToRef.
+ * @param lookAt - The normalized lookAt direction vector
+ * @param center - The center point on the globe
+ * @param useRightHandedSystem - Whether the scene uses a right-handed coordinate system
+ * @param currentYaw - The current yaw value to use as fallback when pitch is near 0 (looking straight down/up)
+ * @param result - The Vector2 to store the result in (x = yaw, y = pitch)
+ * @returns The result Vector2
+ */
+export function ComputeYawPitchFromLookAtToRef(lookAt: Vector3, center: Vector3, useRightHandedSystem: boolean, currentYaw: number, result: Vector2): Vector2 {
+    // Compute local basis at center
+    const east = TmpVectors.Vector3[6];
+    const north = TmpVectors.Vector3[7];
+    const up = TmpVectors.Vector3[8];
+    ComputeLocalBasisToRefs(center, east, north, up, useRightHandedSystem);
+
+    // lookAt = horiz*sinPitch - up*cosPitch
+    // where horiz = north*cos(yaw) + east*sin(yaw)
+    //
+    // The vertical component of lookAt (along up) gives us cosPitch:
+    // lookAt · up = -cosPitch
+    const lookDotUp = Vector3Dot(lookAt, up);
+    const cosPitch = -lookDotUp;
+
+    // Clamp cosPitch to valid range to avoid NaN from acos
+    const clampedCosPitch = Clamp(cosPitch, -1, 1);
+    const pitch = Math.acos(clampedCosPitch);
+
+    // The horizontal component gives us yaw
+    // lookHorizontal = lookAt + up*cosPitch = horiz*sinPitch
+    const lookHorizontal = TmpVectors.Vector3[9];
+    const scaledUp = TmpVectors.Vector3[10];
+    scaledUp.copyFrom(up).scaleInPlace(cosPitch);
+    lookHorizontal.copyFrom(lookAt).addInPlace(scaledUp);
+
+    const sinPitch = Math.sin(pitch);
+    if (Math.abs(sinPitch) < Epsilon) {
+        // Looking straight down or up, yaw is undefined - keep current
+        result.x = currentYaw;
+        result.y = pitch;
+        return result;
+    }
+
+    // horiz = lookHorizontal / sinPitch
+    const horiz = lookHorizontal.scaleInPlace(1 / sinPitch);
+
+    // From the forward formula: horiz = North*cos(yaw) + East*sin(yaw)
+    // So: cosYaw = horiz · north, sinYaw = horiz · east
+    const cosYaw = Vector3Dot(horiz, north);
+    const sinYaw = Vector3Dot(horiz, east);
+
+    result.x = Math.atan2(sinYaw, cosYaw);
+    result.y = pitch;
+    return result;
 }

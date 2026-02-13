@@ -14,9 +14,6 @@ import type { InterpolatingBehavior } from "../Behaviors/Cameras/interpolatingBe
 import type { GeospatialCamera } from "./geospatialCamera";
 
 /**
- * @experimental
- * This class is subject to change as the geospatial camera evolves.
- *
  * Geospatial-specific camera movement system that extends the base movement with
  * raycasting and altitude-aware zoom constraints.
  *
@@ -31,18 +28,13 @@ import type { GeospatialCamera } from "./geospatialCamera";
 export class GeospatialCameraMovement extends CameraMovement {
     /** Predicate function to determine which meshes to pick against (e.g., globe mesh) */
     public pickPredicate?: MeshPredicate;
-    public computedPerFrameZoomVector: Vector3 = new Vector3();
+
+    /** World-space picked point under cursor for zoom-to-cursor behavior (may be undefined) */
+    public computedPerFrameZoomPickPoint?: Vector3;
 
     public zoomToCursor: boolean = true;
 
-    /**
-     * Enables rotation around a specific point, instead of default rotation around center
-     * @internal
-     */
-    public alternateRotationPt?: Vector3;
-
     private _tempPickingRay: Ray;
-    private _storedZoomPickDistance: number | undefined;
 
     private _hitPointRadius?: number = undefined;
     private _dragPlane: Plane = new Plane(0, 0, 0, 0);
@@ -61,13 +53,13 @@ export class GeospatialCameraMovement extends CameraMovement {
         behavior?: InterpolatingBehavior<GeospatialCamera>
     ) {
         super(scene, cameraPosition, behavior);
-        this.computedPerFrameZoomVector.copyFrom(this._cameraLookAt);
         this.pickPredicate = pickPredicate;
         this._tempPickingRay = new Ray(this._cameraPosition, this._cameraLookAt);
         this.panInertia = 0;
         this.rotationInertia = 0;
         this.rotationXSpeed = Math.PI / 500; // Move 1/500th of a half circle per pixel
         this.rotationYSpeed = Math.PI / 500; // Move 1/500th of a half circle per pixel
+        this.zoomSpeed = 2; // Base zoom speed; actual speed is scaled based on altitude
     }
 
     public startDrag(pointerX: number, pointerY: number) {
@@ -100,7 +92,7 @@ export class GeospatialCameraMovement extends CameraMovement {
         this._dragPlaneNormal.scaleToRef(hitPointRadius, this._dragPlaneOriginPointEcef);
 
         // The dragPlaneOffsetVector will later be recalculated when drag occurs, and the delta between the offset vectors will be applied to localTranslation
-        ComputeLocalBasisToRefs(this._dragPlaneOriginPointEcef, TmpVectors.Vector3[0], TmpVectors.Vector3[1], TmpVectors.Vector3[2]);
+        ComputeLocalBasisToRefs(this._dragPlaneOriginPointEcef, TmpVectors.Vector3[0], TmpVectors.Vector3[1], TmpVectors.Vector3[2], this._scene.useRightHandedSystem);
         const localToEcef = Matrix.FromXYZAxesToRef(TmpVectors.Vector3[0], TmpVectors.Vector3[1], TmpVectors.Vector3[2], localToEcefResult);
         localToEcef.setTranslationFromFloats(this._dragPlaneOriginPointEcef.x, this._dragPlaneOriginPointEcef.y, this._dragPlaneOriginPointEcef.z);
         const ecefToLocal = localToEcef.invertToRef(TmpVectors.Matrix[1]);
@@ -117,12 +109,21 @@ export class GeospatialCameraMovement extends CameraMovement {
 
     public handleDrag(pointerX: number, pointerY: number) {
         if (this._hitPointRadius) {
-            const pickResult = this._scene.pick(pointerX, pointerY);
+            const pickResult = this._scene.pick(pointerX, pointerY, this.pickPredicate);
             if (pickResult.ray) {
                 const localToEcef = TmpVectors.Matrix[0];
                 this._recalculateDragPlaneHitPoint(this._hitPointRadius, pickResult.ray, localToEcef);
 
                 const delta = this._dragPlaneHitPointLocal.subtractToRef(this._previousDragPlaneHitPointLocal, TmpVectors.Vector3[6]);
+
+                // When the camera is pitched nearly parallel to the drag plane, ray-plane intersection
+                // can produce enormous deltas. Clamp the delta to avoid massive jumps.
+                const maxDragDelta = this._hitPointRadius * 0.1; // Max 10% of hit radius per frame
+                const deltaLength = delta.length();
+                if (deltaLength > maxDragDelta) {
+                    delta.scaleInPlace(maxDragDelta / deltaLength);
+                }
+
                 this._previousDragPlaneHitPointLocal.copyFrom(this._dragPlaneHitPointLocal);
 
                 Vector3.TransformNormalToRef(delta, localToEcef, delta);
@@ -155,74 +156,39 @@ export class GeospatialCameraMovement extends CameraMovement {
             this._panSpeedMultiplier = 1;
         }
 
-        // If a pan drag is occurring, stop zooming.
-        const isDragging = this._hitPointRadius !== undefined;
-        if (isDragging) {
+        // If a pan drag or rotate is occurring, stop zooming.
+        let zoomTargetDistance: number | undefined;
+        if (this.isDragging || this.rotationAccumulatedPixels.lengthSquared() > Epsilon) {
             this._zoomSpeedMultiplier = 0;
             this._zoomVelocity = 0;
         } else {
-            // Scales zoom movement speed based on camera distance to origin (so long as no active pan is occurring)
-            this._zoomSpeedMultiplier = Vector3Distance(this._cameraPosition, cameraCenter) * 0.01;
+            zoomTargetDistance = this.computedPerFrameZoomPickPoint ? Vector3Distance(this._cameraPosition, this.computedPerFrameZoomPickPoint) : undefined;
+
+            // Scales zoom movement speed based on camera distance to zoom target.
+            this._zoomSpeedMultiplier = (zoomTargetDistance ?? Vector3Distance(this._cameraPosition, cameraCenter)) * 0.01;
         }
 
-        // Before zero-ing out pixel deltas, capture if we have any active zoom in this frame (compared to zoom from inertia)
-        const activeZoom = Math.abs(this.zoomAccumulatedPixels) > 0;
         super.computeCurrentFrameDeltas();
-
-        this._handleZoom(activeZoom);
     }
 
-    private _handleZoom(activeZoom: boolean) {
-        if (Math.abs(this.zoomDeltaCurrentFrame) > Epsilon) {
-            let pickDistance: number | undefined;
-
-            if (!activeZoom) {
-                // During inertia, use the previously stored pick distance
-                // TODO fix this to work with raycasting
-                pickDistance = this._storedZoomPickDistance;
-            } else {
-                // Active zoom - pick and store the distance
-                const pickResult = this._scene.pick(this._scene.pointerX, this._scene.pointerY, this.pickPredicate);
-
-                if (pickResult.hit && pickResult.pickedPoint && pickResult.ray && this.zoomToCursor) {
-                    // Store both the zoom direction and the pick distance for use during inertia
-                    pickResult.ray.direction.normalizeToRef(this.computedPerFrameZoomVector);
-                    pickDistance = pickResult.distance;
-                    this._storedZoomPickDistance = pickDistance;
-                } else {
-                    // If no hit under cursor, zoom along lookVector instead
-                    this._cameraLookAt.normalizeToRef(this.computedPerFrameZoomVector);
-                    const lookPickResult = this.pickAlongVector(this.computedPerFrameZoomVector);
-                    pickDistance = lookPickResult?.distance;
-                    this._storedZoomPickDistance = pickDistance;
-                }
-            }
-
-            // Clamp distance based on limits and update center
-            this._clampZoomDistance(this.zoomDeltaCurrentFrame, pickDistance);
-        }
+    public get isDragging() {
+        return this._hitPointRadius !== undefined;
     }
 
-    private _clampZoomDistance(requestedDistance: number, pickResultDistance: number | undefined): number {
-        // If pickResult is defined
-        if (requestedDistance > 0) {
-            if (pickResultDistance !== undefined) {
-                // If there is a pick, allow movement up to pick - minAltitude
-                if (pickResultDistance - this.limits.altitudeMin < 0) {
-                    this.zoomDeltaCurrentFrame = 0;
-                }
-                this.zoomDeltaCurrentFrame = Math.min(requestedDistance, pickResultDistance - this.limits.altitudeMin);
+    public handleZoom(zoomDelta: number, toCursor: boolean) {
+        if (zoomDelta !== 0) {
+            this.zoomAccumulatedPixels += zoomDelta;
+
+            const pickResult = this._scene.pick(this._scene.pointerX, this._scene.pointerY, this.pickPredicate);
+
+            if (toCursor && pickResult.hit && pickResult.pickedPoint && pickResult.ray && this.zoomToCursor) {
+                this.computedPerFrameZoomPickPoint = pickResult.pickedPoint;
             } else {
-                this.zoomDeltaCurrentFrame = requestedDistance;
+                // If no hit under cursor or explicitly told not to zoom to cursor, zoom along lookVector instead
+                const lookPickResult = this.pickAlongVector(this._cameraLookAt);
+                this.computedPerFrameZoomPickPoint = lookPickResult?.pickedPoint ?? undefined;
             }
         }
-
-        if (requestedDistance < 0) {
-            const maxZoomOut = this.limits.radiusMax ? this.limits.radiusMax - this._cameraPosition.length() : Number.POSITIVE_INFINITY;
-            this.zoomDeltaCurrentFrame = Math.max(requestedDistance, -maxZoomOut);
-        }
-
-        return this.zoomDeltaCurrentFrame;
     }
 
     public pickAlongVector(vector: Vector3): Nullable<PickingInfo> {
@@ -231,9 +197,9 @@ export class GeospatialCameraMovement extends CameraMovement {
         return this._scene.pickWithRay(this._tempPickingRay, this.pickPredicate);
     }
 }
-
+/** @internal */
 export function ClampCenterFromPolesInPlace(center: Vector3) {
-    const sineOfSphericalLatitudeLimit = 0.9999; // ~89.95 degrees
+    const sineOfSphericalLatitudeLimit = 0.998749218; // ~90 degrees
     const centerMagnitude = center.length(); // distance from planet origin
     if (centerMagnitude > Epsilon) {
         const sineSphericalLat = centerMagnitude === 0 ? 0 : center.z / centerMagnitude;
@@ -268,24 +234,42 @@ function IntersectRayWithPlaneToRef(ray: Ray, plane: Plane, ref: Vector3): boole
 
 /**
  * Helper to build east/north/up basis vectors at a world position.
+ * Cross product order is swapped based on handedness so that the east vector
+ * encodes the coordinate-system convention, removing the need for a separate yawScale.
+ * @param worldPos - The position on the globe
+ * @param refEast - Receives the east direction
+ * @param refNorth - Receives the north direction
+ * @param refUp - Receives the up (outward) direction
+ * @param useRightHandedSystem - Whether the scene uses a right-handed coordinate system (default: false)
  * @internal
  */
-export function ComputeLocalBasisToRefs(worldPos: Vector3, refEast: Vector3, refNorth: Vector3, refUp: Vector3) {
+export function ComputeLocalBasisToRefs(worldPos: Vector3, refEast: Vector3, refNorth: Vector3, refUp: Vector3, useRightHandedSystem: boolean = false) {
     // up = normalized position (geocentric normal)
     refUp.copyFrom(worldPos).normalize();
 
-    // east = normalize(worldNorth × up)
-    // (cross product of Earth rotation axis with up gives east except near poles)
+    // east – cross product order determines handedness
     const worldNorth = Vector3.LeftHandedForwardReadOnly; // (0,0,1)
-    Vector3.CrossToRef(worldNorth, refUp, refEast);
+    if (useRightHandedSystem) {
+        Vector3.CrossToRef(worldNorth, refUp, refEast);
+    } else {
+        Vector3.CrossToRef(refUp, worldNorth, refEast);
+    }
 
     // at poles, cross with worldRight instead
     if (refEast.lengthSquared() < Epsilon) {
-        Vector3.CrossToRef(Vector3.Right(), refUp, refEast);
+        if (useRightHandedSystem) {
+            Vector3.CrossToRef(Vector3.Right(), refUp, refEast);
+        } else {
+            Vector3.CrossToRef(refUp, Vector3.Right(), refEast);
+        }
     }
     refEast.normalize();
 
-    // north = up × east (completes right-handed basis)
-    Vector3.CrossToRef(refUp, refEast, refNorth);
+    // north – completes the basis (cross order also swapped for handedness)
+    if (useRightHandedSystem) {
+        Vector3.CrossToRef(refUp, refEast, refNorth);
+    } else {
+        Vector3.CrossToRef(refEast, refUp, refNorth);
+    }
     refNorth.normalize();
 }

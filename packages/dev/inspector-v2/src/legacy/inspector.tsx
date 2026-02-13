@@ -1,15 +1,5 @@
-import type {
-    IDisposable,
-    IExplorerAdditionalChild,
-    IInspectorContextMenuItem,
-    IInspectorContextMenuType,
-    IInspectorOptions as InspectorV1Options,
-    Nullable,
-    Scene,
-    WritableObject,
-} from "core/index";
-import type { EntityBase } from "../components/scene/sceneExplorer";
-import type { InspectorOptions as InspectorV2Options } from "../inspector";
+import type { IInspectorContextMenuItem, IInspectorContextMenuType, IInspectorOptions as InspectorV1Options, Nullable, Scene } from "core/index";
+import type { InspectorOptions as InspectorV2Options, InspectorToken } from "../inspector";
 import type { WeaklyTypedServiceDefinition } from "../modularity/serviceContainer";
 import type { ServiceDefinition } from "../modularity/serviceDefinition";
 import type { IGizmoService } from "../services/gizmoService";
@@ -23,7 +13,6 @@ import { BranchRegular } from "@fluentui/react-icons";
 import { DebugLayerTab } from "core/Debug/debugLayer";
 import { EngineStore } from "core/Engines/engineStore";
 import { Observable } from "core/Misc/observable";
-import { UniqueIdGenerator } from "core/Misc/uniqueIdGenerator";
 import { ShowInspector } from "../inspector";
 import { InterceptProperty } from "../instrumentation/propertyInstrumentation";
 import { GizmoServiceIdentity } from "../services/gizmoService";
@@ -31,6 +20,7 @@ import { PropertiesServiceIdentity } from "../services/panes/properties/properti
 import { SceneExplorerServiceIdentity } from "../services/panes/scene/sceneExplorerService";
 import { SelectionServiceIdentity } from "../services/selectionService";
 import { ShellServiceIdentity } from "../services/shellService";
+import { LegacyPropertiesSectionMapping } from "./propertiesSectionMapping";
 
 type PropertyChangedEvent = {
     object: any;
@@ -40,6 +30,11 @@ type PropertyChangedEvent = {
     allowNullValue?: boolean;
 };
 
+/**
+ * Converts Inspector v1 options to Inspector v2 options.
+ * @param v1Options Inspector v1 options.
+ * @returns Inspector v2 options.
+ */
 export function ConvertOptions(v1Options: Partial<InspectorV1Options>): Partial<InspectorV2Options> {
     // Options not currently handled:
     // • enablePopup: Do users care about this one?
@@ -116,16 +111,7 @@ export function ConvertOptions(v1Options: Partial<InspectorV1Options>): Partial<
                     sceneExplorerService.addSection({
                         displayName: node.name,
                         order: Number.MAX_SAFE_INTEGER,
-                        getRootEntities: () => {
-                            const children = node.getContent();
-                            for (const child of children) {
-                                const entity = child as Partial<WritableObject<EntityBase>>;
-                                if (!entity.uniqueId) {
-                                    entity.uniqueId = UniqueIdGenerator.UniqueId;
-                                }
-                            }
-                            return children as (IExplorerAdditionalChild & EntityBase)[];
-                        },
+                        getRootEntities: () => node.getContent(),
                         getEntityDisplayInfo: (entity) => {
                             const onChangeObservable = new Observable<void>();
 
@@ -171,7 +157,7 @@ export function ConvertOptions(v1Options: Partial<InspectorV1Options>): Partial<
                 const sceneExplorerCommandRegistrations = explorerExtensibility.flatMap((command) =>
                     command.entries.map((entry) =>
                         sceneExplorerService.addEntityCommand({
-                            predicate: (entity): entity is EntityBase => command.predicate(entity),
+                            predicate: (entity): entity is unknown => command.predicate(entity),
                             getCommand: (entity) => {
                                 return {
                                     displayName: entry.label,
@@ -282,18 +268,25 @@ export function ConvertOptions(v1Options: Partial<InspectorV1Options>): Partial<
  * @deprecated This class only exists for backward compatibility. Use the module-level ShowInspector function instead.
  */
 export class Inspector {
-    private static _CurrentInspectorToken: Nullable<IDisposable> = null;
+    private static _CurrentInstance: Nullable<{ scene: Scene; options: Partial<InspectorV2Options>; disposeToken: InspectorToken }> = null;
     private static _PopupToggler: Nullable<(side: "left" | "right") => void> = null;
+    private static _SectionHighlighter: Nullable<(sectionIds: readonly string[]) => void> = null;
+    private static _SidePaneOpenCounter: Nullable<() => number> = null;
+
+    // @ts-expect-error TS6133: This is private, but used by debugLayer (same as Inspector v1).
+    private static get _OpenedPane() {
+        return this._SidePaneOpenCounter?.() ?? 0;
+    }
 
     public static readonly OnSelectionChangeObservable = new Observable<any>();
     public static readonly OnPropertyChangedObservable = new Observable<PropertyChangedEvent>();
 
     public static MarkLineContainerTitleForHighlighting(title: string) {
-        throw new Error("Not Implemented");
+        this.MarkMultipleLineContainerTitlesForHighlighting([title]);
     }
 
     public static MarkMultipleLineContainerTitlesForHighlighting(titles: string[]) {
-        throw new Error("Not Implemented");
+        this._SectionHighlighter?.(titles);
     }
 
     public static PopupEmbed() {
@@ -309,7 +302,7 @@ export class Inspector {
     }
 
     public static get IsVisible(): boolean {
-        return !!this._CurrentInspectorToken;
+        return !!this._CurrentInstance;
     }
 
     public static Show(scene: Scene, userOptions: Partial<InspectorV1Options>) {
@@ -334,10 +327,12 @@ export class Inspector {
             factory: (shellService) => {
                 this._PopupToggler = (side: "left" | "right") => {
                     const sidePaneContainer = side === "left" ? shellService.leftSidePaneContainer : shellService.rightSidePaneContainer;
-                    if (sidePaneContainer.isDocked) {
-                        sidePaneContainer.undock();
-                    } else {
-                        sidePaneContainer.dock();
+                    if (sidePaneContainer) {
+                        if (sidePaneContainer.isDocked) {
+                            sidePaneContainer.undock();
+                        } else {
+                            sidePaneContainer.dock();
+                        }
                     }
                 };
 
@@ -392,16 +387,68 @@ export class Inspector {
         };
         serviceDefinitions.push(propertyChangedServiceDefinition);
 
+        const sectionHighlighterServiceDefinition: ServiceDefinition<[], [IPropertiesService]> = {
+            friendlyName: "Section Highlighter Service (Backward Compatibility)",
+            consumes: [PropertiesServiceIdentity],
+            factory: (propertiesService) => {
+                this._SectionHighlighter = (sectionIds: readonly string[]) => {
+                    propertiesService.highlightSections(sectionIds.map((id) => (LegacyPropertiesSectionMapping as Record<string, string>)[id] ?? id));
+                };
+
+                return {
+                    dispose: () => {
+                        this._SectionHighlighter = null;
+                    },
+                };
+            },
+        };
+        serviceDefinitions.push(sectionHighlighterServiceDefinition);
+
+        const openedPanesServiceDefinition: ServiceDefinition<[], [IShellService]> = {
+            friendlyName: "Opened Panes Service (Backward Compatibility)",
+            consumes: [ShellServiceIdentity],
+            factory: (shellService) => {
+                this._SidePaneOpenCounter = () => (shellService.leftSidePaneContainer ? 1 : 0) + (shellService.rightSidePaneContainer ? 1 : 0);
+
+                return {
+                    dispose: () => {
+                        this._SidePaneOpenCounter = null;
+                    },
+                };
+            },
+        };
+        serviceDefinitions.push(openedPanesServiceDefinition);
+
         options = {
             ...options,
             serviceDefinitions: [...(options.serviceDefinitions ?? []), ...serviceDefinitions],
         };
 
-        this._CurrentInspectorToken = ShowInspector(scene, options);
+        this._CurrentInstance = {
+            scene,
+            options,
+            disposeToken: ShowInspector(scene, options),
+        };
+
+        this._CurrentInstance.disposeToken.onDisposed.addOnce(() => (this._CurrentInstance = null));
     }
 
     public static Hide() {
-        this._CurrentInspectorToken?.dispose();
-        this._CurrentInspectorToken = null;
+        this._CurrentInstance?.disposeToken.dispose();
+    }
+
+    // @ts-expect-error TS6133: This is private, but used by debugLayer (same as Inspector v1).
+    private static _SetNewScene(scene: Scene) {
+        if (this._CurrentInstance && this._CurrentInstance.scene !== scene) {
+            // TODO: For now, just hide and re-show the Inspector.
+            // Need to think more about this when we work on multi-scene support in Inspector v2.
+            const options = this._CurrentInstance.options;
+            this.Hide();
+            this._CurrentInstance = {
+                scene,
+                options,
+                disposeToken: ShowInspector(scene, options),
+            };
+        }
     }
 }

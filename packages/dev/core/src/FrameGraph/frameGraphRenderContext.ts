@@ -13,11 +13,13 @@ import type {
     InternalTexture,
     UtilityLayerRenderer,
     IStencilState,
+    IStencilStateProperties,
 } from "core/index";
 import { Constants } from "../Engines/constants";
 import { EffectRenderer } from "../Materials/effectRenderer";
 import { CopyTextureToTexture } from "../Misc/copyTextureToTexture";
 import { FrameGraphContext } from "./frameGraphContext";
+import { IsDepthTexture } from "../Materials/Textures/textureHelper.functions";
 
 const SamplingModeHasMipMapFiltering = [
     false, // not used
@@ -37,16 +39,14 @@ const SamplingModeHasMipMapFiltering = [
 
 /**
  * Frame graph context used render passes.
- * @experimental
  */
 export class FrameGraphRenderContext extends FrameGraphContext {
     private readonly _effectRenderer: EffectRenderer;
     private readonly _effectRendererBack: EffectRenderer;
     private _currentRenderTarget: FrameGraphRenderTarget | undefined;
-    private _debugMessageWhenTargetBound: string | undefined;
-    private _debugMessageHasBeenPushed = false;
     private _renderTargetIsBound = true;
     private readonly _copyTexture: CopyTextureToTexture;
+    private readonly _copyDepthTexture: CopyTextureToTexture;
 
     private static _IsObjectRenderer(value: Layer | ObjectRenderer | UtilityLayerRenderer): value is ObjectRenderer {
         return (value as ObjectRenderer).initRender !== undefined;
@@ -61,6 +61,7 @@ export class FrameGraphRenderContext extends FrameGraphContext {
             indices: [0, 2, 1, 0, 3, 2],
         });
         this._copyTexture = new CopyTextureToTexture(this._engine);
+        this._copyDepthTexture = new CopyTextureToTexture(this._engine, true);
     }
 
     /**
@@ -160,8 +161,16 @@ export class FrameGraphRenderContext extends FrameGraphContext {
 
     /**
      * Generates mipmaps for the current render target
+     * @param handle Optional handle of the texture to generate mipmaps for (if not provided, will generate mipmaps for all textures in the current render target)
      */
-    public generateMipMaps(): void {
+    public generateMipMaps(handle?: FrameGraphTextureHandle): void {
+        if (handle !== undefined) {
+            const internalTexture = this._textureManager.getTextureFromHandle(handle);
+            if (internalTexture) {
+                this._engine.generateMipmaps(internalTexture);
+            }
+            return;
+        }
         if (this._currentRenderTarget?.renderTargetWrapper === undefined) {
             return;
         }
@@ -169,7 +178,6 @@ export class FrameGraphRenderContext extends FrameGraphContext {
         if (this._engine._currentRenderTarget && (!this._engine.isWebGPU || this._renderTargetIsBound)) {
             // we can't generate the mipmaps if the render target (which is the texture we want to generate mipmaps for) is bound
             // Also, for some reasons, on WebGL2, generating mipmaps doesn't work if a render target is bound, even if it's not the texture we want to generate mipmaps for...
-            this._flushDebugMessages();
             this._engine.unBindFramebuffer(this._engine._currentRenderTarget);
             this._renderTargetIsBound = false;
         }
@@ -231,16 +239,18 @@ export class FrameGraphRenderContext extends FrameGraphContext {
      * @param drawBackFace If true, the fullscreen quad will be drawn as a back face (in CW - optional)
      * @param depthTest If true, depth testing will be enabled when applying the effect (default is false)
      * @param noViewport If true, the current viewport will be left unchanged (optional). If false or undefined, the viewport will be set to the full render target size.
+     * @param alphaMode The alpha mode to use when applying the effect (default is ALPHA_DISABLE)
      * @returns True if the effect was applied, otherwise false (effect not ready)
      */
     public applyFullScreenEffect(
         drawWrapper: DrawWrapper,
         customBindings?: () => void,
-        stencilState?: IStencilState,
+        stencilState?: IStencilState | IStencilStateProperties,
         disableColorWrite?: boolean,
         drawBackFace?: boolean,
         depthTest?: boolean,
-        noViewport?: boolean
+        noViewport?: boolean,
+        alphaMode = Constants.ALPHA_DISABLE
     ): boolean {
         if (!drawWrapper.effect?.isReady()) {
             return false;
@@ -249,6 +259,7 @@ export class FrameGraphRenderContext extends FrameGraphContext {
         this._applyRenderTarget();
 
         const engineDepthMask = this._engine.getDepthWrite(); // for some reasons, depthWrite is not restored by EffectRenderer.restoreStates
+        const engineDepthFunc = this._engine.getDepthFunction();
 
         const effectRenderer = drawBackFace ? this._effectRendererBack : this._effectRenderer;
 
@@ -264,6 +275,7 @@ export class FrameGraphRenderContext extends FrameGraphContext {
             this._engine.setColorWrite(false);
         }
         this._engine.setDepthWrite(false);
+        this._engine.setAlphaMode(alphaMode);
 
         effectRenderer.bindBuffers(drawWrapper.effect);
         customBindings?.();
@@ -273,6 +285,9 @@ export class FrameGraphRenderContext extends FrameGraphContext {
             this._engine.setColorWrite(true);
         }
         this._engine.setDepthWrite(engineDepthMask);
+        if (engineDepthFunc) {
+            this._engine.setDepthFunction(engineDepthFunc);
+        }
         this._engine.setAlphaMode(Constants.ALPHA_DISABLE);
 
         return true;
@@ -290,13 +305,16 @@ export class FrameGraphRenderContext extends FrameGraphContext {
             this.bindRenderTarget();
         }
 
-        this._copyTexture.source = this._textureManager.getTextureFromHandle(sourceTexture, true)!;
-        this._copyTexture.lodLevel = lodLevel;
+        const texture = this._textureManager.getTextureFromHandle(sourceTexture, true)!;
+        const copyTexture = IsDepthTexture(texture.format) ? this._copyDepthTexture : this._copyTexture;
+
+        copyTexture.source = texture;
+        copyTexture.lodLevel = lodLevel;
 
         this.applyFullScreenEffect(
-            this._copyTexture.effectWrapper.drawWrapper,
+            copyTexture.effectWrapper.drawWrapper,
             () => {
-                this._copyTexture.effectWrapper.onApplyObservable.notifyObservers({});
+                copyTexture.effectWrapper.onApplyObservable.notifyObservers({});
             },
             undefined,
             undefined,
@@ -311,23 +329,28 @@ export class FrameGraphRenderContext extends FrameGraphContext {
      * @param object The RenderTargetTexture/Layer to render
      * @param viewportWidth The width of the viewport (optional for Layer, but mandatory for ObjectRenderer)
      * @param viewportHeight The height of the viewport (optional for Layer, but mandatory for ObjectRenderer)
+     * @param restoreDefaultFramebuffer If true, the default framebuffer will be restored after rendering (default: false)
      */
-    public render(object: Layer | ObjectRenderer | UtilityLayerRenderer, viewportWidth?: number, viewportHeight?: number): void {
+    public render(object: Layer | ObjectRenderer | UtilityLayerRenderer, viewportWidth?: number, viewportHeight?: number, restoreDefaultFramebuffer = false): void {
         if (FrameGraphRenderContext._IsObjectRenderer(object)) {
             this._scene._intermediateRendering = true;
             if (object.shouldRender()) {
                 this._scene.incrementRenderId();
                 this._scene.resetCachedMaterial();
 
-                this._applyRenderTarget();
-
                 object.prepareRenderList();
 
                 object.initRender(viewportWidth!, viewportHeight!);
 
+                this._applyRenderTarget();
+
                 object.render();
 
                 object.finishRender();
+
+                if (restoreDefaultFramebuffer) {
+                    this.restoreDefaultFramebuffer();
+                }
             }
             this._scene._intermediateRendering = false;
         } else {
@@ -341,39 +364,23 @@ export class FrameGraphRenderContext extends FrameGraphContext {
      * Note: it is a lazy operation, so the render target will only be bound when needed. This way, it is possible to call
      *   this method several times with different render targets without incurring the cost of binding if no draw calls are made
      * @param renderTarget The handle of the render target texture to bind (default: undefined, meaning "back buffer"). Pass an array for MRT rendering.
-     * @param debugMessage Optional debug message to display when the render target is bound (visible in PIX, for example)
      * @param applyImmediately If true, the render target will be applied immediately (otherwise it will be applied at first use). Default is false (delayed application).
      */
-    public bindRenderTarget(renderTarget?: FrameGraphRenderTarget, debugMessage?: string, applyImmediately = false): void {
-        if (
-            (renderTarget?.renderTargetWrapper === undefined && this._currentRenderTarget === undefined) ||
-            (renderTarget && this._currentRenderTarget && renderTarget.equals(this._currentRenderTarget))
-        ) {
-            this._flushDebugMessages();
-            if (debugMessage !== undefined) {
-                this._engine._debugPushGroup?.(debugMessage, 2);
-                this._debugMessageWhenTargetBound = undefined;
-                this._debugMessageHasBeenPushed = true;
-            }
-            if (applyImmediately) {
-                this._applyRenderTarget();
-            }
-            return;
-        }
+    public bindRenderTarget(renderTarget?: FrameGraphRenderTarget, applyImmediately = false): void {
         this._currentRenderTarget = renderTarget?.renderTargetWrapper === undefined ? undefined : renderTarget;
-        this._debugMessageWhenTargetBound = debugMessage;
         this._renderTargetIsBound = false;
         if (applyImmediately) {
             this._applyRenderTarget();
         }
     }
 
-    /** @internal */
-    public _flushDebugMessages() {
-        if (this._debugMessageHasBeenPushed) {
-            this._engine._debugPopGroup?.(2);
-            this._debugMessageHasBeenPushed = false;
-        }
+    /**
+     * Restores the default framebuffer (back buffer) as the current render target
+     */
+    public restoreDefaultFramebuffer(): void {
+        this._engine.restoreDefaultFramebuffer(true);
+        this._renderTargetIsBound = false;
+        this._currentRenderTarget = undefined;
     }
 
     /** @internal */
@@ -382,23 +389,17 @@ export class FrameGraphRenderContext extends FrameGraphContext {
             return;
         }
 
-        this._flushDebugMessages();
-
         const renderTargetWrapper = this._currentRenderTarget?.renderTargetWrapper;
 
         if (renderTargetWrapper === undefined) {
-            this._engine.restoreDefaultFramebuffer();
-        } else {
+            if (this._engine._currentRenderTarget) {
+                this._engine.restoreDefaultFramebuffer(true);
+            }
+        } else if (this._engine._currentRenderTarget !== renderTargetWrapper) {
             if (this._engine._currentRenderTarget) {
                 this._engine.unBindFramebuffer(this._engine._currentRenderTarget);
             }
             this._engine.bindFramebuffer(renderTargetWrapper);
-        }
-
-        if (this._debugMessageWhenTargetBound !== undefined) {
-            this._engine._debugPushGroup?.(this._debugMessageWhenTargetBound, 2);
-            this._debugMessageWhenTargetBound = undefined;
-            this._debugMessageHasBeenPushed = true;
         }
 
         this._renderTargetIsBound = true;
@@ -406,7 +407,7 @@ export class FrameGraphRenderContext extends FrameGraphContext {
 
     /** @internal */
     public _isReady(): boolean {
-        return this._copyTexture.isReady();
+        return this._copyTexture.isReady() && this._copyDepthTexture.isReady();
     }
 
     /** @internal */
@@ -414,5 +415,6 @@ export class FrameGraphRenderContext extends FrameGraphContext {
         this._effectRenderer.dispose();
         this._effectRendererBack.dispose();
         this._copyTexture.dispose();
+        this._copyDepthTexture.dispose();
     }
 }

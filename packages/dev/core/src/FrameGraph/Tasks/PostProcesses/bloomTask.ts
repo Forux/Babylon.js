@@ -21,6 +21,17 @@ export class FrameGraphBloomTask extends FrameGraphTask {
     public sourceSamplingMode = Constants.TEXTURE_BILINEAR_SAMPLINGMODE;
 
     /**
+     * The alpha mode to use when applying the bloom effect.
+     */
+    public get alphaMode() {
+        return this._merge.alphaMode;
+    }
+
+    public set alphaMode(mode: number) {
+        this._merge.alphaMode = mode;
+    }
+
+    /**
      * The target texture to render the bloom effect to.
      * If not supplied, a texture with the same configuration as the source texture will be created.
      */
@@ -116,6 +127,10 @@ export class FrameGraphBloomTask extends FrameGraphTask {
         return this.bloom.isReady();
     }
 
+    public override getClassName(): string {
+        return "FrameGraphBloomTask";
+    }
+
     public record(): void {
         if (this.sourceTexture === undefined) {
             throw new Error("FrameGraphBloomTask: sourceTexture is required");
@@ -176,7 +191,9 @@ export class FrameGraphBloomTask extends FrameGraphTask {
 
         passDisabled.setRenderTarget(this.outputTexture);
         passDisabled.setExecuteFunc((context) => {
-            context.copyTexture(this.sourceTexture);
+            if (this.alphaMode === Constants.ALPHA_DISABLE) {
+                context.copyTexture(this.sourceTexture);
+            }
         });
     }
 

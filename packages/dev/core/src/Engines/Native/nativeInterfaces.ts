@@ -5,6 +5,7 @@ import type { InternalTexture } from "../../Materials/Textures/internalTexture";
 import type { Nullable } from "../../types";
 import type { ICanvas, IImage, IPath2D } from "../ICanvas";
 import type { NativeData, NativeDataStream } from "./nativeDataStream";
+import type { Matrix } from "../../Maths/math.vector";
 
 export type NativeTexture = NativeData;
 export type NativeFramebuffer = NativeData;
@@ -27,11 +28,11 @@ export interface INativeEngine {
 
     createVertexArray(): NativeData;
 
-    createIndexBuffer(dataBuffer: ArrayBuffer, dataByteOffset: number, dataByteLength: number, is32Bits: boolean, dynamic: boolean): NativeData;
+    createIndexBuffer(dataBuffer: ArrayBufferLike, dataByteOffset: number, dataByteLength: number, is32Bits: boolean, dynamic: boolean): NativeData;
     recordIndexBuffer(vertexArray: NativeData, indexBuffer: NativeData): void;
-    updateDynamicIndexBuffer(indexBuffer: NativeData, data: ArrayBuffer, dataByteOffset: number, dataByteLength: number, startIndex: number): void;
+    updateDynamicIndexBuffer(indexBuffer: NativeData, data: ArrayBufferLike, dataByteOffset: number, dataByteLength: number, startIndex: number): void;
 
-    createVertexBuffer(dataBuffer: ArrayBuffer, dataByteOffset: number, dataByteLength: number, dynamic: boolean): NativeData;
+    createVertexBuffer(dataBuffer: ArrayBufferLike, dataByteOffset: number, dataByteLength: number, dynamic: boolean): NativeData;
     recordVertexBuffer(
         vertexArray: NativeData,
         vertexBuffer: NativeData,
@@ -43,7 +44,7 @@ export interface INativeEngine {
         normalized: boolean,
         instanceDivisor: number
     ): void;
-    updateDynamicVertexBuffer(vertexBuffer: NativeData, dataBuffer: ArrayBuffer, dataByteOffset: number, dataByteLength: number, vertexByteOffset?: number): void;
+    updateDynamicVertexBuffer(vertexBuffer: NativeData, dataBuffer: ArrayBufferLike, dataByteOffset: number, dataByteLength: number, vertexByteOffset?: number): void;
 
     createProgram(vertexShader: string, fragmentShader: string): NativeProgram;
     createProgramAsync(vertexShader: string, fragmentShader: string, onSuccess: () => void, onError: (error: Error) => void): NativeProgram;
@@ -445,4 +446,7 @@ export interface INative {
     disablePerformanceLogging?(): void;
     startPerformanceCounter?(counter: string): unknown;
     endPerformanceCounter?(counter: unknown): void;
+
+    // GaussianSplatting
+    sortSplats?(modelViewMatrix: Matrix, splatPositions: Float32Array, splatIndex: Float32Array, useRightHandedSystem: boolean): void;
 }

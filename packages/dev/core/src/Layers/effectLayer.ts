@@ -62,6 +62,11 @@ export interface IEffectLayerOptions {
     mainTextureType: number;
 
     /**
+     * The format of the main texture. Default: TEXTUREFORMAT_RGBA
+     */
+    mainTextureFormat: number;
+
+    /**
      * Whether or not to generate a stencil buffer. Default: false
      */
     generateStencilBuffer: boolean;
@@ -77,7 +82,7 @@ export interface IEffectLayerOptions {
  */
 export abstract class EffectLayer {
     private _effectLayerOptions: IEffectLayerOptions;
-    private _mainTextureCreatedSize: ISize = { width: 0, height: 0 };
+    protected _mainTextureCreatedSize: ISize = { width: 0, height: 0 };
 
     protected _scene: Scene;
     protected _engine: AbstractEngine;
@@ -429,6 +434,7 @@ export abstract class EffectLayer {
             camera: null,
             renderingGroupId: -1,
             mainTextureType: Constants.TEXTURETYPE_UNSIGNED_BYTE,
+            mainTextureFormat: Constants.TEXTUREFORMAT_RGBA,
             generateStencilBuffer: false,
             ...options,
         };
@@ -476,6 +482,7 @@ export abstract class EffectLayer {
             this._scene,
             {
                 type: this._effectLayerOptions.mainTextureType,
+                format: this._effectLayerOptions.mainTextureFormat,
                 samplingMode: Texture.TRILINEAR_SAMPLINGMODE,
                 generateStencilBuffer: this._effectLayerOptions.generateStencilBuffer,
                 existingObjectRenderer: this._thinEffectLayer.objectRenderer,

@@ -1,7 +1,6 @@
 import type { FunctionComponent } from "react";
 
 import type { ArcRotateCamera } from "core/index";
-import type { ISettingsContext } from "../../../services/settingsContext";
 
 import { NumberInputPropertyLine } from "shared-ui-components/fluent/hoc/propertyLines/inputPropertyLine";
 import { SwitchPropertyLine } from "shared-ui-components/fluent/hoc/propertyLines/switchPropertyLine";
@@ -11,10 +10,10 @@ import { useProperty } from "../../../hooks/compoundPropertyHooks";
 import { useAngleConverters } from "../../../hooks/settingsHooks";
 import { BoundProperty } from "../boundProperty";
 
-export const ArcRotateCameraTransformProperties: FunctionComponent<{ camera: ArcRotateCamera; settings: ISettingsContext }> = (props) => {
-    const { camera, settings } = props;
+export const ArcRotateCameraTransformProperties: FunctionComponent<{ camera: ArcRotateCamera }> = (props) => {
+    const { camera } = props;
 
-    const [toDisplayAngle, fromDisplayAngle, useDegrees] = useAngleConverters(settings);
+    const [toDisplayAngle, fromDisplayAngle, useDegrees] = useAngleConverters();
 
     const lowerAlphaLimit = useProperty(camera, "lowerAlphaLimit") ?? 0;
     const upperAlphaLimit = useProperty(camera, "upperAlphaLimit") ?? Math.PI * 2;
@@ -93,12 +92,10 @@ export const ArcRotateCameraControlProperties: FunctionComponent<{ camera: ArcRo
 export const ArcRotateCameraCollisionProperties: FunctionComponent<{ camera: ArcRotateCamera }> = (props) => {
     const { camera } = props;
 
-    const collisionRadius = useProperty(camera, "collisionRadius");
-
     return (
         <>
             <BoundProperty component={SwitchPropertyLine} label="Check Collisions" target={camera} propertyKey="checkCollisions" />
-            <Vector3PropertyLine label="Collision Radius" value={collisionRadius} onChange={(val) => (camera.collisionRadius = val)} />
+            <BoundProperty component={Vector3PropertyLine} label="Collision Radius" target={camera} propertyKey="collisionRadius" />
         </>
     );
 };

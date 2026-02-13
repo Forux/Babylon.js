@@ -5,9 +5,9 @@ import type {
     FrameGraphRenderPass,
     FrameGraphRenderContext,
     EffectWrapper,
-    IStencilState,
     IViewportLike,
     Nullable,
+    IStencilStateProperties,
 } from "core/index";
 import { Constants } from "core/Engines/constants";
 import { FrameGraphTask } from "../../frameGraphTask";
@@ -37,7 +37,7 @@ export class FrameGraphPostProcessTask extends FrameGraphTask {
     /**
      * The stencil state to use for the post process (optional).
      */
-    public stencilState?: IStencilState;
+    public stencilState?: IStencilStateProperties;
 
     /**
      * The depth attachment texture to use for the post process (optional).
@@ -76,6 +76,17 @@ export class FrameGraphPostProcessTask extends FrameGraphTask {
      * If depth testing should be enabled (default is true).
      */
     public depthTest = true;
+
+    /**
+     * The alpha mode to use when applying the post process (default is ALPHA_DISABLE).
+     */
+    public get alphaMode(): number {
+        return this.postProcess.alphaMode;
+    }
+
+    public set alphaMode(value: number) {
+        this.postProcess.alphaMode = value;
+    }
 
     /**
      * The viewport to use when applying the post process.
@@ -134,6 +145,10 @@ export class FrameGraphPostProcessTask extends FrameGraphTask {
         return this.postProcess.isReady();
     }
 
+    public override getClassName(): string {
+        return "FrameGraphPostProcessTask";
+    }
+
     public record(
         skipCreationOfDisabledPasses = false,
         additionalExecute?: (context: FrameGraphRenderContext) => void,
@@ -175,6 +190,7 @@ export class FrameGraphPostProcessTask extends FrameGraphTask {
         pass.setRenderTarget(this.outputTexture);
         pass.setRenderTargetDepth(this.depthAttachmentTexture);
         pass.setExecuteFunc((context) => {
+            context.pushDebugGroup(`Apply post-process (${this.name})`);
             if (this.sourceTexture !== undefined) {
                 context.setTextureSamplingMode(this.sourceTexture, this.sourceSamplingMode);
             }
@@ -197,6 +213,8 @@ export class FrameGraphPostProcessTask extends FrameGraphTask {
                 this.depthTest,
                 this.viewport !== undefined
             );
+            context.restoreDefaultFramebuffer();
+            context.popDebugGroup();
         });
 
         if (!skipCreationOfDisabledPasses) {
@@ -210,7 +228,7 @@ export class FrameGraphPostProcessTask extends FrameGraphTask {
             passDisabled.setRenderTarget(this.outputTexture);
             passDisabled.setRenderTargetDepth(this.depthAttachmentTexture);
             passDisabled.setExecuteFunc((context) => {
-                if (this.sourceTexture !== undefined) {
+                if (this.sourceTexture !== undefined && this.alphaMode === Constants.ALPHA_DISABLE) {
                     if (this.viewport) {
                         context.setViewport(this.viewport);
                     }

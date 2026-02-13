@@ -2,7 +2,6 @@ import type { FrameGraphTextureHandle, FrameGraphTextureManager, IMultiRenderTar
 
 /**
  * @internal
- * @experimental
  */
 export class FrameGraphRenderTarget {
     protected readonly _textureManager: FrameGraphTextureManager;
@@ -62,6 +61,8 @@ export class FrameGraphRenderTarget {
                         `FrameGraphRenderTarget.renderTargetWrapper: Failed to get texture from handle. handle: ${handle}, name: ${this.name}, index: ${i}, renderTargets: ${this._renderTargets}`
                     );
                 }
+
+                texture.incrementReferences();
 
                 this._renderTargetWrapper.setTexture(texture, i, false);
             }

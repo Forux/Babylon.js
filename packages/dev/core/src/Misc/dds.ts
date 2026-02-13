@@ -317,7 +317,14 @@ export class DDSTools {
         };
     }
 
-    private static _GetHalfFloatAsFloatRGBAArrayBuffer(width: number, height: number, dataOffset: number, dataLength: number, arrayBuffer: ArrayBuffer, lod: number): Float32Array {
+    private static _GetHalfFloatAsFloatRGBAArrayBuffer(
+        width: number,
+        height: number,
+        dataOffset: number,
+        dataLength: number,
+        arrayBuffer: ArrayBufferLike,
+        lod: number
+    ): Float32Array {
         const destArray = new Float32Array(dataLength);
         const srcData = new Uint16Array(arrayBuffer, dataOffset);
         let index = 0;
@@ -339,7 +346,7 @@ export class DDSTools {
         return destArray;
     }
 
-    private static _GetHalfFloatRGBAArrayBuffer(width: number, height: number, dataOffset: number, dataLength: number, arrayBuffer: ArrayBuffer, lod: number): Uint16Array {
+    private static _GetHalfFloatRGBAArrayBuffer(width: number, height: number, dataOffset: number, dataLength: number, arrayBuffer: ArrayBufferLike, lod: number): Uint16Array {
         if (DDSTools.StoreLODInAlphaChannel) {
             const destArray = new Uint16Array(dataLength);
             const srcData = new Uint16Array(arrayBuffer, dataOffset);
@@ -361,7 +368,7 @@ export class DDSTools {
         return new Uint16Array(arrayBuffer, dataOffset, dataLength);
     }
 
-    private static _GetFloatRGBAArrayBuffer(width: number, height: number, dataOffset: number, dataLength: number, arrayBuffer: ArrayBuffer, lod: number): Float32Array {
+    private static _GetFloatRGBAArrayBuffer(width: number, height: number, dataOffset: number, dataLength: number, arrayBuffer: ArrayBufferLike, lod: number): Float32Array {
         if (DDSTools.StoreLODInAlphaChannel) {
             const destArray = new Float32Array(dataLength);
             const srcData = new Float32Array(arrayBuffer, dataOffset);
@@ -382,7 +389,14 @@ export class DDSTools {
         return new Float32Array(arrayBuffer, dataOffset, dataLength);
     }
 
-    private static _GetFloatAsHalfFloatRGBAArrayBuffer(width: number, height: number, dataOffset: number, dataLength: number, arrayBuffer: ArrayBuffer, lod: number): Uint16Array {
+    private static _GetFloatAsHalfFloatRGBAArrayBuffer(
+        width: number,
+        height: number,
+        dataOffset: number,
+        dataLength: number,
+        arrayBuffer: ArrayBufferLike,
+        lod: number
+    ): Uint16Array {
         const destArray = new Uint16Array(dataLength);
         const srcData = new Float32Array(arrayBuffer, dataOffset);
         let index = 0;
@@ -403,7 +417,7 @@ export class DDSTools {
         return destArray;
     }
 
-    private static _GetFloatAsUIntRGBAArrayBuffer(width: number, height: number, dataOffset: number, dataLength: number, arrayBuffer: ArrayBuffer, lod: number): Uint8Array {
+    private static _GetFloatAsUIntRGBAArrayBuffer(width: number, height: number, dataOffset: number, dataLength: number, arrayBuffer: ArrayBufferLike, lod: number): Uint8Array {
         const destArray = new Uint8Array(dataLength);
         const srcData = new Float32Array(arrayBuffer, dataOffset);
         let index = 0;
@@ -425,7 +439,14 @@ export class DDSTools {
         return destArray;
     }
 
-    private static _GetHalfFloatAsUIntRGBAArrayBuffer(width: number, height: number, dataOffset: number, dataLength: number, arrayBuffer: ArrayBuffer, lod: number): Uint8Array {
+    private static _GetHalfFloatAsUIntRGBAArrayBuffer(
+        width: number,
+        height: number,
+        dataOffset: number,
+        dataLength: number,
+        arrayBuffer: ArrayBufferLike,
+        lod: number
+    ): Uint8Array {
         const destArray = new Uint8Array(dataLength);
         const srcData = new Uint16Array(arrayBuffer, dataOffset);
         let index = 0;
@@ -452,7 +473,7 @@ export class DDSTools {
         height: number,
         dataOffset: number,
         dataLength: number,
-        arrayBuffer: ArrayBuffer,
+        arrayBuffer: ArrayBufferLike,
         rOffset: number,
         gOffset: number,
         bOffset: number,
@@ -489,7 +510,7 @@ export class DDSTools {
         height: number,
         dataOffset: number,
         dataLength: number,
-        arrayBuffer: ArrayBuffer,
+        arrayBuffer: ArrayBufferLike,
         rOffset: number,
         gOffset: number,
         bOffset: number
@@ -511,7 +532,7 @@ export class DDSTools {
         return byteArray;
     }
 
-    private static _GetLuminanceArrayBuffer(width: number, height: number, dataOffset: number, dataLength: number, arrayBuffer: ArrayBuffer): Uint8Array {
+    private static _GetLuminanceArrayBuffer(width: number, height: number, dataOffset: number, dataLength: number, arrayBuffer: ArrayBufferLike): Uint8Array {
         const byteArray = new Uint8Array(dataLength);
         const srcData = new Uint8Array(arrayBuffer, dataOffset);
         let index = 0;
@@ -906,9 +927,9 @@ const DXGI_FORMAT_ASTC_12X12_UNORM_SRGB   = 187;
                                       ? Constants.TEXTURETYPE_HALF_FLOAT
                                       : Constants.TEXTURETYPE_UNSIGNED_BYTE;
 
-                            let dataGetter: (width: number, height: number, dataOffset: number, dataLength: number, arrayBuffer: ArrayBuffer, lod: number) => ArrayBufferView;
+                            let dataGetter: (width: number, height: number, dataOffset: number, dataLength: number, arrayBuffer: ArrayBufferLike, lod: number) => ArrayBufferView;
                             let dataGetterPolynomial: Nullable<
-                                (width: number, height: number, dataOffset: number, dataLength: number, arrayBuffer: ArrayBuffer, lod: number) => ArrayBufferView
+                                (width: number, height: number, dataOffset: number, dataLength: number, arrayBuffer: ArrayBufferLike, lod: number) => ArrayBufferView
                             > = null;
 
                             switch (bpp) {

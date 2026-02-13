@@ -13,7 +13,7 @@ const url = (process.env.SANDBOX_BASE_URL || getGlobalConfig().baseUrl.replace("
 
 test("Sandbox is loaded (Desktop)", async ({ page }) => {
     await page.goto(url, {
-        waitUntil: "networkidle",
+        waitUntil: "load",
     });
     await page.setViewportSize({
         width: 1920,
@@ -27,7 +27,7 @@ test("Sandbox is loaded (Desktop)", async ({ page }) => {
 
 test("dropping an image to the sandbox", async ({ page }) => {
     await page.goto(url, {
-        waitUntil: "networkidle",
+        waitUntil: "load",
     });
     await page.setViewportSize({
         width: 1920,
@@ -50,13 +50,16 @@ test("dropping an image to the sandbox", async ({ page }) => {
     // wait for #babylonjsLoadingDiv to be hidden
     await page.waitForSelector("#babylonjsLoadingDiv", { state: "hidden" });
     await page.waitForSelector("#babylonjsLoadingDiv", { state: "detached" });
-    // check snapshot of the page
-    await expect(page).toHaveScreenshot({ maxDiffPixels: 3000 });
+    await page.waitForLoadState("networkidle");
+    // check snapshot of the rendering canvas (the full page includes Inspector, which has a lot of asynchrony and animation, making it hard to get a stable screenshot)
+    await expect(page.locator("#renderCanvas")).toHaveScreenshot({ maxDiffPixels: 3000 });
+    // but still check that the inspector is displayed
+    await expect(page.locator("#babylon-inspector-container")).toBeVisible();
 });
 
 test("loading a model using query parameters", async ({ page }) => {
     await page.goto(url + (snapshot ? "&" : "?") + "assetUrl=https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Models/main/2.0/Box/glTF-Binary/Box.glb", {
-        waitUntil: "networkidle",
+        waitUntil: "load",
     });
     await page.setViewportSize({
         width: 1920,
@@ -65,13 +68,14 @@ test("loading a model using query parameters", async ({ page }) => {
     // wait for #babylonjsLoadingDiv to be hidden
     await page.waitForSelector("#babylonjsLoadingDiv", { state: "hidden" });
     await page.waitForSelector("#babylonjsLoadingDiv", { state: "detached" });
+    await page.waitForLoadState("networkidle");
     // check snapshot of the page
     await expect(page).toHaveScreenshot({ maxDiffPixels: 3000 });
 });
 
 test("inspector is opened when clicking on the button", async ({ page }) => {
     await page.goto(url + (snapshot ? "&" : "?") + "assetUrl=https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Models/main/2.0/Box/glTF-Binary/Box.glb", {
-        waitUntil: "networkidle",
+        waitUntil: "load",
     });
     await page.setViewportSize({
         width: 1920,
@@ -81,11 +85,11 @@ test("inspector is opened when clicking on the button", async ({ page }) => {
     // wait for #babylonjsLoadingDiv to be hidden
     await page.waitForSelector("#babylonjsLoadingDiv", { state: "hidden" });
     await page.waitForSelector("#babylonjsLoadingDiv", { state: "detached" });
+    await page.waitForLoadState("networkidle");
 
     // click the "Inspector" button
     await page.getByTitle("Display inspector").click();
-    await expect(page.locator("#inspector-host")).toBeVisible();
-    await expect(page.locator("#scene-explorer-host")).toBeVisible();
+    await expect(page.locator("#babylon-inspector-container")).toBeVisible();
     // check snapshot of the page
     await expect(page).toHaveScreenshot({ maxDiffPixels: 3000 });
 });

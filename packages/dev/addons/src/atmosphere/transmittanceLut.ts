@@ -1,5 +1,5 @@
 // Copyright (c) Microsoft Corporation.
-// MIT License
+// Licensed under the MIT License.
 
 import type { Atmosphere } from "./atmosphere";
 import type { AtmospherePhysicalProperties } from "./atmospherePhysicalProperties";
@@ -14,8 +14,7 @@ import { Observable } from "core/Misc/observable";
 import { RenderTargetTexture } from "core/Materials/Textures/renderTargetTexture";
 import { Sample2DRgbaToRef } from "./sampling";
 import { Vector3Dot } from "core/Maths/math.vector.functions";
-import "./Shaders/fullscreenTriangle.vertex";
-import "./Shaders/transmittance.fragment";
+import { ShaderLanguage } from "core/Materials/shaderLanguage";
 
 const LutWidthPx = 256;
 const LutHeightPx = 64;
@@ -110,6 +109,13 @@ export class TransmittanceLut {
     }
 
     /**
+     * True if the LUT data has been read back from the GPU.
+     */
+    public get hasLutData(): boolean {
+        return this._lutData[0] !== undefined;
+    }
+
+    /**
      * Constructs the {@link TransmittanceLut}.
      * @param atmosphere - The atmosphere that owns this LUT.
      */
@@ -132,17 +138,28 @@ export class TransmittanceLut {
         renderTarget.anisotropicFilteringLevel = 1;
         renderTarget.skipInitialClear = true;
 
-        const useUbo = this._atmosphere.uniformBuffer.useUbo;
+        const atmosphereUbo = atmosphere.uniformBuffer;
+        const useUbo = atmosphereUbo.useUbo;
+        const useWebGPU = engine.isWebGPU && !EffectWrapper.ForceGLSL;
+        const uboName = useWebGPU ? "atmosphere" : atmosphereUbo.name;
         this._effectWrapper = new EffectWrapper({
             engine,
             name,
             vertexShader: "fullscreenTriangle",
             fragmentShader: "transmittance",
             attributeNames: ["position"],
-            uniformNames: ["depth", ...(useUbo ? [] : this._atmosphere.uniformBuffer.getUniformNames())],
-            uniformBuffers: useUbo ? [this._atmosphere.uniformBuffer.name] : [],
+            uniformNames: ["depth", ...(useUbo ? [] : atmosphereUbo.getUniformNames())],
+            uniformBuffers: useUbo ? [uboName] : [],
             defines: ["#define POSITION_VEC2"],
             useShaderStore: true,
+            shaderLanguage: useWebGPU ? ShaderLanguage.WGSL : ShaderLanguage.GLSL,
+            extraInitializations: (_, list) => {
+                list.push(
+                    ...(useWebGPU
+                        ? [import("./ShadersWGSL/fullscreenTriangle.vertex"), import("./ShadersWGSL/transmittance.fragment")]
+                        : [import("./Shaders/fullscreenTriangle.vertex"), import("./Shaders/transmittance.fragment")])
+                );
+            },
         });
 
         this._effectRenderer = new EffectRenderer(engine, {
@@ -203,15 +220,14 @@ export class TransmittanceLut {
             return false;
         }
 
-        const engine = this._atmosphere.scene.getEngine();
+        const effectRenderer = this._effectRenderer!;
+        effectRenderer.saveStates();
 
+        const engine = this._atmosphere.scene.getEngine();
         engine.bindFramebuffer(this.renderTarget.renderTarget!, undefined, undefined, undefined, true);
 
-        const effectRenderer = this._effectRenderer!;
-        effectRenderer.applyEffectWrapper(effectWrapper);
-
-        effectRenderer.saveStates();
         effectRenderer.setViewport();
+        effectRenderer.applyEffectWrapper(effectWrapper);
 
         const effect = effectWrapper.effect;
         effectRenderer.bindBuffers(effect);

@@ -21,6 +21,10 @@ export interface IGenerateDeclarationConfig {
     addToDocumentation?: boolean;
     initDocumentation?: boolean;
     fileFilterRegex?: string;
+    /** Maps declarationLib names to source directory paths (relative to packages/ folder).
+     * Only needed for libs where folder name doesn't match the camelized lib name.
+     * e.g., { "@dev/inspector": "dev/inspector-v2" } */
+    sourceDirectoryOverrides?: { [key: string]: string };
 }
 
 function GetModuleDeclaration(
@@ -122,8 +126,8 @@ function GetModuleDeclaration(
                                 if (!found) {
                                     // not a dev dependency
                                     // TODO - make a list of external dependencies per package
-                                    // for now - we support react
-                                    if (group !== "react" /* && !group.startsWith("@fluentui")*/) {
+                                    // for now - we support react (including react/jsx-runtime, etc.)
+                                    if (!group.startsWith("react") /* && !group.startsWith("@fluentui")*/) {
                                         // check what the line imports
                                         line = "";
                                     }
@@ -175,7 +179,7 @@ function GetModuleDeclaration(
         // TODO - make a list of dependencies that are accepted by each package
         if (!devPackageName) {
             if (externalName) {
-                if (externalName === "@fortawesome" || externalName === "react-contextmenu" || externalName === "@fluentui" || externalName === "@recast-navigation") {
+                if (externalName === "@fortawesome" || externalName === "@fluentui" || externalName === "@recast-navigation") {
                     // replace with any
                     const matchRegex = new RegExp(`([ <])(${alias}[^,;\n>) ]*)([^\\w])`, "g");
                     processedLines = processedLines.replace(matchRegex, `$1any$3`);
@@ -332,7 +336,8 @@ function GetPackageDeclaration(
         let line = lines[i];
 
         if (/import\("\.([^)]*)\)./g.test(line) && !/^declare type (.*) import/g.test(line)) {
-            line = line.replace(/import\(([^)]*)\)./g, "");
+            // Only remove relative imports (starting with "."), not external imports like "react"
+            line = line.replace(/import\("\.([^)]*)\)\./g, "");
         }
 
         if (!line.includes("const enum") && !line.includes("=")) {
@@ -411,7 +416,7 @@ function GetPackageDeclaration(
             // TODO - make a list of dependencies that are accepted by each package
             if (!localDevPackageMap) {
                 if (externalName) {
-                    if (externalName === "@fortawesome" || externalName === "react-contextmenu" || externalName === "@fluentui" || externalName === "@recast-navigation") {
+                    if (externalName === "@fortawesome" || externalName === "@fluentui" || externalName === "@recast-navigation") {
                         // replace with any
                         const matchRegex = new RegExp(`([ <])(${alias}[^,;\n>) ]*)([^\\w])`, "g");
                         processedSource = processedSource.replace(matchRegex, `$1any$3`);
@@ -595,8 +600,15 @@ export function generateDeclaration() {
         }
         const outputDir = config.outputDirectory || "./dist";
         checkDirectorySync(outputDir);
-        const directoriesToWatch = config.declarationLibs.map((lib: string) => path.join(rootDir, "packages", `${camelize(lib).replace(/@/g, "")}/dist/**/*.d.ts`));
-        const looseDeclarations = config.declarationLibs.map((lib: string) => path.join(rootDir, "packages", `${camelize(lib).replace(/@/g, "")}/**/LibDeclarations/**/*.d.ts`));
+        // Map declarationLibs to source directories, using overrides where specified
+        const sourceDirs = config.declarationLibs.map((lib: string) => {
+            if (config.sourceDirectoryOverrides?.[lib]) {
+                return config.sourceDirectoryOverrides[lib];
+            }
+            return camelize(lib).replace(/@/g, "");
+        });
+        const directoriesToWatch = sourceDirs.map((dir: string) => path.join(rootDir, "packages", `${dir}/dist/**/*.d.ts`));
+        const looseDeclarations = sourceDirs.map((dir: string) => path.join(rootDir, "packages", `${dir}/**/LibDeclarations/**/*.d.ts`));
 
         const debounced = debounce(() => {
             const { output, namespaceDeclaration, looseDeclarationsString } = generateCombinedDeclaration(

@@ -153,12 +153,17 @@ export class Particle {
     public _currentDrag2 = 0;
 
     /** @internal */
-    public _randomNoiseCoordinates1: Vector3;
+    public _randomNoiseCoordinates1: Nullable<Vector3>;
     /** @internal */
-    public _randomNoiseCoordinates2: Vector3;
+    public _randomNoiseCoordinates2: Nullable<Vector3>;
 
     /** @internal */
     public _localPosition?: Vector3;
+
+    /**
+     * Callback triggered when the particle is reset
+     */
+    public onReset: Nullable<() => void>;
 
     /**
      * Creates a new instance Particle
@@ -245,6 +250,9 @@ export class Particle {
 
     /** @internal */
     public _reset() {
+        if (this.onReset) {
+            this.onReset();
+        }
         this.age = 0;
         this.id = Particle._Count++;
         this._currentColorGradient = null;
@@ -255,6 +263,8 @@ export class Particle {
         this._currentDragGradient = null;
         this.cellIndex = this.particleSystem.startSpriteCellID;
         this._randomCellOffset = undefined;
+        this._randomNoiseCoordinates1 = null;
+        this._randomNoiseCoordinates2 = null;
     }
 
     /**
@@ -337,8 +347,8 @@ export class Particle {
                 other.remapData = new Vector4(0, 0, 0, 0);
             }
         }
-        if (this._randomNoiseCoordinates1) {
-            if (other._randomNoiseCoordinates1) {
+        if (this._randomNoiseCoordinates1 && this._randomNoiseCoordinates2) {
+            if (other._randomNoiseCoordinates1 && other._randomNoiseCoordinates2) {
                 other._randomNoiseCoordinates1.copyFrom(this._randomNoiseCoordinates1);
                 other._randomNoiseCoordinates2.copyFrom(this._randomNoiseCoordinates2);
             } else {

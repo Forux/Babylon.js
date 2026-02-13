@@ -142,8 +142,9 @@ export class Geometry implements IGetSetVerticesData {
      * @param vertexData defines the VertexData used to get geometry data
      * @param updatable defines if geometry must be updatable (false by default)
      * @param mesh defines the mesh that will be associated with the geometry
+     * @param totalVertices defines the total number of vertices (optional)
      */
-    constructor(id: string, scene?: Scene, vertexData?: VertexData, updatable: boolean = false, mesh: Nullable<Mesh> = null) {
+    constructor(id: string, scene?: Scene, vertexData?: VertexData, updatable: boolean = false, mesh: Nullable<Mesh> = null, totalVertices: Nullable<number> = null) {
         this._scene = scene || <Scene>EngineStore.LastCreatedScene;
         if (!this._scene) {
             return;
@@ -157,10 +158,14 @@ export class Geometry implements IGetSetVerticesData {
         this._indices = [];
         this._updatable = updatable;
 
+        if (totalVertices !== null) {
+            this._totalVertices = totalVertices;
+        }
+
         // vertexData
         if (vertexData) {
             this.setAllVerticesData(vertexData, updatable);
-        } else {
+        } else if (totalVertices === null) {
             this._totalVertices = 0;
         }
 
@@ -1050,7 +1055,18 @@ export class Geometry implements IGetSetVerticesData {
             const { type, byteOffset, byteStride, normalized } = vb;
             updatable = updatable || isUpdatable;
 
-            const copy = GetTypedArrayData(bufferData, size, type, byteOffset, byteStride, this._totalVertices, true);
+            let numElements = this._totalVertices;
+            if (vb.getIsInstanced()) {
+                // Do our best with the data we have to find a number of instances when the vertex buffer is instanced...
+                let bufferDataByteSize = 0;
+                if (bufferData instanceof Array) {
+                    bufferDataByteSize = bufferData.length * 4;
+                } else {
+                    bufferDataByteSize = bufferData.byteLength;
+                }
+                numElements = bufferDataByteSize / byteStride;
+            }
+            const copy = GetTypedArrayData(bufferData, size, type, byteOffset, byteStride, numElements, true);
             const newVb = new VertexBuffer(this._engine, copy, kind, {
                 updatable: isUpdatable,
                 useBytes: false,
@@ -1060,9 +1076,10 @@ export class Geometry implements IGetSetVerticesData {
                 type: type,
                 normalized: normalized,
                 takeBufferOwnership: true,
+                instanced: vb.getIsInstanced(),
             });
 
-            geometry.setVerticesBuffer(newVb, this._totalVertices);
+            geometry.setVerticesBuffer(newVb, numElements);
         }
 
         geometry._updatable = updatable;
@@ -1115,6 +1132,7 @@ export class Geometry implements IGetSetVerticesData {
      * Vertex buffers will not store CPU data anymore (this will prevent picking, collisions or physics to work correctly)
      */
     public clearCachedData(): void {
+        this._totalIndices = this._indices.length; // save the current value so that getTotalIndices can still work
         this._indices = [];
         this._resetPointsArrayCache();
 

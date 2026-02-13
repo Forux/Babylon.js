@@ -6,6 +6,8 @@ import { SystemBlock } from "core/Particles/Node/Blocks/systemBlock";
 import { NodeParticleBlockConnectionPointTypes } from "core/Particles/Node/Enums/nodeParticleBlockConnectionPointTypes";
 import { NodeParticleContextualSources } from "core/Particles/Node/Enums/nodeParticleContextualSources";
 import { ParticleMathBlock, ParticleMathBlockOperations } from "core/Particles/Node/Blocks/particleMathBlock";
+import { ParticleNumberMathBlock, ParticleNumberMathBlockOperations } from "core/Particles/Node/Blocks/particleNumberMathBlock";
+import { ParticleVectorMathBlock, ParticleVectorMathBlockOperations } from "core/Particles/Node/Blocks/particleVectorMathBlock";
 import { UpdateColorBlock } from "core/Particles/Node/Blocks/Update/updateColorBlock";
 import { ParticleLerpBlock } from "core/Particles/Node/Blocks/particleLerpBlock";
 import { UpdateScaleBlock } from "core/Particles/Node/Blocks/Update/updateScaleBlock";
@@ -28,6 +30,8 @@ import { SetupSpriteSheetBlock } from "core/Particles/Node/Blocks/Emitters/setup
 import { BasicSpriteUpdateBlock } from "core/Particles/Node/Blocks/Update/basicSpriteUpdateBlock";
 import { UpdateSpriteCellIndexBlock } from "core/Particles/Node/Blocks/Update/updateSpriteCellIndexBlock";
 import { UpdateFlowMapBlock } from "core/Particles/Node/Blocks/Update/updateFlowMapBlock";
+import { UpdateNoiseBlock } from "core/Particles/Node/Blocks/Update/updateNoiseBlock";
+import { UpdateRemapBlock } from "core/Particles/Node/Blocks/Update/updateRemapBlock";
 import { ParticleConditionBlock, ParticleConditionBlockTests } from "core/Particles/Node/Blocks/Conditions/particleConditionBlock";
 import { CreateParticleBlock } from "core/Particles/Node/Blocks/Emitters/createParticleBlock";
 import { BoxShapeBlock } from "core/Particles/Node/Blocks/Emitters/boxShapeBlock";
@@ -44,6 +48,10 @@ import { ParticleLocalVariableBlock } from "core/Particles/Node/Blocks/particleL
 import { ParticleVectorLengthBlock } from "core/Particles/Node/Blocks/particleVectorLengthBlock";
 import { ParticleFresnelBlock } from "core/Particles/Node/Blocks/particleFresnelBlock";
 import { ParticleFloatToIntBlock } from "core/Particles/Node/Blocks/particleFloatToIntBlock";
+import { ParticleClampBlock } from "core/Particles/Node/Blocks/particleClampBlock";
+import { ParticleNLerpBlock } from "core/Particles/Node/Blocks/particleNLerpBlock";
+import { ParticleSmoothStepBlock } from "core/Particles/Node/Blocks/particleSmoothStepBlock";
+import { ParticleStepBlock } from "core/Particles/Node/Blocks/particleStepBlock";
 
 /**
  * Static class for BlockTools
@@ -51,6 +59,14 @@ import { ParticleFloatToIntBlock } from "core/Particles/Node/Blocks/particleFloa
 export class BlockTools {
     public static GetBlockFromString(data: string) {
         switch (data) {
+            case "NLerpBlock":
+                return new ParticleNLerpBlock("NLerp");
+            case "StepBlock":
+                return new ParticleStepBlock("Step");
+            case "SmoothStepBlock":
+                return new ParticleSmoothStepBlock("SmoothStep");
+            case "ClampBlock":
+                return new ParticleClampBlock("Clamp");
             case "FresnelBlock":
                 return new ParticleFresnelBlock("Fresnel");
             case "LocalVariableBlock":
@@ -150,8 +166,12 @@ export class BlockTools {
                 return new UpdateAgeBlock("Update age");
             case "UpdateFlowMapBlock":
                 return new UpdateFlowMapBlock("Update flow map");
+            case "UpdateNoiseBlock":
+                return new UpdateNoiseBlock("Update noise");
             case "UpdateAttractorBlock":
                 return new UpdateAttractorBlock("Update attractor");
+            case "UpdateRemapBlock":
+                return new UpdateRemapBlock("Update remap");
             case "SystemBlock":
                 return new SystemBlock("System");
             case "TextureBlock":
@@ -318,6 +338,26 @@ export class BlockTools {
             case "MaxBlock": {
                 const block = new ParticleMathBlock("Max");
                 block.operation = ParticleMathBlockOperations.Max;
+                return block;
+            }
+            case "ModuloBlock": {
+                const block = new ParticleNumberMathBlock("Modulo");
+                block.operation = ParticleNumberMathBlockOperations.Modulo;
+                return block;
+            }
+            case "PowBlock": {
+                const block = new ParticleNumberMathBlock("Pow");
+                block.operation = ParticleNumberMathBlockOperations.Pow;
+                return block;
+            }
+            case "DotBlock": {
+                const block = new ParticleVectorMathBlock("Dot");
+                block.operation = ParticleVectorMathBlockOperations.Dot;
+                return block;
+            }
+            case "DistanceBlock": {
+                const block = new ParticleVectorMathBlock("Distance");
+                block.operation = ParticleVectorMathBlockOperations.Distance;
                 return block;
             }
             case "ToDegreesBlock": {

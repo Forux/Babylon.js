@@ -4,14 +4,29 @@ import { kebabize } from "./utils.js";
 export type BuildType = /*"lts" | */ "umd" | "esm" | "es6" | "namespace";
 const privatePackages: DevPackageName[] = ["shared-ui-components"];
 export const declarationsOnlyPackages: DevPackageName[] = ["babylonjs-gltf2interface"];
+
+/**
+ * ES packages that are bundled and should not have sub-paths appended when importing.
+ * For these packages, any import like `package/subpath` should be transformed to just `package`.
+ */
+export const bundledESPackages: DevPackageName[] = [
+    "node-editor",
+    "node-geometry-editor",
+    "node-render-graph-editor",
+    "node-particle-editor",
+    "gui-editor",
+    "inspector-legacy",
+    "inspector",
+];
+
 export type DevPackageName =
     | "core"
     | "gui"
     | "materials"
     | "loaders"
     | "serializers"
+    | "inspector-legacy"
     | "inspector"
-    | "inspector-v2"
     | "post-processes"
     | "procedural-textures"
     | "node-editor"
@@ -33,8 +48,8 @@ export type UMDPackageName =
     | "babylonjs-loaders"
     | "babylonjs-materials"
     | "babylonjs-procedural-textures"
+    | "babylonjs-inspector-legacy"
     | "babylonjs-inspector"
-    | "babylonjs-inspector-v2"
     | "babylonjs-node-editor"
     | "babylonjs-node-geometry-editor"
     | "babylonjs-node-render-graph-editor"
@@ -81,6 +96,7 @@ export type ES6PackageName =
     | "@babylonjs/loaders"
     | "@babylonjs/serializers"
     | "@babylonjs/procedural-textures"
+    | "@babylonjs/inspector-legacy"
     | "@babylonjs/inspector"
     | "@babylonjs/node-editor"
     | "@babylonjs/node-geometry-editor"
@@ -96,7 +112,7 @@ export type ES6PackageName =
     | "babylonjs-gltf2interface"
     | "@babylonjs/smart-filters";
 
-export const umdPackageMapping: { [key in UMDPackageName]: { baseDir: string; baseFilename: string; isBundle?: boolean } } = {
+export const umdPackageMapping: { [key in UMDPackageName]: { sourceDir?: string; baseDir: string; baseFilename: string; isBundle?: boolean } } = {
     babylonjs: {
         baseDir: "",
         baseFilename: "babylon",
@@ -121,12 +137,16 @@ export const umdPackageMapping: { [key in UMDPackageName]: { baseDir: string; ba
         baseDir: "proceduralTexturesLibrary",
         baseFilename: "babylonjs.proceduralTextures",
     },
-    "babylonjs-inspector": {
+    "babylonjs-inspector-legacy": {
+        // Needed because the package name does not currently match the directory name (see prepareSnapshot.ts)
+        sourceDir: "babylonjs-inspector",
         baseDir: "inspector",
         baseFilename: "babylon.inspector",
         isBundle: true,
     },
-    "babylonjs-inspector-v2": {
+    "babylonjs-inspector": {
+        // Needed because the package name does not currently match the directory name (see prepareSnapshot.ts)
+        sourceDir: "babylonjs-inspector-v2",
         baseDir: "inspector",
         baseFilename: "babylon.inspector-v2",
         isBundle: true,
@@ -203,8 +223,8 @@ const packageMapping: {
         materials: "babylonjs-materials",
         loaders: "babylonjs-loaders",
         serializers: "babylonjs-serializers",
+        "inspector-legacy": "babylonjs-inspector-legacy",
         inspector: "babylonjs-inspector",
-        "inspector-v2": "babylonjs-inspector-v2",
         "node-editor": (_filePath?: string) => {
             // if (filePath && filePath.indexOf("sharedUiComponents") !== -1) {
             //     return "babylonjs-shared-ui-components";
@@ -251,8 +271,8 @@ const packageMapping: {
         materials: "@babylonjs/materials",
         loaders: "@babylonjs/loaders",
         serializers: "@babylonjs/serializers",
+        "inspector-legacy": "@babylonjs/inspector-legacy",
         inspector: "@babylonjs/inspector",
-        "inspector-v2": "@babylonjs/inspector",
         "node-editor": "@babylonjs/node-editor",
         "node-geometry-editor": "@babylonjs/node-geometry-editor",
         "node-render-graph-editor": "@babylonjs/node-render-graph-editor",
@@ -274,8 +294,8 @@ const packageMapping: {
         materials: "@babylonjs/esm",
         loaders: "@babylonjs/esm",
         serializers: "@babylonjs/esm",
+        "inspector-legacy": "@babylonjs/esm",
         inspector: "@babylonjs/esm",
-        "inspector-v2": "@babylonjs/esm",
         "node-editor": "@babylonjs/esm",
         "node-geometry-editor": "@babylonjs/esm",
         "node-render-graph-editor": "@babylonjs/esm",
@@ -331,7 +351,7 @@ const packageMapping: {
             return "BABYLON";
         },
         serializers: "BABYLON",
-        inspector: (filePath?: string) => {
+        "inspector-legacy": (filePath?: string) => {
             filePath = filePath?.replaceAll("\\", "/");
             if (filePath) {
                 if (filePath.includes("shared-ui-components/") || filePath.includes("/sharedUiComponents/")) {
@@ -343,7 +363,7 @@ const packageMapping: {
             }
             return "INSPECTOR";
         },
-        "inspector-v2": (filePath?: string) => {
+        inspector: (filePath?: string) => {
             filePath = filePath?.replaceAll("\\", "/");
             if (filePath) {
                 if (filePath.includes("shared-ui-components/") || filePath.includes("/sharedUiComponents/")) {

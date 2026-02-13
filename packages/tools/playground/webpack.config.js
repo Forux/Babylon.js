@@ -26,51 +26,47 @@ module.exports = (env) => {
                 new MonacoWebpackPlugin({
                     languages: ["typescript", "javascript"],
                     filename: "[name].[contenthash].worker.js",
+                    monacoEditorPath: path.resolve("../../../node_modules/monaco-editor"),
                 }),
+                // Override Monaco's defaultDocumentColorsComputer with a compatible version
+                // that doesn't use negative lookbehind regex (unsupported in older Safari).
+                // Using NormalModuleReplacementPlugin instead of resolve.alias to avoid
+                // circular resolution loops that cause CI timeouts.
+                new (require("webpack").NormalModuleReplacementPlugin)(
+                    /defaultDocumentColorsComputer\.js$/,
+                    path.resolve(__dirname, "src/tools/monaco/compat/defaultDocumentColorsComputer.ts")
+                ),
             ]
         ),
         resolve: {
             extensions: [".js", ".ts", ".tsx", ".scss", "*.svg"],
             alias: {
                 "shared-ui-components": path.resolve("../../dev/sharedUiComponents/dist"),
-                "inspector-v2": path.resolve("../../dev/inspector-v2/dist"),
-                addons: path.resolve("../../dev/addons/dist"),
-                materials: path.resolve("../../dev/materials/dist"),
-                core: path.resolve("../../dev/core/dist"),
-                loaders: path.resolve("../../dev/loaders/dist"),
-                gui: path.resolve("../../dev/gui/dist"),
-                serializers: path.resolve("../../dev/serializers/dist"),
             },
         },
-        externals: [
-            function ({ context, request }, callback) {
-                if (/^@dev\/core$/.test(request)) {
-                    return callback(null, "BABYLON");
-                }
-
-                if (context.includes("inspector-v2") || context.includes("sharedUiComponents")) {
-                    if (/^core\//.test(request)) {
-                        return callback(null, "BABYLON");
-                    } else if (/^loaders\//.test(request)) {
-                        return callback(null, "BABYLON");
-                    } else if (/^addons\//.test(request)) {
-                        return callback(null, "ADDONS");
-                    } else if (/^materials\//.test(request)) {
-                        return callback(null, "BABYLON");
-                    } else if (/^gui\//.test(request)) {
-                        return callback(null, "BABYLON.GUI");
-                    }
-                }
-
-                // Continue without externalizing the import
-                callback();
-            },
-        ],
+        externals: {
+            "@dev/core": "BABYLON",
+        },
         module: {
             rules: webpackTools.getRules({
                 sideEffects: true,
                 includeCSS: true,
                 extraRules: [
+                    {
+                        test: /\.m?js$/,
+                        include: /node_modules[\\/]+monaco-editor/,
+                        use: {
+                            loader: "ts-loader",
+                            options: {
+                                transpileOnly: true,
+                                compilerOptions: {
+                                    allowJs: true,
+                                    target: "ES2015",
+                                    module: "ESNext",
+                                },
+                            },
+                        },
+                    },
                     {
                         test: /\.ttf$/,
                         type: "asset/resource",
@@ -81,6 +77,7 @@ module.exports = (env) => {
                     },
                 ],
                 tsOptions: {
+                    transpileOnly: true,
                     compilerOptions: {
                         rootDir: "../../",
                     },

@@ -13,21 +13,7 @@ import type { IDisposable, Nullable, Scene, ThinEngine } from "@dev/core";
 
 import "../scss/rendering.scss";
 
-let InspectorV2ModulePromise: Promise<typeof import("inspector-v2/inspector") & typeof import("inspector-v2/legacy/inspector")> | null = null;
-// eslint-disable-next-line @typescript-eslint/promise-function-async
-function ImportInspectorV2() {
-    if (!InspectorV2ModulePromise) {
-        const inspectorModulePromise = import("inspector-v2/inspector");
-        const backCompatModulePromise = import("inspector-v2/legacy/inspector");
-        InspectorV2ModulePromise = Promise.all([inspectorModulePromise, backCompatModulePromise]).then(([inspectorModule, backCompatModule]) => {
-            return {
-                ...inspectorModule,
-                ...backCompatModule,
-            };
-        });
-    }
-    return InspectorV2ModulePromise;
-}
+type InspectorV2Module = typeof import("inspector/legacy/legacy") & typeof import("inspector/index");
 
 interface IRenderingComponentProps {
     globalState: GlobalState;
@@ -48,7 +34,7 @@ export class RenderingComponent extends React.Component<IRenderingComponentProps
     private _canvasRef: React.RefObject<HTMLCanvasElement>;
     private _downloadManager: DownloadManager;
     private _inspectorFallback: boolean = false;
-    private inspectorV2Token: Nullable<IDisposable> = null;
+    private _inspectorV2Token: Nullable<IDisposable> = null;
 
     /**
      * Create the rendering component.
@@ -98,63 +84,32 @@ export class RenderingComponent extends React.Component<IRenderingComponentProps
                 debugLayer.openedPanes = debugLayer.BJSINSPECTOR?.Inspector?._OpenedPane || 0;
             }
 
-            const isInspectorV1Enabled = this._scene.debugLayer.openedPanes !== 0;
-            const isInspectorV2Enabled = !!this.inspectorV2Token;
-            const isInspectorEnabled = isInspectorV1Enabled || isInspectorV2Enabled;
-
-            const searchParams = new URLSearchParams(window.location.search);
-            let isInspectorV2ModeEnabled = searchParams.has("inspectorv2") && searchParams.get("inspectorv2") !== "false";
-
-            if (action === "refresh") {
-                action = isInspectorEnabled ? "enable" : "disable";
-            } else if (action === "toggle") {
-                action = isInspectorEnabled ? "disable" : "enable";
-            }
-
-            // Disallow Inspector v2 on specific/older versions. For now, only support the latest as both core and inspector are evolving in tandem.
-            // Once we have an Inspector v2 UMD package, we can make this work the same as Inspector v1.)
-            if (action === "enable" && isInspectorV2ModeEnabled && props.globalState.version) {
-                isInspectorV2ModeEnabled = false;
-                alert("Inspector v2 is only supported with the latest version of Babylon.js at this time. Falling back to Inspector V1.");
-            }
-
             this.setState({
-                preferInspector: action === "enable",
+                preferInspector: true,
             });
 
             // Inspector v2 should not be disposed during a React render, so just wait one JS frame.
             await Promise.resolve();
 
-            if (isInspectorV1Enabled && (isInspectorV2ModeEnabled || action === "disable")) {
+            if (this._inspectorV2Token) {
+                this._inspectorV2Token.dispose();
+                this._inspectorV2Token = null;
+            } else if (this._scene.debugLayer.openedPanes !== 0) {
                 this._scene.debugLayer.hide();
-            }
-
-            if (isInspectorV2Enabled && (!isInspectorV2ModeEnabled || action === "disable")) {
-                this.inspectorV2Token?.dispose();
-                this.inspectorV2Token = null;
-            }
-
-            if (!isInspectorV1Enabled && !isInspectorV2ModeEnabled && action === "enable") {
-                this._scene.debugLayer.show({
-                    embedMode: true,
-                });
-            }
-
-            if (!isInspectorV2Enabled && isInspectorV2ModeEnabled && action === "enable") {
-                const inspectorV2Module = await ImportInspectorV2();
-                const options = {
-                    ...inspectorV2Module.ConvertOptions({
-                        embedMode: true,
-                    }),
-                    showThemeSelector: false,
-                    themeMode: Utilities.ReadStringFromStore("theme", "Light") === "Dark" ? "dark" : "light",
-                } as const;
-                this.inspectorV2Token = inspectorV2Module.ShowInspector(this._scene, options);
+            } else {
+                await this._showInspectorAsync();
             }
         });
 
         this.props.globalState.onFullcreenRequiredObservable.add(() => {
             this._engine?.switchFullscreen(false);
+        });
+
+        this.props.globalState.onThemeChangedObservable.add(() => {
+            if (this._inspectorV2Token) {
+                this._inspectorV2Token.dispose();
+                this._showInspectorAsync();
+            }
         });
 
         window.addEventListener("resize", () => {
@@ -166,6 +121,26 @@ export class RenderingComponent extends React.Component<IRenderingComponentProps
         });
 
         window.addEventListener("error", this._saveError);
+    }
+
+    private async _showInspectorAsync() {
+        if (this._scene) {
+            const inspectorV2Module: InspectorV2Module | undefined = (globalThis as any).INSPECTOR;
+            if (inspectorV2Module?.ShowInspector) {
+                const options = {
+                    ...inspectorV2Module.ConvertOptions({
+                        embedMode: true,
+                    }),
+                    showThemeSelector: false,
+                    themeMode: Utilities.ReadStringFromStore("theme", "Light") === "Dark" ? "dark" : "light",
+                } as const;
+                this._inspectorV2Token = inspectorV2Module.ShowInspector(this._scene, options);
+            } else {
+                await this._scene.debugLayer.show({
+                    embedMode: true,
+                });
+            }
+        }
     }
 
     private _saveError = (_err: ErrorEvent) => {
@@ -204,13 +179,13 @@ export class RenderingComponent extends React.Component<IRenderingComponentProps
 
         this.props.globalState.onErrorObservable.notifyObservers(null);
 
-        const displayInspector = this.inspectorV2Token || this._scene?.debugLayer.isVisible();
+        const displayInspector = this._inspectorV2Token || this._scene?.debugLayer.isVisible();
 
         const webgpuPromise = WebGPUEngine ? WebGPUEngine.IsSupportedAsync : Promise.resolve(false);
         const webGPUSupported = await webgpuPromise;
 
-        this.inspectorV2Token?.dispose();
-        this.inspectorV2Token = null;
+        this._inspectorV2Token?.dispose();
+        this._inspectorV2Token = null;
 
         let useWebGPU = location.search.indexOf("webgpu") !== -1 && webGPUSupported;
         let forceWebGL1 = false;
@@ -218,7 +193,7 @@ export class RenderingComponent extends React.Component<IRenderingComponentProps
 
         switch (configuredEngine) {
             case "WebGPU":
-                useWebGPU = true && webGPUSupported;
+                useWebGPU = webGPUSupported;
                 break;
             case "WebGL":
                 forceWebGL1 = true;
@@ -383,7 +358,7 @@ export class RenderingComponent extends React.Component<IRenderingComponentProps
 
             // Rehydrate inspector
             if (this.state.preferInspector && displayInspector) {
-                this.props.globalState.onInspectorRequiredObservable.notifyObservers("enable");
+                this.props.globalState.onInspectorRequiredObservable.notifyObservers();
             }
             return;
         } catch (e) {

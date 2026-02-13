@@ -7,6 +7,11 @@ export class FrameGraphContext {
     private _depthTest: boolean;
     private _depthWrite: boolean;
 
+    /**
+     * If true, debug markers will be enabled in the context.
+     */
+    public enableDebugMarkers = true;
+
     /** @internal */
     constructor(
         protected readonly _engine: AbstractEngine,
@@ -34,7 +39,7 @@ export class FrameGraphContext {
 
         if (this._engine._currentRenderTarget !== currentRenderTarget) {
             if (!currentRenderTarget) {
-                this._engine.restoreDefaultFramebuffer();
+                this._engine.restoreDefaultFramebuffer(true);
             } else {
                 this._engine.bindFramebuffer(currentRenderTarget);
             }
@@ -56,14 +61,22 @@ export class FrameGraphContext {
      * @param name The name of the debug group
      */
     public pushDebugGroup(name: string) {
-        this._engine._debugPushGroup?.(name, 1);
+        this.enableDebugMarkers && this._engine._debugPushGroup?.(name);
     }
 
     /**
      * Pops a debug group from the engine's debug stack.
      */
     public popDebugGroup() {
-        this._engine._debugPopGroup?.(1);
+        this.enableDebugMarkers && this._engine._debugPopGroup?.();
+    }
+
+    /**
+     * Inserts a debug marker in the engine's debug stack.
+     * @param text The text of the debug marker
+     */
+    public insertDebugMarker(text: string) {
+        this.enableDebugMarkers && this._engine._debugInsertMarker?.(text);
     }
 
     /**

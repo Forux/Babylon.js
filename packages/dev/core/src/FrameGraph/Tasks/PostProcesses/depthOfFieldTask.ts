@@ -22,6 +22,17 @@ export class FrameGraphDepthOfFieldTask extends FrameGraphTask {
     public sourceSamplingMode = Constants.TEXTURE_BILINEAR_SAMPLINGMODE;
 
     /**
+     * The alpha mode to use when applying the depth of field effect.
+     */
+    public get alphaMode() {
+        return this._merge.alphaMode;
+    }
+
+    public set alphaMode(mode: number) {
+        this._merge.alphaMode = mode;
+    }
+
+    /**
      * The depth texture to use for the depth of field effect.
      * Should store camera space depth (Z coordinate).
      */
@@ -133,6 +144,10 @@ export class FrameGraphDepthOfFieldTask extends FrameGraphTask {
         return this.depthOfField.isReady();
     }
 
+    public override getClassName(): string {
+        return "FrameGraphDepthOfFieldTask";
+    }
+
     public record(): void {
         if (this.sourceTexture === undefined || this.depthTexture === undefined || this.camera === undefined) {
             throw new Error("FrameGraphDepthOfFieldTask: sourceTexture, depthTexture and camera are required");
@@ -215,7 +230,9 @@ export class FrameGraphDepthOfFieldTask extends FrameGraphTask {
 
         passDisabled.setRenderTarget(this.outputTexture);
         passDisabled.setExecuteFunc((context) => {
-            context.copyTexture(this.sourceTexture);
+            if (this.alphaMode === Constants.ALPHA_DISABLE) {
+                context.copyTexture(this.sourceTexture);
+            }
         });
     }
 

@@ -20,13 +20,27 @@ import { ImageProcessingPostProcess } from "core/PostProcesses/imageProcessingPo
 import "core/Helpers/sceneHelpers";
 import { Color3, Color4 } from "core/Maths/math.color";
 import { ArcRotateCamera } from "core/Cameras/arcRotateCamera";
-
 import { PBRMaterial } from "core/Materials/PBR/pbrMaterial";
 import { MeshBuilder } from "core/Meshes/meshBuilder";
 import { StandardMaterial } from "core/Materials/standardMaterial";
 import { MultiMaterial } from "core/Materials/multiMaterial";
+import { NodeMaterial } from "core/Materials/Node/nodeMaterial";
 import { Texture } from "core/Materials/Textures/texture";
-import { ShowInspector } from "../../src";
+import { AdvancedDynamicTexture } from "gui/2D/advancedDynamicTexture";
+import { Button } from "gui/2D/controls/button";
+import "core/Audio/audioSceneComponent";
+import "core/Audio/audioEngine";
+import { Sound } from "core/Audio/sound";
+import { ShowInspector } from "../../src/inspector";
+
+// TODO: Get this working automatically without requiring an explicit import. Inspector v2 should dynamically import these when needed.
+//       See the initial attempt here: https://github.com/BabylonJS/Babylon.js/pull/17646
+import "node-editor/legacy/legacy";
+import "node-geometry-editor/legacy/legacy";
+import "node-particle-editor/legacy/legacy";
+import "node-render-graph-editor/legacy/legacy";
+
+import "node-particle-editor/legacy/legacy"; // Ensure node particle editor legacy code is imported
 
 // Register scene loader plugins.
 registerBuiltInLoaders();
@@ -36,6 +50,7 @@ const canvas = document.getElementById("canvas") as HTMLCanvasElement;
 const engine = new Engine(canvas, true, {
     adaptToDeviceRatio: true,
     antialias: true,
+    audioEngine: true,
 });
 
 const scene = new Scene(engine);
@@ -150,6 +165,8 @@ function createTestMetadata() {
 function createMaterials() {
     const multiMaterial = new MultiMaterial("multi", scene);
     multiMaterial.subMaterials.push(...scene.materials);
+
+    NodeMaterial.ParseFromSnippetAsync("9RX8AG#4", scene);
 }
 
 function createGaussianSplatting() {
@@ -158,6 +175,24 @@ function createGaussianSplatting() {
         mesh.scaling.scaleInPlace(0.1);
         mesh.rotation.y = Math.PI;
         mesh.position = new Vector3(0.336, 0.072, -0.171);
+    });
+}
+
+function createGui() {
+    const advancedTexture = AdvancedDynamicTexture.CreateFullscreenUI("UI");
+    const button = Button.CreateSimpleButton("but1", "Click Me");
+    button.onPointerClickObservable.add(() => alert("button clicked"));
+    button.width = 0.2;
+    button.height = "40px";
+    button.color = "white";
+    button.background = "green";
+    advancedTexture.addControl(button);
+}
+
+function createSound() {
+    const sound = new Sound("Music", "https://playground.babylonjs.com/sounds/violons11.wav", scene, null, {
+        loop: true,
+        autoplay: false,
     });
 }
 
@@ -177,6 +212,10 @@ function createGaussianSplatting() {
     createMaterials();
 
     createTestMetadata();
+
+    createGui();
+
+    createSound();
 
     engine.runRenderLoop(() => {
         scene.render();

@@ -1113,9 +1113,33 @@ export class GLTFFileLoader extends GLTFLoaderOptions implements IDisposable, IS
         onError?: (request?: WebRequest) => void,
         onOpened?: (request: WebRequest) => void
     ): IFileRequest {
-        const request = scene._loadFile(
+        let completionProgressApplied = false;
+        let completedPayloadBytes: Nullable<number> = null;
+        const applyCompletionProgress = (payloadBytes: number) => {
+            const loaded = request._loaded ?? payloadBytes ?? 0;
+            const total = request._total ?? loaded;
+            request._lengthComputable = true;
+            request._loaded = loaded;
+            request._total = Math.max(total, loaded);
+            completionProgressApplied = true;
+            this._onProgress(
+                {
+                    lengthComputable: true,
+                    loaded: request._loaded,
+                    total: request._total,
+                } as ProgressEvent,
+                request
+            );
+        };
+        let request: IFileRequestInfo;
+        request = scene._loadFile(
             fileOrUrl,
-            onSuccess,
+            (data) => {
+                completedPayloadBytes =
+                    typeof data === "string" ? (typeof TextEncoder !== "undefined" ? new TextEncoder().encode(data).byteLength : data.length) : data.byteLength;
+                applyCompletionProgress(completedPayloadBytes);
+                setTimeout(() => onSuccess(data), 10);
+            },
             (event) => {
                 this._onProgress(event, request);
             },
@@ -1125,9 +1149,10 @@ export class GLTFFileLoader extends GLTFLoaderOptions implements IDisposable, IS
             onOpened
         ) as IFileRequestInfo;
         request.onCompleteObservable.add(() => {
-            // Force the length computable to be true since we can guarantee the data is loaded.
-            request._lengthComputable = true;
-            request._total = request._loaded;
+            if (!completionProgressApplied) {
+                // Fallback final tick in case onSuccess path did not run.
+                applyCompletionProgress(completedPayloadBytes ?? 0);
+            }
         });
         this._requests.push(request);
         return request;

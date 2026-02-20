@@ -20,6 +20,7 @@ export const SoundExplorerServiceDefinition: ServiceDefinition<[], [ISceneExplor
         if (!scene) {
             return undefined;
         }
+        if (!scene.mainSoundTrack) return;
 
         const soundAddedObservable = new Observable<Sound>();
         const soundRemovedObservable = new Observable<Sound>();

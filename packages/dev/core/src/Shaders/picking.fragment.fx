@@ -1,4 +1,5 @@
-﻿
+﻿precision highp int;
+
 #if defined(INSTANCES)
 flat varying float vMeshID;
 #else

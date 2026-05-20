@@ -1,10 +1,10 @@
-import type { FunctionComponent } from "react";
+import { type FunctionComponent } from "react";
 
-import type { Nullable, Quaternion, Vector3 } from "core/index";
+import { type Nullable, type Quaternion, type Vector3 } from "core/index";
 
 import { QuaternionPropertyLine, RotationVectorPropertyLine, Vector3PropertyLine } from "shared-ui-components/fluent/hoc/propertyLines/vectorPropertyLine";
 import { useQuaternionProperty } from "../../hooks/compoundPropertyHooks";
-import { useSetting } from "../../hooks/settingsHooks";
+import { useSetting } from "shared-ui-components/modularTool/hooks/settingsHooks";
 import { UseDegreesSettingDescriptor, UseEulerSettingDescriptor } from "../../services/globalSettings";
 import { BoundProperty, Property } from "./boundProperty";
 
@@ -24,7 +24,7 @@ export const TransformProperties: FunctionComponent<{ transform: Transform }> = 
             {quatRotation ? (
                 <Property
                     component={QuaternionPropertyLine}
-                    label="Rotation Quaternion"
+                    label="Rotation"
                     propertyPath="rotationQuaternion"
                     value={quatRotation}
                     onChange={(val) => (transform.rotationQuaternion = val)}
@@ -34,7 +34,7 @@ export const TransformProperties: FunctionComponent<{ transform: Transform }> = 
             ) : (
                 <BoundProperty component={RotationVectorPropertyLine} label="Rotation" target={transform} propertyKey="rotation" useDegrees={useDegrees} />
             )}
-            <BoundProperty component={Vector3PropertyLine} label="Scaling" target={transform} propertyKey="scaling" />
+            <BoundProperty component={Vector3PropertyLine} label="Scaling" target={transform} propertyKey="scaling" step={0.1} />
         </>
     );
 };

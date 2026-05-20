@@ -1,27 +1,28 @@
 import { serialize, serializeAsColor4, serializeAsCameraReference } from "../Misc/decorators";
 import { Tools } from "../Misc/tools";
 import { Observable } from "../Misc/observable";
-import type { Nullable } from "../types";
-import type { Camera } from "../Cameras/camera";
-import type { Scene } from "../scene";
-import type { ISize } from "../Maths/math.size";
-import type { Color4 } from "../Maths/math.color";
-import type { AbstractEngine } from "../Engines/abstractEngine";
+import { type Nullable } from "../types";
+import { type Camera } from "../Cameras/camera";
+import { type Scene } from "../scene";
+import { type ISize } from "../Maths/math.size";
+import { type Color4 } from "../Maths/math.color";
+import { type AbstractEngine } from "../Engines/abstractEngine";
 import { EngineStore } from "../Engines/engineStore";
-import type { SubMesh } from "../Meshes/subMesh";
-import type { AbstractMesh } from "../Meshes/abstractMesh";
-import type { Mesh } from "../Meshes/mesh";
-import type { PostProcess } from "../PostProcesses/postProcess";
-import type { BaseTexture } from "../Materials/Textures/baseTexture";
+import { RegisterEffectLayerSceneComponent } from "./effectLayerSceneComponent.pure";
+import { type SubMesh } from "../Meshes/subMesh";
+import { type AbstractMesh } from "../Meshes/abstractMesh";
+import { type Mesh } from "../Meshes/mesh";
+import { type PostProcess } from "../PostProcesses/postProcess";
+import { type BaseTexture } from "../Materials/Textures/baseTexture";
 import { Texture } from "../Materials/Textures/texture";
 import { RenderTargetTexture } from "../Materials/Textures/renderTargetTexture";
-import type { Effect } from "../Materials/effect";
-import type { Material } from "../Materials/material";
+import { type Effect } from "../Materials/effect";
+import { type Material } from "../Materials/material";
 import { Constants } from "../Engines/constants";
 
 import { _WarnImport } from "../Misc/devTools";
 import { GetExponentOfTwo } from "../Misc/tools.functions";
-import type { ShaderLanguage } from "core/Materials/shaderLanguage";
+import { type ShaderLanguage } from "core/Materials/shaderLanguage";
 import { ThinEffectLayer } from "./thinEffectLayer";
 import { UniqueIdGenerator } from "core/Misc/uniqueIdGenerator";
 
@@ -318,6 +319,7 @@ export abstract class EffectLayer {
         this.name = name;
 
         this._scene = scene || <Scene>EngineStore.LastCreatedScene;
+        RegisterEffectLayerSceneComponent(EffectLayer);
         EffectLayer._SceneComponentInitialization(this._scene);
 
         this._engine = this._scene.getEngine();

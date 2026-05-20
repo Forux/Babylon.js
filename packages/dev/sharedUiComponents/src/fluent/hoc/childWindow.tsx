@@ -1,8 +1,5 @@
-import type { GriffelRenderer } from "@fluentui/react-components";
-import type { FunctionComponent, PropsWithChildren, Ref } from "react";
-
-import { createDOMRenderer, FluentProvider, Portal, RendererProvider } from "@fluentui/react-components";
-import { useCallback, useEffect, useImperativeHandle, useState } from "react";
+import { type GriffelRenderer, createDOMRenderer, FluentProvider, Portal, RendererProvider } from "@fluentui/react-components";
+import { type FunctionComponent, type PropsWithChildren, type Ref, useCallback, useEffect, useImperativeHandle, useState } from "react";
 
 import { Logger } from "core/Misc/logger";
 import { ToastProvider } from "../primitives/toast";
@@ -190,22 +187,20 @@ export const ChildWindow: FunctionComponent<PropsWithChildren<ChildWindowProps>>
             body.style.display = "flex";
             body.style.overflow = "hidden";
 
-            const applyWindowState = () => {
-                // Setup the window state, including creating a Fluent/Griffel "renderer" for managing runtime styles/classes in the child window.
-                setWindowState({ mountNode: body, renderer: createDOMRenderer(childWindow.document) });
-                onOpenChange?.(true);
-            };
+            // Setup the window state, including creating a Fluent/Griffel "renderer" for managing runtime styles/classes in the child window.
+            setWindowState({ mountNode: body, renderer: createDOMRenderer(childWindow.document) });
+            onOpenChange?.(true);
 
-            // Once the child window document is ready, setup the window state which will trigger another effect that renders into the child window.
-            if (childWindow.document.readyState === "complete") {
-                applyWindowState();
-            } else {
-                const onChildWindowLoad = () => {
-                    applyWindowState();
-                };
-                childWindow.addEventListener("load", onChildWindowLoad, { once: true });
-                disposeActions.push(() => childWindow.removeEventListener("load", onChildWindowLoad));
-            }
+            // Track the most recently observed window bounds. In some browsers (e.g. Firefox), accessing
+            // properties like screenX on a closed window throws, so we cache the last known good values
+            // to use as a fallback when the dispose runs after the window has already been closed.
+            const getBounds = () => ({
+                left: childWindow.screenX,
+                top: childWindow.screenY,
+                width: childWindow.innerWidth,
+                height: childWindow.innerHeight,
+            });
+            let lastBounds = getBounds();
 
             // When the child window is closed for any reason, transition back to a closed state.
             const onChildWindowUnload = () => {
@@ -215,6 +210,13 @@ export const ChildWindow: FunctionComponent<PropsWithChildren<ChildWindowProps>>
             };
             childWindow.addEventListener("unload", onChildWindowUnload, { once: true });
             disposeActions.push(() => childWindow.removeEventListener("unload", onChildWindowUnload));
+
+            // Capture bounds before the window is unloaded, while its properties are still safe to read.
+            const onChildWindowBeforeUnload = () => {
+                lastBounds = getBounds();
+            };
+            childWindow.addEventListener("beforeunload", onChildWindowBeforeUnload);
+            disposeActions.push(() => childWindow.removeEventListener("beforeunload", onChildWindowBeforeUnload));
 
             // If the main window closes, close any open child windows as well (don't leave them orphaned).
             const onParentWindowUnload = () => {
@@ -229,15 +231,10 @@ export const ChildWindow: FunctionComponent<PropsWithChildren<ChildWindowProps>>
             // On dispose, save the window bounds.
             disposeActions.push(() => {
                 if (storageKey) {
-                    localStorage.setItem(
-                        storageKey,
-                        JSON.stringify({
-                            left: childWindow.screenX,
-                            top: childWindow.screenY,
-                            width: childWindow.innerWidth,
-                            height: childWindow.innerHeight,
-                        })
-                    );
+                    if (!childWindow.closed) {
+                        lastBounds = getBounds();
+                    }
+                    localStorage.setItem(storageKey, JSON.stringify(lastBounds));
                 }
             });
         }

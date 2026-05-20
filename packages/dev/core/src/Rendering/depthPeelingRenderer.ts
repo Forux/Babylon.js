@@ -2,14 +2,15 @@
  * Implementation based on https://medium.com/@shrekshao_71662/dual-depth-peeling-implementation-in-webgl-11baa061ba4b
  */
 import { Constants } from "../Engines/constants";
-import type { Scene } from "../scene";
+import { type Scene } from "../scene";
 import { ThinTexture } from "../Materials/Textures/thinTexture";
-import type { PrePassEffectConfiguration } from "./prePassEffectConfiguration";
-import type { PrePassRenderer } from "./prePassRenderer";
-import type { InternalTexture } from "../Materials/Textures/internalTexture";
+import { type PrePassEffectConfiguration } from "./prePassEffectConfiguration";
+import { type PrePassRenderer } from "./prePassRenderer";
+import { type InternalTexture } from "../Materials/Textures/internalTexture";
 import { RenderTargetTexture } from "../Materials/Textures/renderTargetTexture";
 import { Logger } from "../Misc/logger";
 import { ThinDepthPeelingRenderer } from "./thinDepthPeelingRenderer";
+import { RegisterDepthPeelingSceneComponent } from "./depthPeelingSceneComponent.pure";
 
 class DepthPeelingEffectConfiguration implements PrePassEffectConfiguration {
     /**
@@ -48,6 +49,8 @@ export class DepthPeelingRenderer extends ThinDepthPeelingRenderer {
      */
     constructor(scene: Scene, passCount: number = 5) {
         super(scene, passCount);
+
+        RegisterDepthPeelingSceneComponent(DepthPeelingRenderer);
 
         //  We need a depth texture for opaque
         if (!scene.enablePrePassRenderer()) {

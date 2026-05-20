@@ -1,11 +1,11 @@
-import type { ServiceDefinition } from "../modularity/serviceDefinition";
-import type { IShellService } from "./shellService";
+import { type ServiceDefinition } from "shared-ui-components/modularTool/modularity/serviceDefinition";
+import { type IShellService, ShellServiceIdentity } from "shared-ui-components/modularTool/services/shellService";
 
 import { PersonFeedbackRegular } from "@fluentui/react-icons";
 
 import { Button } from "shared-ui-components/fluent/primitives/button";
 import { Tooltip } from "shared-ui-components/fluent/primitives/tooltip";
-import { ShellServiceIdentity } from "./shellService";
+import { DefaultToolbarItemOrder } from "./defaultToolbarMetadata";
 
 export const UserFeedbackServiceDefinition: ServiceDefinition<[], [IShellService]> = {
     friendlyName: "User Feedback",
@@ -15,7 +15,11 @@ export const UserFeedbackServiceDefinition: ServiceDefinition<[], [IShellService
             key: "User Feedback",
             verticalLocation: "bottom",
             horizontalLocation: "right",
-            suppressTeachingMoment: true,
+            order: DefaultToolbarItemOrder.Feedback,
+            teachingMoment: {
+                title: "Feedback",
+                description: "Press this button to give feedback on Inspector v2 and help us prioritize new features and improvements!",
+            },
             component: () => {
                 return (
                     <Tooltip content="Give Feedback on Inspector v2">

@@ -1,6 +1,6 @@
-import type { GPUParticleSystem } from "core/Particles/gpuParticleSystem";
-import type { FunctionComponent } from "react";
-import type { ISelectionService } from "../../../services/selectionService";
+import { type GPUParticleSystem } from "core/Particles/gpuParticleSystem";
+import { type FunctionComponent } from "react";
+import { type ISelectionService } from "../../../services/selectionService";
 
 import { EditRegular, EyeRegular } from "@fluentui/react-icons";
 
@@ -15,7 +15,7 @@ import { SwitchPropertyLine } from "shared-ui-components/fluent/hoc/propertyLine
 import { TextPropertyLine } from "shared-ui-components/fluent/hoc/propertyLines/textPropertyLine";
 import { Vector3PropertyLine } from "shared-ui-components/fluent/hoc/propertyLines/vectorPropertyLine";
 import { useProperty } from "../../../hooks/compoundPropertyHooks";
-import { useObservableState } from "../../../hooks/observableHooks";
+import { useObservableState } from "shared-ui-components/modularTool/hooks/observableHooks";
 import { EditParticleSystem } from "../../../misc/nodeParticleEditor";
 import { BoundProperty } from "../boundProperty";
 
@@ -34,7 +34,7 @@ export const ParticleSystemSystemProperties: FunctionComponent<{ particleSystem:
     const capacity = useObservableState(() => system.getCapacity());
     const activeCount = useObservableState(() => system.getActiveCount(), scene?.onBeforeRenderObservable);
 
-    const selectEntity = (entity: unknown) => (selectionService.selectedEntity = entity);
+    const selectEntity = (entity: object) => (selectionService.selectedEntity = entity);
 
     return (
         <>

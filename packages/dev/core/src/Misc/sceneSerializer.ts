@@ -1,17 +1,18 @@
-import type { Geometry } from "../Meshes/geometry";
+import { type Geometry } from "../Meshes/geometry";
 import { Mesh } from "../Meshes/mesh";
 import { Constants } from "../Engines/constants";
 import { MultiMaterial } from "../Materials/multiMaterial";
-import type { Material } from "../Materials/material";
-import type { Scene } from "../scene";
-import type { Light } from "../Lights/light";
+import { type Material } from "../Materials/material";
+import { type Scene } from "../scene";
+import { type Light } from "../Lights/light";
 import { SerializationHelper } from "./decorators.serialization";
 import { Texture } from "../Materials/Textures/texture";
-import type { CubeTexture } from "../Materials/Textures/cubeTexture";
-import type { Node } from "../node";
-import type { TransformNode } from "../Meshes/transformNode";
-import type { Camera } from "../Cameras/camera";
+import { type CubeTexture } from "../Materials/Textures/cubeTexture";
+import { type Node } from "../node";
+import { type TransformNode } from "../Meshes/transformNode";
+import { type Camera } from "../Cameras/camera";
 import { Logger } from "core/Misc/logger";
+import { _IsSideEffectImplemented } from "./devTools";
 
 let SerializedGeometries: Geometry[] = [];
 const SerializeGeometry = (geometry: Geometry, serializationGeometries: any): any => {
@@ -173,7 +174,7 @@ export class SceneSerializer {
         }
 
         //Physics
-        if (scene.isPhysicsEnabled && scene.isPhysicsEnabled()) {
+        if (_IsSideEffectImplemented(scene.isPhysicsEnabled) && scene.isPhysicsEnabled()) {
             const physicEngine = scene.getPhysicsEngine();
 
             if (physicEngine) {
@@ -325,7 +326,8 @@ export class SceneSerializer {
         for (index = 0; index < scene.meshes.length; index++) {
             const abstractMesh = scene.meshes[index];
 
-            if (abstractMesh instanceof Mesh) {
+            // GaussianSplattingPartProxyMesh would be serialized with the GaussianSplattingMesh holding it
+            if (abstractMesh instanceof Mesh && abstractMesh.getClassName() !== "GaussianSplattingPartProxyMesh") {
                 const mesh = abstractMesh;
                 if (!mesh.doNotSerialize) {
                     if (mesh.delayLoadState === Constants.DELAYLOADSTATE_LOADED || mesh.delayLoadState === Constants.DELAYLOADSTATE_NONE) {

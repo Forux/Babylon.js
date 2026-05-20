@@ -1,9 +1,9 @@
-import type { Scene } from "core/scene";
-import type { Nullable } from "core/types";
-import type { AbstractMesh } from "core/Meshes/abstractMesh";
-import type { Particle } from "core/Particles/particle";
-import type { ThinParticleSystem } from "core/Particles/thinParticleSystem";
-import type { NodeParticleConnectionPoint } from "core/Particles/Node/nodeParticleBlockConnectionPoint";
+import { type Scene } from "core/scene";
+import { type Nullable } from "core/types";
+import { type AbstractMesh } from "core/Meshes/abstractMesh";
+import { type Particle } from "core/Particles/particle";
+import { type ThinParticleSystem } from "core/Particles/thinParticleSystem";
+import { type NodeParticleConnectionPoint } from "core/Particles/Node/nodeParticleBlockConnectionPoint";
 
 import { Color4 } from "core/Maths/math.color";
 import { Vector2, Vector3 } from "core/Maths/math.vector";
@@ -15,6 +15,8 @@ import { NodeParticleSystemSources } from "core/Particles/Node/Enums/nodeParticl
  * Class used to store node based geometry build state
  */
 export class NodeParticleBuildState {
+    private _buildPromises = new Array<Promise<void>>();
+
     /**
      * Gets the capactity of the particle system to build
      */
@@ -76,6 +78,22 @@ export class NodeParticleBuildState {
     }
 
     /**
+     * Registers an asynchronous operation that must complete before the node particle system is ready.
+     * @param promise defines the promise to wait for
+     */
+    public registerBuildPromise(promise: Promise<void>) {
+        this._buildPromises.push(promise);
+    }
+
+    /**
+     * Waits for all asynchronous build operations to complete.
+     * @returns a promise that resolves when all registered build operations are complete
+     */
+    public async waitForBuildPromisesAsync(): Promise<void> {
+        await Promise.all(this._buildPromises);
+    }
+
+    /**
      * Adapt a value to a target type
      * @param source defines the value to adapt
      * @param targetType defines the target type
@@ -116,10 +134,10 @@ export class NodeParticleBuildState {
             case NodeParticleContextualSources.Direction:
                 return this.particleContext.direction;
             case NodeParticleContextualSources.DirectionScale:
-                return this.particleContext._directionScale;
+                return this.particleContext._properties.directionScale;
             case NodeParticleContextualSources.ScaledDirection:
-                this.particleContext.direction.scaleToRef(this.particleContext._directionScale, this.particleContext._scaledDirection);
-                return this.particleContext._scaledDirection;
+                this.particleContext.direction.scaleToRef(this.particleContext._properties.directionScale, this.particleContext._properties.scaledDirection);
+                return this.particleContext._properties.scaledDirection;
             case NodeParticleContextualSources.Color:
                 return this.particleContext.color;
             case NodeParticleContextualSources.InitialColor:
@@ -145,16 +163,16 @@ export class NodeParticleBuildState {
             case NodeParticleContextualSources.SpriteCellStart:
                 return this.systemContext.startSpriteCellID;
             case NodeParticleContextualSources.InitialDirection:
-                return this.particleContext._initialDirection;
+                return this.particleContext._properties.initialDirection;
             case NodeParticleContextualSources.ColorStep:
                 return this.particleContext.colorStep;
             case NodeParticleContextualSources.ScaledColorStep:
                 this.particleContext.colorStep.scaleToRef(this.systemContext._scaledUpdateSpeed, this.systemContext._scaledColorStep);
                 return this.systemContext._scaledColorStep;
             case NodeParticleContextualSources.LocalPositionUpdated:
-                this.particleContext.direction.scaleToRef(this.particleContext._directionScale, this.particleContext._scaledDirection);
-                this.particleContext._localPosition!.addInPlace(this.particleContext._scaledDirection);
-                Vector3.TransformCoordinatesToRef(this.particleContext._localPosition!, this.systemContext._emitterWorldMatrix, this.particleContext.position);
+                this.particleContext.direction.scaleToRef(this.particleContext._properties.directionScale, this.particleContext._properties.scaledDirection);
+                this.particleContext._properties.localPosition!.addInPlace(this.particleContext._properties.scaledDirection);
+                Vector3.TransformCoordinatesToRef(this.particleContext._properties.localPosition!, this.systemContext._emitterWorldMatrix, this.particleContext.position);
                 return this.particleContext.position;
         }
 

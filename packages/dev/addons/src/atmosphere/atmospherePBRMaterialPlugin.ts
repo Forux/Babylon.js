@@ -1,19 +1,20 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import type { Atmosphere } from "./atmosphere";
-import type { BaseTexture } from "core/Materials/Textures/baseTexture";
-import type { Material } from "core/Materials/material";
+import { type Atmosphere } from "./atmosphere";
+import { type BaseTexture } from "core/Materials/Textures/baseTexture";
+import { type Material } from "core/Materials/material";
 import { MaterialDefines } from "core/Materials/materialDefines";
 import { MaterialPluginBase } from "core/Materials/materialPluginBase";
-import type { Nullable } from "core/types";
-import type { UniformBuffer } from "core/Materials/uniformBuffer";
+import { type Nullable } from "core/types";
+import { type UniformBuffer } from "core/Materials/uniformBuffer";
 import { Vector3FromFloatsToRef, Vector3ScaleToRef } from "core/Maths/math.vector.functions";
 import { ShaderLanguage } from "core/Materials/shaderLanguage";
 import "./ShadersWGSL/ShadersInclude/atmosphereFunctions";
 import "./ShadersWGSL/ShadersInclude/atmosphereUboDeclaration";
 
 class AtmospherePBRMaterialDefines extends MaterialDefines {
+    public USE_CUSTOM_REFLECTION = false;
     public USE_AERIAL_PERSPECTIVE_LUT: boolean;
     public APPLY_AERIAL_PERSPECTIVE_INTENSITY = false;
     public APPLY_AERIAL_PERSPECTIVE_RADIANCE_BIAS = false;
@@ -68,7 +69,12 @@ export class AtmospherePBRMaterialPlugin extends MaterialPluginBase {
             PluginName,
             PluginPriority,
             {
-                USE_CUSTOM_REFLECTION: _atmosphere.diffuseSkyIrradianceLut !== null,
+                // USE_CUSTOM_REFLECTION is computed dynamically in prepareDefines because it
+                // depends on whether the material's currently-active reflection setup actually
+                // declares `irradianceSampler` (i.e. has USEIRRADIANCEMAP set). Setting it
+                // unconditionally here would inject shader code that references an undeclared
+                // sampler when the material renders against a cube env. See forum 63276.
+                USE_CUSTOM_REFLECTION: false,
                 CUSTOM_FRAGMENT_BEFORE_FOG: _isAerialPerspectiveEnabled,
                 USE_AERIAL_PERSPECTIVE_LUT: _isAerialPerspectiveEnabled && _atmosphere.isAerialPerspectiveLutEnabled,
                 APPLY_AERIAL_PERSPECTIVE_INTENSITY: _isAerialPerspectiveEnabled && _atmosphere.aerialPerspectiveIntensity !== 1.0,
@@ -116,15 +122,20 @@ export class AtmospherePBRMaterialPlugin extends MaterialPluginBase {
      * @override
      */
     public override isReadyForSubMesh(): boolean {
-        let isReady = true;
         const atmosphere = this._atmosphere;
+
+        if (!atmosphere.transmittanceLut?.hasLutData || (atmosphere.diffuseSkyIrradianceLut && !atmosphere.diffuseSkyIrradianceLut.hasLutData)) {
+            return false;
+        }
+
         if (this._isAerialPerspectiveEnabled && atmosphere.isAerialPerspectiveLutEnabled) {
             const aerialPerspectiveLutRenderTarget = atmosphere.aerialPerspectiveLutRenderTarget;
-            isReady = isReady && !!aerialPerspectiveLutRenderTarget?.isReady();
+            if (!aerialPerspectiveLutRenderTarget?.isReady()) {
+                return false;
+            }
         }
-        const transmittanceLutRenderTarget = atmosphere.transmittanceLut?.renderTarget ?? null;
-        isReady = isReady && !!transmittanceLutRenderTarget?.isReady();
-        return isReady;
+
+        return true;
     }
 
     /**
@@ -185,13 +196,21 @@ export class AtmospherePBRMaterialPlugin extends MaterialPluginBase {
      * @override
      */
     public override prepareDefines(defines: AtmospherePBRMaterialDefines): void {
+        const lastUseCustomReflection = defines.USE_CUSTOM_REFLECTION;
         const lastUseAerialPerspectiveLut = defines.USE_AERIAL_PERSPECTIVE_LUT;
         const lastApplyAerialPerspectiveIntensity = defines.APPLY_AERIAL_PERSPECTIVE_INTENSITY;
         const lastApplyAerialPerspectiveRadianceBias = defines.APPLY_AERIAL_PERSPECTIVE_RADIANCE_BIAS;
+        // Only override the PBR reflection block when the surrounding shader actually declares
+        // `irradianceSampler` (USEIRRADIANCEMAP). When the material renders against a non-irradiance-map
+        // env (e.g. a cube env using spherical harmonics), the standard PBR reflection block must run
+        // instead, otherwise the injected `sampleReflection(irradianceSampler, ...)` would reference an
+        // undeclared identifier. See forum 63276.
+        defines.USE_CUSTOM_REFLECTION = this._atmosphere.diffuseSkyIrradianceLut !== null && !!defines.USEIRRADIANCEMAP;
         defines.USE_AERIAL_PERSPECTIVE_LUT = this._isAerialPerspectiveEnabled && this._atmosphere.isAerialPerspectiveLutEnabled;
         defines.APPLY_AERIAL_PERSPECTIVE_INTENSITY = this._isAerialPerspectiveEnabled && this._atmosphere.aerialPerspectiveIntensity !== 1.0;
         defines.APPLY_AERIAL_PERSPECTIVE_RADIANCE_BIAS = this._isAerialPerspectiveEnabled && this._atmosphere.aerialPerspectiveRadianceBias !== 0.0;
         if (
+            lastUseCustomReflection !== defines.USE_CUSTOM_REFLECTION ||
             lastUseAerialPerspectiveLut !== defines.USE_AERIAL_PERSPECTIVE_LUT ||
             lastApplyAerialPerspectiveIntensity !== defines.APPLY_AERIAL_PERSPECTIVE_INTENSITY ||
             lastApplyAerialPerspectiveRadianceBias !== defines.APPLY_AERIAL_PERSPECTIVE_RADIANCE_BIAS
@@ -232,6 +251,8 @@ export class AtmospherePBRMaterialPlugin extends MaterialPluginBase {
                     this._isAerialPerspectiveEnabled && this._atmosphere.isAerialPerspectiveLutEnabled
                         ? `uniform sampler2D transmittanceLut;\r\nprecision highp sampler2DArray;\r\nuniform sampler2DArray aerialPerspectiveLut;\r\n${atmosphereImportSnippet}\r\n#include<atmosphereFunctions>`
                         : `uniform sampler2D transmittanceLut;\r\n${atmosphereImportSnippet}\r\n#include<atmosphereFunctions>`,
+
+                // Provides the direct light contribution, accounting for transmittance.
                 CUSTOM_LIGHT0_COLOR: `
             {
                 vec3 positionGlobal = 0.001 * vPositionW + ${OriginOffsetUniformName};
@@ -242,6 +263,10 @@ export class AtmospherePBRMaterialPlugin extends MaterialPluginBase {
                 diffuse0 = lightIntensity * sampleTransmittanceLut(transmittanceLut, positionRadius, cosAngleLightToZenith);
             }
 `,
+
+                // Approximates the environment contribution from the atmosphere.
+                // Note there are some tuned constants used below to modify the environment intensity.
+                // A more physically accurate approach could be considered, and/or uniforms added to customize.
                 CUSTOM_REFLECTION: `
             {
                 vec3 positionGlobal =  0.001 * vPositionW + ${OriginOffsetUniformName};
@@ -258,7 +283,7 @@ export class AtmospherePBRMaterialPlugin extends MaterialPluginBase {
 
                 // Add a contribution here to estimate indirect lighting.
                 const float r = 0.2;
-                float indirect = getLuminance(environmentIrradiance) / max(0.00001, 1. - r);
+                float indirect = getLuminanceUnclamped(environmentIrradiance) / max(0.00001, 1. - r);
                 environmentIrradiance *= irradianceScale;
                 environmentIrradiance += indirect;
 
@@ -298,6 +323,8 @@ export class AtmospherePBRMaterialPlugin extends MaterialPluginBase {
                     this._isAerialPerspectiveEnabled && this._atmosphere.isAerialPerspectiveLutEnabled
                         ? `var transmittanceLutSampler: sampler;\r\nvar transmittanceLut: texture_2d<f32>;\r\nvar aerialPerspectiveLutSampler: sampler;\r\nvar aerialPerspectiveLut: texture_2d_array<f32>;\r\n${atmosphereImportSnippet}\r\n#include<atmosphereFunctions>`
                         : `var transmittanceLutSampler: sampler;\r\nvar transmittanceLut: texture_2d<f32>;\r\n${atmosphereImportSnippet}\r\n#include<atmosphereFunctions>`,
+
+                // Provides the direct light contribution, accounting for transmittance.
                 CUSTOM_LIGHT0_COLOR: `
             {
                 var positionGlobal = 0.001 * fragmentInputs.vPositionW + uniforms.${OriginOffsetUniformName};
@@ -308,6 +335,10 @@ export class AtmospherePBRMaterialPlugin extends MaterialPluginBase {
                 diffuse0 = atmosphere.lightIntensity * sampleTransmittanceLut(transmittanceLut, positionRadius, cosAngleLightToZenith);
             }
 `,
+
+                // Approximates the environment contribution from the atmosphere.
+                // Note there are some tuned constants used below to modify the environment intensity.
+                // A more physically accurate approach could be considered, and/or uniforms added to customize.
                 CUSTOM_REFLECTION: `
             {
                 var positionGlobal =  0.001 * fragmentInputs.vPositionW + uniforms.${OriginOffsetUniformName};
@@ -324,7 +355,7 @@ export class AtmospherePBRMaterialPlugin extends MaterialPluginBase {
 
                 // Add a contribution here to estimate indirect lighting.
                 const r = 0.2;
-                var indirect = getLuminance(environmentIrradiance) / max(0.00001, 1.0 - r);
+                var indirect = getLuminanceUnclamped(environmentIrradiance) / max(0.00001, 1.0 - r);
                 environmentIrradiance *= irradianceScale;
                 environmentIrradiance += indirect;
 

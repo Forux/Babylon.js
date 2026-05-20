@@ -1,19 +1,19 @@
 import * as React from "react";
 
-import type { Observable } from "core/Misc/observable";
+import { type Observable } from "core/Misc/observable";
 import { Material } from "core/Materials/material";
 import { PBRMaterial } from "core/Materials/PBR/pbrMaterial";
 import { Constants } from "core/Engines/constants";
 import { Engine } from "core/Engines/engine";
 
-import type { PropertyChangedEvent } from "../../../../propertyChangedEvent";
+import { type PropertyChangedEvent } from "../../../../propertyChangedEvent";
 import { CheckBoxLineComponent } from "shared-ui-components/lines/checkBoxLineComponent";
 import { SliderLineComponent } from "shared-ui-components/lines/sliderLineComponent";
 import { LineContainerComponent } from "shared-ui-components/lines/lineContainerComponent";
 import { TextLineComponent } from "shared-ui-components/lines/textLineComponent";
 import { OptionsLine, Null_Value } from "shared-ui-components/lines/optionsLineComponent";
-import type { LockObject } from "shared-ui-components/tabs/propertyGrids/lockObject";
-import type { GlobalState } from "../../../../globalState";
+import { type LockObject } from "shared-ui-components/tabs/propertyGrids/lockObject";
+import { type GlobalState } from "../../../../globalState";
 import { CustomPropertyGridComponent } from "../customPropertyGridComponent";
 import { ButtonLineComponent } from "shared-ui-components/lines/buttonLineComponent";
 import { TextInputLineComponent } from "shared-ui-components/lines/textInputLineComponent";
@@ -197,24 +197,36 @@ export class CommonMaterialPropertyGridComponent extends React.Component<ICommon
                         onClick={() => {
                             const effect = material.getEffect();
                             const vertexSourceCode = effect?.vertexSourceCode;
-                            const fragmentShaderCode = effect?.fragmentSourceCode
+                            const fragmentShaderCode = effect?.fragmentSourceCode;
+                            // eslint-disable-next-line no-console
                             console.log(" ****************************** ");
+                            // eslint-disable-next-line no-console
                             console.log(" ****************************** ");
+                            // eslint-disable-next-line no-console
                             console.log(" ******* Vertex shader: ******* ");
+                            // eslint-disable-next-line no-console
                             console.log(" ****************************** ");
+                            // eslint-disable-next-line no-console
                             console.log(" ****************************** ");
+                            // eslint-disable-next-line no-console
                             console.log(vertexSourceCode);
+                            // eslint-disable-next-line no-console
                             console.log(" ****************************** ");
+                            // eslint-disable-next-line no-console
                             console.log(" ****************************** ");
+                            // eslint-disable-next-line no-console
                             console.log(" ******* Fragment shader: ******* ");
+                            // eslint-disable-next-line no-console
                             console.log(" ****************************** ");
+                            // eslint-disable-next-line no-console
                             console.log(" ****************************** ");
+                            // eslint-disable-next-line no-console
                             console.log(fragmentShaderCode);
-                            const shaderWindow = window.open('', '_blank');
+                            const shaderWindow = window.open("", "_blank");
                             if (shaderWindow) {
-                                shaderWindow.document.write('<h1>Vertex Shader Code:</h1><br>');
+                                shaderWindow.document.write("<h1>Vertex Shader Code:</h1><br>");
                                 shaderWindow.document.write(`<pre>${vertexSourceCode}</pre>`);
-                                shaderWindow.document.write('<br><br><h1>Fragment Shader Code:</h1><br>');
+                                shaderWindow.document.write("<br><br><h1>Fragment Shader Code:</h1><br>");
                                 shaderWindow.document.write(`<pre>${fragmentShaderCode}</pre>`);
                                 shaderWindow.document.close();
                             }

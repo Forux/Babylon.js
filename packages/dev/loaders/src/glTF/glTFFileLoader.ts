@@ -6,30 +6,33 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
 /* eslint-disable @typescript-eslint/naming-convention */
 import type * as GLTF2 from "babylonjs-gltf2interface";
-import type { Nullable } from "core/types";
-import type { Observer } from "core/Misc/observable";
-import { Observable } from "core/Misc/observable";
+import { type Nullable } from "core/types";
+import { type Observer, Observable } from "core/Misc/observable";
 import { Tools } from "core/Misc/tools";
-import type { Camera } from "core/Cameras/camera";
-import type { BaseTexture } from "core/Materials/Textures/baseTexture";
-import type { Material } from "core/Materials/material";
-import type { AbstractMesh } from "core/Meshes/abstractMesh";
-import type { ISceneLoaderPluginFactory, ISceneLoaderPluginAsync, ISceneLoaderProgressEvent, ISceneLoaderAsyncResult, SceneLoaderPluginOptions } from "core/Loading/sceneLoader";
-import { RegisterSceneLoaderPlugin } from "core/Loading/sceneLoader";
+import { type Camera } from "core/Cameras/camera";
+import { type BaseTexture } from "core/Materials/Textures/baseTexture";
+import { type Material } from "core/Materials/material";
+import { type AbstractMesh } from "core/Meshes/abstractMesh";
+import {
+    type ISceneLoaderPluginFactory,
+    type ISceneLoaderPluginAsync,
+    type ISceneLoaderProgressEvent,
+    type ISceneLoaderAsyncResult,
+    type SceneLoaderPluginOptions,
+    RegisterSceneLoaderPlugin,
+} from "core/Loading/sceneLoader";
 import { AssetContainer } from "core/assetContainer";
-import type { Scene, IDisposable } from "core/scene";
-import type { WebRequest } from "core/Misc/webRequest";
-import type { IFileRequest } from "core/Misc/fileRequest";
+import { type Scene, type IDisposable } from "core/scene";
+import { type WebRequest } from "core/Misc/webRequest";
+import { type IFileRequest } from "core/Misc/fileRequest";
 import { Logger } from "core/Misc/logger";
-import type { IDataBuffer } from "core/Misc/dataReader";
-import { DataReader } from "core/Misc/dataReader";
+import { type IDataBuffer, DataReader } from "core/Misc/dataReader";
 import { GLTFValidation } from "./glTFValidation";
 import { GLTFFileLoaderMetadata, GLTFMagicBase64Encoded } from "./glTFFileLoader.metadata";
-import type { LoadFileError } from "core/Misc/fileTools";
-import { DecodeBase64UrlToBinary } from "core/Misc/fileTools";
+import { type LoadFileError, DecodeBase64UrlToBinary } from "core/Misc/fileTools";
 import { RuntimeError, ErrorCodes } from "core/Misc/error";
-import type { TransformNode } from "core/Meshes/transformNode";
-import type { MorphTargetManager } from "core/Morph/morphTargetManager";
+import { type TransformNode } from "core/Meshes/transformNode";
+import { type MorphTargetManager } from "core/Morph/morphTargetManager";
 
 /**
  * Defines options for glTF loader extensions. This interface is extended by specific extensions.
@@ -169,6 +172,9 @@ export enum GLTFLoaderState {
 
 /** @internal */
 export interface IGLTFLoader extends IDisposable {
+    /**
+     *
+     */
     importMeshAsync: (
         meshesNames: string | readonly string[] | null | undefined,
         scene: Scene,
@@ -178,6 +184,9 @@ export interface IGLTFLoader extends IDisposable {
         onProgress?: (event: ISceneLoaderProgressEvent) => void,
         fileName?: string
     ) => Promise<ISceneLoaderAsyncResult>;
+    /**
+     *
+     */
     loadAsync: (scene: Scene, data: IGLTFLoaderData, rootUrl: string, onProgress?: (event: ISceneLoaderProgressEvent) => void, fileName?: string) => Promise<void>;
 }
 
@@ -327,7 +336,6 @@ class GLTFLoaderBaseOptions {
 export const GLTFLoaderDefaultOptions = new GLTFLoaderBaseOptions();
 
 abstract class GLTFLoaderOptions extends GLTFLoaderBaseOptions {
-    // eslint-disable-next-line babylonjs/available
     protected copyFrom(options?: Partial<Readonly<GLTFLoaderOptions>>) {
         if (options) {
             this.alwaysComputeBoundingBox = options.alwaysComputeBoundingBox ?? this.alwaysComputeBoundingBox;
@@ -1131,12 +1139,10 @@ export class GLTFFileLoader extends GLTFLoaderOptions implements IDisposable, IS
                 request
             );
         };
-        let request: IFileRequestInfo;
-        request = scene._loadFile(
+        const request: IFileRequestInfo = scene._loadFile(
             fileOrUrl,
             (data) => {
-                completedPayloadBytes =
-                    typeof data === "string" ? (typeof TextEncoder !== "undefined" ? new TextEncoder().encode(data).byteLength : data.length) : data.byteLength;
+                completedPayloadBytes = typeof data === "string" ? (typeof TextEncoder !== "undefined" ? new TextEncoder().encode(data).byteLength : data.length) : data.byteLength;
                 applyCompletionProgress(completedPayloadBytes);
                 setTimeout(() => onSuccess(data), 10);
             },

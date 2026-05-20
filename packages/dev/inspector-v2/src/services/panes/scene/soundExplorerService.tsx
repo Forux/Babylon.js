@@ -1,78 +1,87 @@
-import type { Sound } from "core/index";
-import type { ServiceDefinition } from "../../../modularity/serviceDefinition";
-import type { ISceneContext } from "../../sceneContext";
-import type { ISceneExplorerService } from "./sceneExplorerService";
+import { type IDisposable, type Sound, type SoundTrack } from "core/index";
+import { type ServiceDefinition } from "shared-ui-components/modularTool/modularity/serviceDefinition";
+import { type ISceneContext, SceneContextIdentity } from "../../sceneContext";
+import { type ISceneExplorerService, SceneExplorerServiceIdentity } from "./sceneExplorerService";
+import { type IWatcherService, WatcherServiceIdentity } from "../../watcherService";
 
+import { tokens } from "@fluentui/react-components";
 import { SoundWaveCircleRegular } from "@fluentui/react-icons";
 
 import { Observable } from "core/Misc/observable";
 import { InterceptFunction } from "../../../instrumentation/functionInstrumentation";
-import { InterceptProperty } from "../../../instrumentation/propertyInstrumentation";
-import { SceneContextIdentity } from "../../sceneContext";
 import { DefaultSectionsOrder } from "./defaultSectionsMetadata";
-import { SceneExplorerServiceIdentity } from "./sceneExplorerService";
 
-export const SoundExplorerServiceDefinition: ServiceDefinition<[], [ISceneExplorerService, ISceneContext]> = {
+export const SoundExplorerServiceDefinition: ServiceDefinition<[], [ISceneExplorerService, ISceneContext, IWatcherService]> = {
     friendlyName: "Sound Explorer",
-    consumes: [SceneExplorerServiceIdentity, SceneContextIdentity],
-    factory: (sceneExplorerService, sceneContext) => {
+    consumes: [SceneExplorerServiceIdentity, SceneContextIdentity, WatcherServiceIdentity],
+    factory: (sceneExplorerService, sceneContext, watcherService) => {
         const scene = sceneContext.currentScene;
         if (!scene) {
             return undefined;
         }
-        if (!scene.mainSoundTrack) return;
+        if (!scene.mainSoundTrack) {
+            return;
+        }
 
         const soundAddedObservable = new Observable<Sound>();
         const soundRemovedObservable = new Observable<Sound>();
 
-        const addSoundHook = InterceptFunction(scene.mainSoundTrack, "addSound", {
-            afterCall: (sound) => soundAddedObservable.notifyObservers(sound),
-        });
+        let addSoundHook: IDisposable | undefined;
+        let removeSoundHook: IDisposable | undefined;
 
-        const removeSoundHook = InterceptFunction(scene.mainSoundTrack, "removeSound", {
-            afterCall: (sound) => soundRemovedObservable.notifyObservers(sound),
-        });
+        const hookMainSoundTrack = (mainSoundTrack: SoundTrack | undefined) => {
+            addSoundHook?.dispose();
+            addSoundHook = undefined;
+            removeSoundHook?.dispose();
+            removeSoundHook = undefined;
+
+            if (mainSoundTrack) {
+                addSoundHook = InterceptFunction(mainSoundTrack, "addSound", {
+                    afterCall: (sound) => soundAddedObservable.notifyObservers(sound),
+                });
+
+                removeSoundHook = InterceptFunction(mainSoundTrack, "removeSound", {
+                    afterCall: (sound) => soundRemovedObservable.notifyObservers(sound),
+                });
+            }
+        };
+
+        // If _mainSoundTrack is already defined, set up hooks immediately.
+        hookMainSoundTrack(scene.mainSoundTrack);
+
+        // Watch for _mainSoundTrack being set (it is lazily created by the mainSoundTrack getter in audioSceneComponent.ts).
+        const mainSoundTrackHook = watcherService.watchProperty(scene, "_mainSoundTrack", () => hookMainSoundTrack(scene._mainSoundTrack));
 
         const sectionRegistration = sceneExplorerService.addSection({
             displayName: "Sounds",
             order: DefaultSectionsOrder.Sounds,
-            getRootEntities: () => scene.mainSoundTrack.soundCollection,
+            getRootEntities: () => scene.mainSoundTrack?.soundCollection ?? [],
             getEntityDisplayInfo: (sound) => {
                 const onChangeObservable = new Observable<void>();
 
-                const displayNameHookToken = InterceptProperty(sound, "name", {
-                    afterSet: () => {
-                        onChangeObservable.notifyObservers();
-                    },
-                });
-
-                const nameHookToken = InterceptProperty(sound, "name", {
-                    afterSet: () => {
-                        onChangeObservable.notifyObservers();
-                    },
-                });
+                const nameHookToken = watcherService.watchProperty(sound, "name", () => onChangeObservable.notifyObservers());
 
                 return {
                     get name() {
-                        return sound.name;
+                        return sound.name || `Unnamed ${sound.getClassName()}`;
                     },
                     onChange: onChangeObservable,
                     dispose: () => {
                         nameHookToken.dispose();
-                        displayNameHookToken.dispose();
                         onChangeObservable.clear();
                     },
                 };
             },
-            entityIcon: () => <SoundWaveCircleRegular />,
+            entityIcon: () => <SoundWaveCircleRegular color={tokens.colorPaletteForestForeground2} />,
             getEntityAddedObservables: () => [soundAddedObservable],
             getEntityRemovedObservables: () => [soundRemovedObservable],
         });
 
         return {
             dispose: () => {
-                addSoundHook.dispose();
-                removeSoundHook.dispose();
+                mainSoundTrackHook.dispose();
+                addSoundHook?.dispose();
+                removeSoundHook?.dispose();
                 soundAddedObservable.clear();
                 soundRemovedObservable.clear();
                 sectionRegistration.dispose();

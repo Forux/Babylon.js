@@ -1,6 +1,6 @@
-import type { FunctionComponent } from "react";
+import { type FunctionComponent } from "react";
 
-import type { DropdownOption } from "shared-ui-components/fluent/primitives/dropdown";
+import { type DropdownOption } from "shared-ui-components/fluent/primitives/dropdown";
 
 import { Camera } from "core/Cameras/camera";
 import { Collapse } from "shared-ui-components/fluent/primitives/collapse";
@@ -46,6 +46,7 @@ export const CameraGeneralProperties: FunctionComponent<{ camera: Camera }> = (p
                     min={toDisplayAngle(0.1)}
                     max={toDisplayAngle(Math.PI)}
                     step={toDisplayAngle(0.01)}
+                    unit={useDegrees ? "°" : "rad"}
                     convertTo={toDisplayAngle}
                     convertFrom={fromDisplayAngle}
                 />

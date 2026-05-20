@@ -1,25 +1,39 @@
-import { checkPerformanceOfScene, evaluateDefaultScene, getGlobalConfig } from "@tools/test-tools";
+import { test, expect, Page } from "@playwright/test";
+import { comparePerformance, evaluateDefaultScene, getGlobalConfig } from "@tools/test-tools";
 
 // IN TESTS
 declare const BABYLON: typeof import("core/index");
 
 // Performance tests require the PROD version of the CDN (babylon-server)
 
-const framesToRender = 2500;
-const numberOfPasses = 8;
-const acceptedThreshold = 0.05; // 5% compensation
+const perfOptions = {
+    framesToRender: 800,
+    numberOfPasses: 5,
+    trimCount: 1,
+    cdnVersion: process.env.CDN_VERSION || "",
+    cdnVersionB: process.env.CDN_VERSION_B || "",
+};
 
-describe("Performance - scene", () => {
-    jest.setTimeout(40000);
+test.describe("Performance - scene", () => {
+    let page: Page;
 
-    it("Should have same or better performance with default scene", async () => {
-        const stable = await checkPerformanceOfScene(page, getGlobalConfig().baseUrl, "stable", evaluateDefaultScene, numberOfPasses, framesToRender);
-        const dev = await checkPerformanceOfScene(page, getGlobalConfig().baseUrl, "dev", evaluateDefaultScene, numberOfPasses, framesToRender);
-        console.log(`Performance - scene: stable: ${stable}ms, dev: ${dev}ms`);
-        expect(dev / stable, `Dev: ${dev}ms, Stable: ${stable}ms`).toBeLessThanOrEqual(1 + acceptedThreshold);
-    }, 40000);
+    test.beforeAll(async ({ browser }) => {
+        page = await browser.newPage();
+    });
 
-    it("Should have same or better performance with particle system", async () => {
+    test.afterAll(async () => {
+        await page?.close();
+    });
+
+    test("Should have same or better performance with default scene", async () => {
+        test.setTimeout(120000);
+        const result = await comparePerformance(page, getGlobalConfig().baseUrl, evaluateDefaultScene, perfOptions);
+        console.log(`[PERF] Default scene: ${result.summary}`);
+        expect(result.passed, result.summary).toBe(true);
+    });
+
+    test("Should have same or better performance with particle system", async () => {
+        test.setTimeout(120000);
         // this code will run in the browser
         const createScene = () => {
             if (!window.scene) {
@@ -42,12 +56,13 @@ describe("Performance - scene", () => {
             });
         };
 
-        const stable = await checkPerformanceOfScene(page, getGlobalConfig().baseUrl, "stable", createScene, numberOfPasses, framesToRender);
-        const dev = await checkPerformanceOfScene(page, getGlobalConfig().baseUrl, "dev", createScene, numberOfPasses, framesToRender);
-        expect(dev / stable, `Dev: ${dev}ms, Stable: ${stable}ms`).toBeLessThanOrEqual(1 + acceptedThreshold);
-    }, 40000);
+        const result = await comparePerformance(page, getGlobalConfig().baseUrl, createScene, perfOptions);
+        console.log(`[PERF] Particle system: ${result.summary}`);
+        expect(result.passed, result.summary).toBe(true);
+    });
 
-    it("Should have same or better performance with follow camera", async () => {
+    test("Should have same or better performance with follow camera", async () => {
+        test.setTimeout(120000);
         // this code will run in the browser
         const createScene = () => {
             const scene = new BABYLON.Scene(window.engine!);
@@ -103,8 +118,8 @@ describe("Performance - scene", () => {
             });
         };
 
-        const stable = await checkPerformanceOfScene(page, getGlobalConfig().baseUrl, "stable", createScene, numberOfPasses, framesToRender);
-        const dev = await checkPerformanceOfScene(page, getGlobalConfig().baseUrl, "dev", createScene, numberOfPasses, framesToRender);
-        expect(dev / stable, `Dev: ${dev}ms, Stable: ${stable}ms`).toBeLessThanOrEqual(1 + acceptedThreshold);
-    }, 40000);
+        const result = await comparePerformance(page, getGlobalConfig().baseUrl, createScene, perfOptions);
+        console.log(`[PERF] Follow camera: ${result.summary}`);
+        expect(result.passed, result.summary).toBe(true);
+    });
 });

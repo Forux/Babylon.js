@@ -1,10 +1,11 @@
-import type { IndicesArray } from "../types";
+import { type IndicesArray } from "../types";
 import { Vector3 } from "../Maths/math.vector";
 import { VertexBuffer } from "../Buffers/buffer";
 import { SubMesh } from "../Meshes/subMesh";
 import { Mesh } from "../Meshes/mesh";
 import { AsyncLoop } from "../Misc/tools";
 import { Epsilon } from "../Maths/math.constants";
+import { RegisterMeshSimplificationSceneComponent } from "./meshSimplificationSceneComponent.pure";
 /**
  * A simplifier interface for future simplification implementations
  * @see https://doc.babylonjs.com/features/featuresDeepDive/mesh/simplifyingMeshes
@@ -103,6 +104,7 @@ export class SimplificationQueue {
      * Creates a new queue
      */
     constructor() {
+        RegisterMeshSimplificationSceneComponent(SimplificationQueue);
         this.running = false;
         this._simplificationArray = [];
     }
@@ -892,7 +894,7 @@ export class QuadraticErrorSimplification implements ISimplifier {
     private _calculateError(vertex1: DecimationVertex, vertex2: DecimationVertex, pointResult?: Vector3): number {
         const q = vertex1.q.add(vertex2.q);
         const border = vertex1.isBorder && vertex2.isBorder;
-        let error: number = 0;
+        let error: number;
         const qDet = q.det(0, 1, 2, 1, 4, 5, 2, 5, 7);
 
         if (qDet !== 0 && !border) {

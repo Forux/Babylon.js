@@ -1,22 +1,18 @@
-import type { ServiceDefinition } from "../modularity/serviceDefinition";
-import type { IGizmoService } from "./gizmoService";
-import type { ISettingsService } from "./panes/settingsService";
-import type { ISceneContext } from "./sceneContext";
-import type { ISelectionService } from "./selectionService";
-import type { SettingDescriptor } from "./settingsStore";
-import type { IShellService } from "./shellService";
+import { type Nullable } from "core/index";
+import { type ServiceDefinition } from "shared-ui-components/modularTool/modularity/serviceDefinition";
+import { type IGizmoService, GizmoServiceIdentity } from "./gizmoService";
+import { type ISettingsService, SettingsServiceIdentity } from "shared-ui-components/modularTool/services/settingsService";
+import { type ISceneContext, SceneContextIdentity } from "./sceneContext";
+import { type ISelectionService, SelectionServiceIdentity } from "./selectionService";
+import { type SettingDescriptor } from "shared-ui-components/modularTool/services/settingsStore";
+import { type IShellService, ShellServiceIdentity } from "shared-ui-components/modularTool/services/shellService";
 
 import { useCallback } from "react";
 import { SwitchPropertyLine } from "shared-ui-components/fluent/hoc/propertyLines/switchPropertyLine";
 import { PickingToolbar } from "../components/pickingToolbar";
-import { useObservableState } from "../hooks/observableHooks";
-import { useSetting } from "../hooks/settingsHooks";
-import { GizmoServiceIdentity } from "./gizmoService";
+import { useObservableState } from "shared-ui-components/modularTool/hooks/observableHooks";
+import { useSetting } from "shared-ui-components/modularTool/hooks/settingsHooks";
 import { HighlightSelectedEntitySettingDescriptor } from "./highlightService";
-import { SettingsServiceIdentity } from "./panes/settingsService";
-import { SceneContextIdentity } from "./sceneContext";
-import { SelectionServiceIdentity } from "./selectionService";
-import { ShellServiceIdentity } from "./shellService";
 
 const IgnoreBackfacesForPickingSettingDescriptor: SettingDescriptor<boolean> = {
     key: "IgnoreBackfacesForPicking",
@@ -61,10 +57,10 @@ export const PickingServiceDefinition: ServiceDefinition<[], [ISceneContext, ISh
             key: "Picking Service",
             verticalLocation: "top",
             horizontalLocation: "left",
-            suppressTeachingMoment: true,
+            teachingMoment: false,
             component: () => {
                 const scene = useObservableState(() => sceneContext.currentScene, sceneContext.currentSceneObservable);
-                const selectEntity = useCallback((entity: unknown) => (selectionService.selectedEntity = entity), []);
+                const selectEntity = useCallback((entity: Nullable<object>) => (selectionService.selectedEntity = entity), []);
                 const [ignoreBackfacesForPicking] = useSetting(IgnoreBackfacesForPickingSettingDescriptor);
                 const [highlightSelectedEntity, setHighlightSelectedEntity] = useSetting(HighlightSelectedEntitySettingDescriptor);
                 return scene ? (

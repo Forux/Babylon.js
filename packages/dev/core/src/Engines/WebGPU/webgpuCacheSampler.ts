@@ -3,8 +3,8 @@
 // eslint-disable-next-line @typescript-eslint/naming-convention
 import * as WebGPUConstants from "./webgpuConstants";
 import { Constants } from "../constants";
-import type { TextureSampler } from "../../Materials/Textures/textureSampler";
-import type { Nullable } from "../../types";
+import { type TextureSampler } from "../../Materials/Textures/textureSampler";
+import { type Nullable } from "../../types";
 
 /**
  * Note: we don't make a difference between mipmaps enabled or not when computing these bits (so, TEXTURE_NEAREST_NEAREST and TEXTURE_NEAREST_NEAREST_MIPNEAREST have the same bits, for example).
@@ -105,7 +105,7 @@ export class WebGPUCacheSampler {
                     lodMinClamp = lodMaxClamp = 0;
                 }
                 break;
-            case Constants.TEXTURE_LINEAR_LINEAR_MIPLINEAR:
+            /* case Constants.TEXTURE_LINEAR_LINEAR_MIPLINEAR: */ // same value as below
             case Constants.TEXTURE_TRILINEAR_SAMPLINGMODE:
                 magFilter = WebGPUConstants.FilterMode.Linear;
                 minFilter = WebGPUConstants.FilterMode.Linear;
@@ -158,7 +158,7 @@ export class WebGPUCacheSampler {
                 mipmapFilter = WebGPUConstants.FilterMode.Nearest;
                 lodMinClamp = lodMaxClamp = 0;
                 break;
-            case Constants.TEXTURE_NEAREST_NEAREST:
+            /* case Constants.TEXTURE_NEAREST_NEAREST: */ // same value as below
             case Constants.TEXTURE_NEAREST_SAMPLINGMODE:
                 magFilter = WebGPUConstants.FilterMode.Nearest;
                 minFilter = WebGPUConstants.FilterMode.Nearest;
@@ -183,7 +183,7 @@ export class WebGPUCacheSampler {
                     mipmapFilter = WebGPUConstants.FilterMode.Linear;
                 }
                 break;
-            case Constants.TEXTURE_LINEAR_LINEAR:
+            /* case Constants.TEXTURE_LINEAR_LINEAR: */ // same value as below
             case Constants.TEXTURE_BILINEAR_SAMPLINGMODE:
                 magFilter = WebGPUConstants.FilterMode.Linear;
                 minFilter = WebGPUConstants.FilterMode.Linear;

@@ -1,10 +1,10 @@
 import { Quaternion, Vector3 } from "../../../Maths/math.vector";
-import type { AbstractMesh } from "../../../Meshes/abstractMesh";
-import type { Node } from "../../../node";
-import type { Nullable } from "../../../types";
+import { type AbstractMesh } from "../../../Meshes/abstractMesh";
+import { type Node } from "../../../node";
+import { type Nullable } from "../../../types";
 import { SpatialAudioAttachmentType } from "../../spatialAudioAttachmentType";
-import type { _SpatialAudioSubNode } from "../subNodes/spatialAudioSubNode";
-import type { _SpatialAudioListener } from "../subProperties/spatialAudioListener";
+import { type _SpatialAudioSubNode } from "../subNodes/spatialAudioSubNode";
+import { type _SpatialAudioListener } from "../subProperties/spatialAudioListener";
 
 /**
  * Provides a common interface for attaching an audio listener or source to a specific entity, ensuring only one entity
@@ -82,7 +82,9 @@ export class _SpatialAudioAttacherComponent {
      * This is called automatically by default and only needs to be called manually if automatic updates are disabled.
      */
     public update() {
-        if (this._attachmentType & SpatialAudioAttachmentType.Position) {
+        const updatesPosition = !!(this._attachmentType & SpatialAudioAttachmentType.Position);
+
+        if (updatesPosition) {
             if (this._useBoundingBox && (this._sceneNode as AbstractMesh).getBoundingInfo) {
                 this._position.copyFrom((this._sceneNode as AbstractMesh).getBoundingInfo().boundingBox.centerWorld);
             } else {
@@ -98,6 +100,10 @@ export class _SpatialAudioAttacherComponent {
 
             this._spatialAudioNode.rotationQuaternion.copyFrom(this._rotationQuaternion);
             this._spatialAudioNode._updateRotation();
+        }
+
+        if (!updatesPosition && "panningEnabled" in this._spatialAudioNode && !this._spatialAudioNode.panningEnabled) {
+            this._spatialAudioNode._updatePosition();
         }
     }
 }

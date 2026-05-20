@@ -1,26 +1,28 @@
-import type { GlobalState } from "../../globalState";
-import type { Nullable } from "core/types";
-import type { Observer } from "core/Misc/observable";
+import { type GlobalState } from "../../globalState";
+import { type Nullable } from "core/types";
+import { type Observer } from "core/Misc/observable";
 import { Engine } from "core/Engines/engine";
 import { Scene } from "core/scene";
 import { Matrix, Vector3 } from "core/Maths/math.vector";
 import { ArcRotateCamera } from "core/Cameras/arcRotateCamera";
 import { Color3 } from "core/Maths/math.color";
 import { SceneLoaderFlags } from "core/Loading/sceneLoaderFlags";
-import type { NodeParticleSystemSet } from "core/Particles/Node/nodeParticleSystemSet";
+import { type NodeParticleSystemSet } from "core/Particles/Node/nodeParticleSystemSet";
 import { LogEntry } from "../log/logComponent";
 import { GridMaterial } from "materials/grid/gridMaterial";
 import { MeshBuilder } from "core/Meshes/meshBuilder";
-import type { AbstractMesh } from "core/Meshes/abstractMesh";
+import { type AbstractMesh } from "core/Meshes/abstractMesh";
 import { SceneInstrumentation } from "core/Instrumentation/sceneInstrumentation";
-import type { ThinParticleSystem } from "core/Particles/thinParticleSystem";
-import type { ParticleSystemSet } from "core/Particles/particleSystemSet";
+import { type ThinParticleSystem } from "core/Particles/thinParticleSystem";
+import { type ParticleSystemSet } from "core/Particles/particleSystemSet";
 import { EngineStore } from "core/Engines";
-import type { ParticleSystem } from "core/Particles";
+import { type ParticleSystem } from "core/Particles";
 import { AxesViewer } from "core/Debug/axesViewer";
 import { TransformNode } from "core/Meshes/transformNode";
 import { DynamicTexture } from "core/Materials/Textures/dynamicTexture";
 import { StandardMaterial } from "core/Materials/standardMaterial";
+import { MeshShapeBlock } from "core/Particles/Node/Blocks/Emitters/meshShapeBlock";
+import { type FramingBehavior } from "core/Behaviors/Cameras/framingBehavior";
 
 export class PreviewManager {
     private _nodeParticleSystemSet: NodeParticleSystemSet;
@@ -62,6 +64,7 @@ export class PreviewManager {
         this._camera.minZ = 0.001;
         this._camera.attachControl(false);
         this._camera.useFramingBehavior = true;
+        (this._camera.getBehaviorByName("Framing") as FramingBehavior).elevationReturnTime = -1;
         this._camera.wheelDeltaPercentage = 0.01;
         this._camera.pinchDeltaPercentage = 0.01;
 
@@ -178,6 +181,7 @@ export class PreviewManager {
                 }
                 this._particleSystemSet = particleSystemSet;
                 this._particleSystemSet.start();
+                this._updateCameraLimits();
                 this._globalState.onLogRequiredObservable.notifyObservers(new LogEntry("Node Particle System Set build successful", false));
             } catch (err) {
                 this._globalState.onLogRequiredObservable.notifyObservers(new LogEntry(err, true));
@@ -198,6 +202,36 @@ export class PreviewManager {
 
                 void this._reconnectEmittersAsync(scene);
             }
+        }
+    }
+
+    private _updateCameraLimits() {
+        let smallestDiameter = Infinity;
+
+        for (const block of this._nodeParticleSystemSet.attachedBlocks) {
+            if (block instanceof MeshShapeBlock && block.mesh) {
+                const boundingInfo = block.mesh.getBoundingInfo();
+                if (boundingInfo) {
+                    // Use local-space radius since the mesh may live in a different scene
+                    // whose world matrix has not been computed
+                    const diameter = boundingInfo.boundingSphere.radius * 2;
+                    if (diameter > 0 && diameter < smallestDiameter) {
+                        smallestDiameter = diameter;
+                    }
+                }
+            }
+        }
+
+        if (smallestDiameter !== Infinity && smallestDiameter < 3) {
+            this._camera.lowerRadiusLimit = smallestDiameter;
+
+            // Increase wheel delta so zooming feels responsive at small scales
+            this._camera.wheelDeltaPercentage = 0.05;
+            this._camera.pinchDeltaPercentage = 0.05;
+        } else {
+            this._camera.lowerRadiusLimit = 3;
+            this._camera.wheelDeltaPercentage = 0.01;
+            this._camera.pinchDeltaPercentage = 0.01;
         }
     }
 

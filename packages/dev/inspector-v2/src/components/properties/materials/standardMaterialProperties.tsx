@@ -1,6 +1,6 @@
-import type { FunctionComponent } from "react";
+import { type FunctionComponent } from "react";
 
-import type { StandardMaterial } from "core/Materials/standardMaterial";
+import { type StandardMaterial } from "core/Materials/standardMaterial";
 
 import { Color3PropertyLine } from "shared-ui-components/fluent/hoc/propertyLines/colorPropertyLine";
 import { SwitchPropertyLine } from "shared-ui-components/fluent/hoc/propertyLines/switchPropertyLine";
@@ -9,7 +9,7 @@ import { Collapse } from "shared-ui-components/fluent/primitives/collapse";
 import { useProperty } from "../../../hooks/compoundPropertyHooks";
 import { BoundProperty } from "../boundProperty";
 import { TextureSelectorPropertyLine } from "shared-ui-components/fluent/hoc/propertyLines/entitySelectorPropertyLine";
-import type { ISelectionService } from "../../../services/selectionService";
+import { type ISelectionService } from "../../../services/selectionService";
 
 export const StandardMaterialGeneralProperties: FunctionComponent<{ material: StandardMaterial }> = (props) => {
     const { material } = props;
@@ -46,7 +46,7 @@ export const StandardMaterialTexturesProperties: FunctionComponent<{ material: S
     const { material, selectionService } = props;
     const scene = material.getScene();
 
-    const selectEntity = (entity: unknown) => (selectionService.selectedEntity = entity);
+    const selectEntity = (entity: object) => (selectionService.selectedEntity = entity);
 
     return (
         <>

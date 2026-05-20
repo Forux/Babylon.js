@@ -1,16 +1,14 @@
-import type { Sound } from "core/index";
+import { type Sound } from "core/index";
 
-import type { FunctionComponent } from "react";
-
-import { useCallback } from "react";
+import { type FunctionComponent, useCallback } from "react";
 
 import { PauseRegular, PlayRegular } from "@fluentui/react-icons";
 import { ButtonLine } from "shared-ui-components/fluent/hoc/buttonLine";
+import { NumberInputPropertyLine } from "shared-ui-components/fluent/hoc/propertyLines/inputPropertyLine";
 import { SwitchPropertyLine } from "shared-ui-components/fluent/hoc/propertyLines/switchPropertyLine";
-import { SyncedSliderPropertyLine } from "shared-ui-components/fluent/hoc/propertyLines/syncedSliderPropertyLine";
 import { TextPropertyLine } from "shared-ui-components/fluent/hoc/propertyLines/textPropertyLine";
 import { useInterceptObservable } from "../../../hooks/instrumentationHooks";
-import { useObservableState } from "../../../hooks/observableHooks";
+import { useObservableState } from "shared-ui-components/modularTool/hooks/observableHooks";
 import { BoundProperty, Property } from "../boundProperty";
 
 function useSoundState(sound: Sound) {
@@ -70,12 +68,11 @@ export const SoundCommandProperties: FunctionComponent<{ sound: Sound }> = (prop
                 }}
             />
             <Property
-                component={SyncedSliderPropertyLine}
+                component={NumberInputPropertyLine}
                 label="Volume"
                 functionPath="setVolume"
                 value={volume}
                 min={0}
-                max={5}
                 step={0.1}
                 onChange={(value) => {
                     sound.setVolume(value);

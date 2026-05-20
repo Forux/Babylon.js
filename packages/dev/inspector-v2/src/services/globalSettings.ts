@@ -1,24 +1,16 @@
-import type { SettingDescriptor } from "./settingsStore";
+import { type SettingDescriptor } from "shared-ui-components/modularTool/services/settingsStore";
+
+export { CompactModeSettingDescriptor, DisableCopySettingDescriptor } from "shared-ui-components/modularTool/services/globalSettings";
 
 // These are all "global" settings that aren't produced/owned by a specific service,
 // so we just add them by default directly in the SettingsService.
 
-export const CompactModeSettingDescriptor: SettingDescriptor<boolean> = {
-    key: "CompactMode",
-    defaultValue: !matchMedia("(pointer: coarse)").matches,
-};
-
 export const UseDegreesSettingDescriptor: SettingDescriptor<boolean> = {
     key: "UseDegrees",
-    defaultValue: false,
+    defaultValue: true,
 };
 
 export const UseEulerSettingDescriptor: SettingDescriptor<boolean> = {
     key: "UseEuler",
-    defaultValue: false,
-};
-
-export const DisableCopySettingDescriptor: SettingDescriptor<boolean> = {
-    key: "DisableCopy",
-    defaultValue: false,
+    defaultValue: true,
 };

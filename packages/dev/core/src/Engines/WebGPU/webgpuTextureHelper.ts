@@ -3,8 +3,8 @@
 import * as WebGPUConstants from "./webgpuConstants";
 import { ILog2 } from "../../Maths/math.scalar.functions";
 import { Constants } from "../constants";
-import type { InternalTexture } from "../../Materials/Textures/internalTexture";
-import type { IHardwareTextureWrapper } from "../../Materials/Textures/hardwareTextureWrapper";
+import { type InternalTexture } from "../../Materials/Textures/internalTexture";
+import { type IHardwareTextureWrapper } from "../../Materials/Textures/hardwareTextureWrapper";
 
 /** @internal */
 export class WebGPUTextureHelper {
@@ -409,31 +409,31 @@ export class WebGPUTextureHelper {
                 return useSRGBBuffer ? WebGPUConstants.TextureFormat.BC1RGBAUnormSRGB : WebGPUConstants.TextureFormat.BC1RGBAUnorm;
             case Constants.TEXTUREFORMAT_COMPRESSED_RGBA_ASTC_4x4:
                 return useSRGBBuffer ? WebGPUConstants.TextureFormat.ASTC4x4UnormSRGB : WebGPUConstants.TextureFormat.ASTC4x4Unorm;
-            case Constants.TEXTUREFORMAT_COMPRESSED_RGBA_ASTC_5x4_KHR:
+            case Constants.TEXTUREFORMAT_COMPRESSED_RGBA_ASTC_5x4:
                 return useSRGBBuffer ? WebGPUConstants.TextureFormat.ASTC5x4UnormSRGB : WebGPUConstants.TextureFormat.ASTC5x4Unorm;
-            case Constants.TEXTUREFORMAT_COMPRESSED_RGBA_ASTC_5x5_KHR:
+            case Constants.TEXTUREFORMAT_COMPRESSED_RGBA_ASTC_5x5:
                 return useSRGBBuffer ? WebGPUConstants.TextureFormat.ASTC5x5UnormSRGB : WebGPUConstants.TextureFormat.ASTC5x5Unorm;
-            case Constants.TEXTUREFORMAT_COMPRESSED_RGBA_ASTC_6x5_KHR:
+            case Constants.TEXTUREFORMAT_COMPRESSED_RGBA_ASTC_6x5:
                 return useSRGBBuffer ? WebGPUConstants.TextureFormat.ASTC6x5UnormSRGB : WebGPUConstants.TextureFormat.ASTC6x5Unorm;
-            case Constants.TEXTUREFORMAT_COMPRESSED_RGBA_ASTC_6x6_KHR:
+            case Constants.TEXTUREFORMAT_COMPRESSED_RGBA_ASTC_6x6:
                 return useSRGBBuffer ? WebGPUConstants.TextureFormat.ASTC6x6UnormSRGB : WebGPUConstants.TextureFormat.ASTC6x6Unorm;
-            case Constants.TEXTUREFORMAT_COMPRESSED_RGBA_ASTC_8x5_KHR:
+            case Constants.TEXTUREFORMAT_COMPRESSED_RGBA_ASTC_8x5:
                 return useSRGBBuffer ? WebGPUConstants.TextureFormat.ASTC8x5UnormSRGB : WebGPUConstants.TextureFormat.ASTC8x5Unorm;
-            case Constants.TEXTUREFORMAT_COMPRESSED_RGBA_ASTC_8x6_KHR:
+            case Constants.TEXTUREFORMAT_COMPRESSED_RGBA_ASTC_8x6:
                 return useSRGBBuffer ? WebGPUConstants.TextureFormat.ASTC8x6UnormSRGB : WebGPUConstants.TextureFormat.ASTC8x6Unorm;
-            case Constants.TEXTUREFORMAT_COMPRESSED_RGBA_ASTC_8x8_KHR:
+            case Constants.TEXTUREFORMAT_COMPRESSED_RGBA_ASTC_8x8:
                 return useSRGBBuffer ? WebGPUConstants.TextureFormat.ASTC8x8UnormSRGB : WebGPUConstants.TextureFormat.ASTC8x8Unorm;
-            case Constants.TEXTUREFORMAT_COMPRESSED_RGBA_ASTC_10x5_KHR:
+            case Constants.TEXTUREFORMAT_COMPRESSED_RGBA_ASTC_10x5:
                 return useSRGBBuffer ? WebGPUConstants.TextureFormat.ASTC10x5UnormSRGB : WebGPUConstants.TextureFormat.ASTC10x5Unorm;
-            case Constants.TEXTUREFORMAT_COMPRESSED_RGBA_ASTC_10x6_KHR:
+            case Constants.TEXTUREFORMAT_COMPRESSED_RGBA_ASTC_10x6:
                 return useSRGBBuffer ? WebGPUConstants.TextureFormat.ASTC10x6UnormSRGB : WebGPUConstants.TextureFormat.ASTC10x6Unorm;
-            case Constants.TEXTUREFORMAT_COMPRESSED_RGBA_ASTC_10x8_KHR:
+            case Constants.TEXTUREFORMAT_COMPRESSED_RGBA_ASTC_10x8:
                 return useSRGBBuffer ? WebGPUConstants.TextureFormat.ASTC10x8UnormSRGB : WebGPUConstants.TextureFormat.ASTC10x8Unorm;
-            case Constants.TEXTUREFORMAT_COMPRESSED_RGBA_ASTC_10x10_KHR:
+            case Constants.TEXTUREFORMAT_COMPRESSED_RGBA_ASTC_10x10:
                 return useSRGBBuffer ? WebGPUConstants.TextureFormat.ASTC10x10UnormSRGB : WebGPUConstants.TextureFormat.ASTC10x10Unorm;
-            case Constants.TEXTUREFORMAT_COMPRESSED_RGBA_ASTC_12x10_KHR:
+            case Constants.TEXTUREFORMAT_COMPRESSED_RGBA_ASTC_12x10:
                 return useSRGBBuffer ? WebGPUConstants.TextureFormat.ASTC12x10UnormSRGB : WebGPUConstants.TextureFormat.ASTC12x10Unorm;
-            case Constants.TEXTUREFORMAT_COMPRESSED_RGBA_ASTC_12x12_KHR:
+            case Constants.TEXTUREFORMAT_COMPRESSED_RGBA_ASTC_12x12:
                 return useSRGBBuffer ? WebGPUConstants.TextureFormat.ASTC12x12UnormSRGB : WebGPUConstants.TextureFormat.ASTC12x12Unorm;
             case Constants.TEXTUREFORMAT_COMPRESSED_RGB_ETC1_WEBGL:
             case Constants.TEXTUREFORMAT_COMPRESSED_RGB8_ETC2:

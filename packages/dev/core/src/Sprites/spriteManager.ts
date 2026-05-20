@@ -1,27 +1,25 @@
-import type { IDisposable, Scene } from "../scene";
-import type { Nullable } from "../types";
-import type { Observer } from "../Misc/observable";
-import { Observable } from "../Misc/observable";
+import { type IDisposable, type Scene } from "../scene";
+import { type Nullable } from "../types";
+import { type Observer, Observable } from "../Misc/observable";
 import { Vector3, TmpVectors, Matrix } from "../Maths/math.vector";
 import { Sprite } from "./sprite";
-import { SpriteSceneComponent } from "./spriteSceneComponent";
-import type { InternalSpriteAugmentedScene } from "./spriteSceneComponent";
+import { SpriteSceneComponent, type InternalSpriteAugmentedScene } from "./spriteSceneComponent";
+import { RegisterSpriteSceneComponent } from "./spriteSceneComponent.pure";
 import { PickingInfo } from "../Collisions/pickingInfo";
-import type { Camera } from "../Cameras/camera";
+import { type Camera } from "../Cameras/camera";
 import { Texture } from "../Materials/Textures/texture";
 import { SceneComponentConstants } from "../sceneComponent";
 import { Logger } from "../Misc/logger";
 import { Tools } from "../Misc/tools";
 import { WebRequest } from "../Misc/webRequest";
-import type { SpriteRendererOptions } from "./spriteRenderer";
-import { SpriteRenderer } from "./spriteRenderer";
-import type { ThinSprite } from "./thinSprite";
-import type { ISize } from "../Maths/math.size";
+import { type SpriteRendererOptions, SpriteRenderer } from "./spriteRenderer";
+import { type ThinSprite } from "./thinSprite";
+import { type ISize } from "../Maths/math.size";
 import { EngineStore } from "../Engines/engineStore";
 import { Constants } from "../Engines/constants";
 
-import type { Ray } from "../Culling/ray";
-import type { IAssetContainer } from "../IAssetContainer";
+import { type Ray } from "../Culling/ray";
+import { type IAssetContainer } from "../IAssetContainer";
 
 // https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Reflect
 declare const Reflect: any;
@@ -116,6 +114,7 @@ export interface ISpriteManager extends IDisposable {
 
     /**
      * Serializes the sprite manager to a JSON object
+     * @param serializeTexture defines whether the texture must be serialized as well (false by default)
      */
     serialize(serializeTexture?: boolean): any;
 }
@@ -341,6 +340,9 @@ export class SpriteManager implements ISpriteManager {
         if (!scene) {
             scene = EngineStore.LastCreatedScene!;
         }
+        this.layerMask = scene.defaultRenderableLayerMask;
+
+        RegisterSpriteSceneComponent();
 
         if (!scene._getComponent(SceneComponentConstants.NAME_SPRITE)) {
             scene._addComponent(new SpriteSceneComponent(scene));
@@ -417,7 +419,7 @@ export class SpriteManager implements ISpriteManager {
             } catch (e) {
                 this._fromPacked = false;
                 this._packedAndReady = false;
-                throw new Error("Invalid JSON from string. Spritesheet managed with constant cell size.");
+                throw new Error("Invalid JSON from string. Spritesheet managed with constant cell size.", { cause: e });
             }
         } else {
             const re = /\./g;
@@ -442,7 +444,7 @@ export class SpriteManager implements ISpriteManager {
                 } catch (e) {
                     this._fromPacked = false;
                     this._packedAndReady = false;
-                    throw new Error("Invalid JSON format. Please check documentation for format specifications.");
+                    throw new Error("Invalid JSON format. Please check documentation for format specifications.", { cause: e });
                 }
             };
             Tools.LoadFile(jsonUrl, onload, undefined, undefined, false, onerror);
@@ -497,8 +499,8 @@ export class SpriteManager implements ISpriteManager {
         const pickedPoint = TmpVectors.Vector3[0];
         const cameraSpacePosition = TmpVectors.Vector3[1];
         const cameraView = camera.getViewMatrix();
-        let activeRay: Ray = ray;
-        let pickedRay: Ray = ray;
+        let activeRay: Ray;
+        let pickedRay!: Ray;
 
         for (let index = 0; index < count; index++) {
             const sprite = this.sprites[index];

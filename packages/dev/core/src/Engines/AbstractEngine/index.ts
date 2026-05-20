@@ -12,3 +12,8 @@ export * from "./abstractEngine.alpha";
 export * from "./abstractEngine.views";
 export * from "./abstractEngine.loadFile";
 export * from "./abstractEngine.textureLoaders";
+// must import first since nothing references the exports
+// eslint-disable-next-line no-duplicate-imports
+export * from "./abstractEngine.textureSelector";
+
+import "./abstractEngine.textureSelector";

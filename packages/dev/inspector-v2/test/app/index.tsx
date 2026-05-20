@@ -3,21 +3,20 @@
 // Frame graphs: http://localhost:1338/?inspectorv2#9YU4C5#23
 // Sprites: https://localhost:1338/?inspectorv2#YCY2IL#4
 // Animation groups: http://localhost:1338/?inspectorv2#FMAYKS
+// Inspector v1 extensibility API: https://localhost:1338/#10HGIN#7
 
-import HavokPhysics from "@babylonjs/havok";
-import "core/Physics/v2/physicsEngineComponent";
-import type { Nullable } from "core/types";
+import { type Nullable } from "core/types";
 
 import { Engine } from "core/Engines/engine";
 import { ImportMeshAsync, LoadAssetContainerAsync } from "core/Loading/sceneLoader";
 import { ParticleHelper } from "core/Particles/particleHelper";
 import { Vector3 } from "core/Maths/math.vector";
-import { PhysicsAggregate, PhysicsMotionType, PhysicsShapeType } from "core/Physics/v2";
+import { PhysicsMotionType, PhysicsShapeType } from "core/Physics/v2/IPhysicsEnginePlugin";
+import { PhysicsAggregate } from "core/Physics/v2/physicsAggregate";
 import { HavokPlugin } from "core/Physics/v2/Plugins/havokPlugin";
 import { Scene } from "core/scene";
 import { registerBuiltInLoaders } from "loaders/dynamic";
 import { ImageProcessingPostProcess } from "core/PostProcesses/imageProcessingPostProcess";
-import "core/Helpers/sceneHelpers";
 import { Color3, Color4 } from "core/Maths/math.color";
 import { ArcRotateCamera } from "core/Cameras/arcRotateCamera";
 import { PBRMaterial } from "core/Materials/PBR/pbrMaterial";
@@ -28,10 +27,12 @@ import { NodeMaterial } from "core/Materials/Node/nodeMaterial";
 import { Texture } from "core/Materials/Textures/texture";
 import { AdvancedDynamicTexture } from "gui/2D/advancedDynamicTexture";
 import { Button } from "gui/2D/controls/button";
-import "core/Audio/audioSceneComponent";
-import "core/Audio/audioEngine";
 import { Sound } from "core/Audio/sound";
+import { PointLight } from "core/Lights/pointLight";
+import { SpotLight } from "core/Lights/spotLight";
+import { ClusteredLightContainer } from "core/Lights/Clustered/clusteredLightContainer";
 import { ShowInspector } from "../../src/inspector";
+// import "../../src/legacy/legacy";
 
 // TODO: Get this working automatically without requiring an explicit import. Inspector v2 should dynamically import these when needed.
 //       See the initial attempt here: https://github.com/BabylonJS/Babylon.js/pull/17646
@@ -39,8 +40,6 @@ import "node-editor/legacy/legacy";
 import "node-geometry-editor/legacy/legacy";
 import "node-particle-editor/legacy/legacy";
 import "node-render-graph-editor/legacy/legacy";
-
-import "node-particle-editor/legacy/legacy"; // Ensure node particle editor legacy code is imported
 
 // Register scene loader plugins.
 registerBuiltInLoaders();
@@ -58,9 +57,17 @@ const scene = new Scene(engine);
 
 let camera: Nullable<ArcRotateCamera> = null;
 
-const newSystem = ParticleHelper.CreateDefault(Vector3.Zero(), 10000, scene);
-newSystem.name = "CPU particle system";
-newSystem.start();
+async function loadModelAsync() {
+    let assetContainer = await LoadAssetContainerAsync("https://assets.babylonjs.com/meshes/Demos/optimized/acrobaticPlane_variants.glb", scene);
+    assetContainer.addAllToScene();
+    return assetContainer;
+}
+
+function createParticleSystem() {
+    const newSystem = ParticleHelper.CreateDefault(Vector3.Zero(), 10000, scene);
+    newSystem.name = "CPU particle system";
+    newSystem.start();
+}
 
 function createCamera() {
     camera?.dispose();
@@ -85,6 +92,8 @@ function createPostProcess() {
 }
 
 async function createPhysics() {
+    const { default: HavokPhysics } = await import("@babylonjs/havok");
+    await import("core/Physics/v2/physicsEngineComponent");
     const havok = await HavokPhysics();
     const hkPlugin = new HavokPlugin(true, havok);
     scene.enablePhysics(new Vector3(0, -9.81, 0), hkPlugin);
@@ -113,6 +122,8 @@ function createTestPBRSphere() {
     glass.albedoColor = new Color3(0.95, 0.95, 0.95);
 
     sphere.material = glass;
+
+    return sphere;
 }
 
 function createTestBoxes() {
@@ -124,6 +135,16 @@ function createTestBoxes() {
     box.material = redMat;
     const boxInstance = box.createInstance("boxInstance");
     boxInstance.position = new Vector3(0, 0, -0.5);
+
+    const level1Torus = MeshBuilder.CreateTorus("level1Torus", {}, scene);
+    const level2Torus = MeshBuilder.CreateTorus("level2Torus", {}, scene);
+    level2Torus.position = new Vector3(0.5, 0, 0);
+    level2Torus.parent = level1Torus;
+    const level3Torus = MeshBuilder.CreateTorus("level3Torus", {}, scene);
+    level3Torus.parent = level2Torus;
+    level3Torus.position = new Vector3(0.5, 0, 0);
+    scene.removeMesh(level1Torus);
+    scene.removeMesh(level2Torus);
 }
 
 function createTestMetadata() {
@@ -133,6 +154,7 @@ function createTestMetadata() {
         test: "test string",
         description: "Material JSON metadata.",
         someNumber: 73,
+        doSomething: () => {},
     };
 
     const defaultMeta = MeshBuilder.CreateBox("default.metadata", { size: 0.15 }, scene);
@@ -189,17 +211,30 @@ function createGui() {
     advancedTexture.addControl(button);
 }
 
-function createSound() {
+async function createSound() {
+    await import("core/Audio/audioSceneComponent");
+    await import("core/Audio/audioEngine");
+
     const sound = new Sound("Music", "https://playground.babylonjs.com/sounds/violons11.wav", scene, null, {
         loop: true,
         autoplay: false,
     });
 }
 
+async function createClusteredLight() {
+    await import("core/Lights/Clustered/clusteredLightingSceneComponent");
+    const pointLight1 = new PointLight("clusteredPoint1", new Vector3(1, 1, 0), scene);
+    const pointLight2 = new PointLight("clusteredPoint2", new Vector3(-1, 1, 0), scene);
+    const spotLight1 = new SpotLight("clusteredSpot1", new Vector3(0, 2, 0), Vector3.Down(), Math.PI / 4, 2, scene);
+    new ClusteredLightContainer("clusteredLights", [pointLight1, pointLight2, spotLight1], scene);
+}
+
 (async () => {
-    let assetContainer = await LoadAssetContainerAsync("https://assets.babylonjs.com/meshes/Demos/optimized/acrobaticPlane_variants.glb", scene);
-    assetContainer.addAllToScene();
+    let assetContainer = await loadModelAsync();
     createCamera();
+
+    createParticleSystem();
+
     createPostProcess();
 
     await createPhysics();
@@ -207,7 +242,7 @@ function createSound() {
     createGaussianSplatting();
 
     createTestBoxes();
-    createTestPBRSphere();
+    const sphere = createTestPBRSphere();
 
     createMaterials();
 
@@ -216,6 +251,8 @@ function createSound() {
     createGui();
 
     createSound();
+
+    await createClusteredLight();
 
     engine.runRenderLoop(() => {
         scene.render();
@@ -243,6 +280,9 @@ function createSound() {
             }
         }
     });
+
+    // scene.debugLayer.show();
+    // scene.debugLayer.select(sphere);
 })();
 
 ShowInspector(scene);

@@ -1,17 +1,18 @@
-import type {
-    Observer,
-    Nullable,
-    NodeRenderGraphBlock,
-    NodeRenderGraphTeleportOutBlock,
-    NodeRenderGraphTeleportInBlock,
-    AbstractEngine,
-    INodeRenderGraphCreateOptions,
-    INodeRenderGraphEditorOptions,
-    Scene,
-    WritableObject,
-    IShadowLight,
-    INodeRenderGraphCustomBlockDescription,
-    Immutable,
+import {
+    type Observer,
+    type Nullable,
+    type NodeRenderGraphBlock,
+    type NodeRenderGraphTeleportOutBlock,
+    type NodeRenderGraphTeleportInBlock,
+    type AbstractEngine,
+    type INodeRenderGraphCreateOptions,
+    type INodeRenderGraphEditorOptions,
+    type Scene,
+    type WritableObject,
+    type IShadowLight,
+    type INodeRenderGraphCustomBlockDescription,
+    type Immutable,
+    type Camera,
 } from "core/index";
 import { Observable } from "../../Misc/observable";
 import { NodeRenderGraphOutputBlock } from "./Blocks/outputBlock";
@@ -32,9 +33,7 @@ import { NodeRenderGraphBuildState } from "./nodeRenderGraphBuildState";
 import { NodeRenderGraphCullObjectsBlock } from "./Blocks/cullObjectsBlock";
 
 // declare NODERENDERGRAPHEDITOR namespace for compilation issue
-// eslint-disable-next-line @typescript-eslint/naming-convention
 declare let NODERENDERGRAPHEDITOR: any;
-// eslint-disable-next-line @typescript-eslint/naming-convention
 declare let BABYLON: any;
 
 /**
@@ -46,7 +45,7 @@ export class NodeRenderGraph {
     private _buildId: number = NodeRenderGraph._BuildIdGenerator++;
 
     /** Define the Url to load node editor script */
-    public static EditorURL = `${Tools._DefaultCdnUrl}/v${Engine.Version}/NodeRenderGraph/babylon.nodeRenderGraph.js`;
+    public static EditorURL = `${Tools._DefaultCdnUrl}/v${Engine.Version}/nodeRenderGraphEditor/babylon.nodeRenderGraphEditor.js`;
 
     /** Define the Url to load snippets */
     public static SnippetUrl = Constants.SnippetUrl;
@@ -54,14 +53,21 @@ export class NodeRenderGraph {
     /** Description of custom blocks to use in the node render graph editor */
     public static CustomBlockDescriptions: INodeRenderGraphCustomBlockDescription[] = [];
 
-    // eslint-disable-next-line @typescript-eslint/naming-convention
     private BJSNODERENDERGRAPHEDITOR = this._getGlobalNodeRenderGraphEditor();
 
     /** @returns the inspector from bundle or global */
     private _getGlobalNodeRenderGraphEditor(): any {
-        // UMD Global name detection from Webpack Bundle UMD Name.
+        // UMD global name detection from bundle metadata.
+        // Note: rollup-built UMD bundles do not expose the editor class
+        // directly on the namespace - it lives on `.default.NodeRenderGraphEditor` -
+        // so we unwrap that case before falling back to the BABYLON global.
         if (typeof NODERENDERGRAPHEDITOR !== "undefined") {
-            return NODERENDERGRAPHEDITOR;
+            if ((NODERENDERGRAPHEDITOR as any).NodeRenderGraphEditor) {
+                return NODERENDERGRAPHEDITOR;
+            }
+            if ((NODERENDERGRAPHEDITOR as any).default?.NodeRenderGraphEditor) {
+                return (NODERENDERGRAPHEDITOR as any).default;
+            }
         }
 
         // In case of module let's check the global emitted from the editor entry point.
@@ -257,6 +263,47 @@ export class NodeRenderGraph {
     }
 
     /**
+     * Replaces a camera in all camera input blocks of this node render graph.
+     * If the current camera is found in any input block, it is replaced by the new camera,
+     * optionally updating the scene's pointer camera and rebuilding the graph.
+     * @param currentCamera The camera to replace.
+     * @param newCamera The new camera to assign to the matching input blocks.
+     * @param updateCameraToUseForPointers If true (default), updates `scene.cameraToUseForPointers` to the new camera when a replacement occurs.
+     * @param rebuildGraph If true (default), rebuilds the graph asynchronously after the replacement.
+     * @returns A promise that resolves to true if at least one input block was updated, false otherwise.
+     */
+    public async replaceCameraAsync(currentCamera: Nullable<Camera>, newCamera: Camera, updateCameraToUseForPointers = true, rebuildGraph = true) {
+        const inputBlocks = this.getInputBlocks();
+
+        let updated = false;
+        for (const block of inputBlocks) {
+            if (block.isCamera() && block.value === currentCamera) {
+                block.value = newCamera;
+                updated = true;
+            }
+        }
+
+        if (updated) {
+            if (updateCameraToUseForPointers) {
+                this._scene.cameraToUseForPointers = newCamera;
+            }
+
+            if (rebuildGraph) {
+                const currentAutoFill = this._options.autoFillExternalInputs;
+                try {
+                    this._options.autoFillExternalInputs = false; // makes sure that the camera input block(s) we just updated don't get overwritten by autoFillExternalInputs
+
+                    await this.buildAsync();
+                } finally {
+                    this._options.autoFillExternalInputs = currentAutoFill;
+                }
+            }
+        }
+
+        return updated;
+    }
+
+    /**
      * Launch the node render graph editor
      * @param config Define the configuration of the editor
      * @returns a promise fulfilled when the node editor is visible
@@ -391,7 +438,6 @@ export class NodeRenderGraph {
      * @param maxTimeout Maximum time in ms to wait for the graph to be ready (default is 10000)
      * @returns The promise that resolves when the graph is ready
      */
-    // eslint-disable-next-line @typescript-eslint/promise-function-async, no-restricted-syntax
     public async whenReadyAsync(timeStep = 16, maxTimeout = 10000): Promise<void> {
         this._frameGraph.pausedExecution = true;
         await this._frameGraph.whenReadyAsync(timeStep, maxTimeout);

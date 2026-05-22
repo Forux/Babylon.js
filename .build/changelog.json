@@ -1,6 +1,690 @@
 {
-    "fromTag": "9.7.0",
+    "fromTag": "9.8.0",
     "changelog": {
+        "9.8.0": [
+            {
+                "pr": "18441",
+                "title": "Tree-shaking - the pure barrel",
+                "description": "## Tree-Shaking for `@babylonjs/core`\n\nThis PR introduces full tree-shaking support for `@babylonjs/core`. The goal is to allow bundlers (Webpack, Rollup, Vite, esbuild) to eliminate unused code from Babylon.js applications, significantly reducing bundle sizes.\n\n### Problem\n\nEvery source file in `@babylonjs/core` was marked as having side effects (`\"sideEffects\": [\"**/*\"]`), preventing bundlers from dropping unused modules. Over 900 files contained module-level side effects — `RegisterClass()` calls, prototype augmentations, `ShaderStore` writes, `AddNodeConstructor` calls, and static property assignments — that forced the entire package into every bundle.\n\n### Approach: Pure/Side-Effect Split\n\nFiles under `packages/dev/core/src/` are split based on their side-effect profile:\n\n- **Side-effect-free files** stay as a single `foo.ts` — no split needed.\n- **Files with side effects** (RegisterClass, shader store writes, etc.) are split into two files:\n  - **`foo.pure.ts`** — All logic. Imports only from other `.pure.ts` files. No side effects. Contains a `RegisterFoo()` function that encapsulates all side effects.\n  - **`foo.ts`** — Thin wrapper that re-exports from `.pure.ts` and calls `RegisterFoo()`.\n- **Files that also augment other classes** (prototype assignments, `declare module`) get a third file:\n  - **`foo.types.ts`** — `declare module` augmentations for TypeScript.\n\nThis is a **fully backwards-compatible** change. Existing imports from `@babylonjs/core` continue to work identically. Tree-shaking users can import from `.pure` paths to get only the code they use.\n\n### Implementation Phases\n\n1. **Audit & tooling** — Side-effect inventory script, bundle smoke tests, `/*#__PURE__*/` annotations\n2. **Mechanical splits** — `RegisterClass`-only files (406 files), shader store files, prototype augmentation files\n3. **Complex splits** — Files with mixed side effects, static property assignments, factory patterns\n4. **Pure barrels** — Generated `pure.ts` barrel files alongside each `index.ts`\n5. **CI enforcement** — Manifest drift checks, pure barrel generation checks, bundle smoke tests, `sideEffects` field sync\n6. **Bulk block registration helpers** — Consolidate related registrations (e.g., all math blocks, all mesh blocks)\n7. **Native engine fix** — Re-export `Native/Extensions` barrel to ensure `createCubeTexture` is registered on `NativeEngine`\n\n### Key Stats\n\n- ~1,713 files changed\n- ~784 side-effect entries in `package.json` (down from `[\"**/*\"]`)\n- ~1,784 files confirmed pure (no side effects)\n- All 3,070 unit tests pass\n- Bundle smoke tests confirm tree-shaking works (physics-v2 scene: -38.6% vs baseline)\n\n### Scripts Added\n\n- `npm run audit:side-effects` — Scan and report all side effects\n- `npm run update:manifest` — Regenerate the side-effects manifest\n- `npm run generate:pure-barrels` — Generate pure barrel files\n- `npm run generate:side-effect-stubs` — Generate missing side-effect stubs\n- `npm run test:treeshaking` — Bundle smoke tests (Webpack + Rollup)\n- `npm run check:treeshaking` — CI checks (manifest drift, pure barrels, bundle smoke)\n",
+                "author": {
+                    "name": "RaananW",
+                    "url": "https://github.com/RaananW"
+                },
+                "files": [
+                    ".azure-pipelines/ci-monorepo.yml",
+                    ".githooks/pre-commit",
+                    ".github/copilot-instructions.md",
+                    ".github/instructions/index.md",
+                    ".github/instructions/side-effect-imports.instructions.md",
+                    ".github/instructions/tree-shaking.instructions.md",
+                    ".gitignore",
+                    "docs/tree-shaking/03-registering-side-effects.md",
+                    "docs/tree-shaking/04-troubleshooting.md",
+                    "eslint.config.mjs",
+                    "package-lock.json",
+                    "package.json",
+                    "packages/dev/buildTools/src/addJSToCompiledFiles.ts",
+                    "packages/dev/buildTools/src/buildShaders.ts",
+                    "packages/dev/core/package.json",
+                    "packages/dev/core/src/Actions/action.pure.ts",
+                    "packages/dev/core/src/Actions/action.ts",
+                    "packages/dev/core/src/Actions/actionManager.ts",
+                    "packages/dev/core/src/Actions/condition.pure.ts",
+                    "packages/dev/core/src/Actions/condition.ts",
+                    "packages/dev/core/src/Actions/directActions.pure.ts",
+                    "packages/dev/core/src/Actions/directActions.ts",
+                    "packages/dev/core/src/Actions/directAudioActions.pure.ts",
+                    "packages/dev/core/src/Actions/directAudioActions.ts",
+                    "packages/dev/core/src/Actions/interpolateValueAction.pure.ts",
+                    "packages/dev/core/src/Actions/interpolateValueAction.ts",
+                    "packages/dev/core/src/Actions/pure.ts",
+                    "packages/dev/core/src/Animations/animatable.pure.ts",
+                    "packages/dev/core/src/Animations/animatable.ts",
+                    "packages/dev/core/src/Animations/animatable.types.ts",
+                    "packages/dev/core/src/Animations/animation.pure.ts",
+                    "packages/dev/core/src/Animations/animation.ts",
+                    "packages/dev/core/src/Animations/animation.types.ts",
+                    "packages/dev/core/src/Animations/animationGroup.pure.ts",
+                    "packages/dev/core/src/Animations/animationGroup.ts",
+                    "packages/dev/core/src/Animations/animationGroup.types.ts",
+                    "packages/dev/core/src/Animations/pure.ts",
+                    "packages/dev/core/src/Audio/audioEngine.pure.ts",
+                    "packages/dev/core/src/Audio/audioEngine.ts",
+                    "packages/dev/core/src/Audio/audioSceneComponent.pure.ts",
+                    "packages/dev/core/src/Audio/audioSceneComponent.ts",
+                    "packages/dev/core/src/Audio/audioSceneComponent.types.ts",
+                    "packages/dev/core/src/Audio/pure.ts",
+                    "packages/dev/core/src/Audio/sound.pure.ts",
+                    "packages/dev/core/src/Audio/sound.ts",
+                    "packages/dev/core/src/AudioV2/abstractAudio/pure.ts",
+                    "packages/dev/core/src/AudioV2/abstractAudio/subProperties/pure.ts",
+                    "packages/dev/core/src/AudioV2/pure.ts",
+                    "packages/dev/core/src/AudioV2/webAudio/pure.ts",
+                    "packages/dev/core/src/BakedVertexAnimation/pure.ts",
+                    "packages/dev/core/src/Behaviors/Cameras/pure.ts",
+                    "packages/dev/core/src/Behaviors/Meshes/pure.ts",
+                    "packages/dev/core/src/Behaviors/pure.ts",
+                    "packages/dev/core/src/Bones/bone.pure.ts",
+                    "packages/dev/core/src/Bones/bone.ts",
+                    "packages/dev/core/src/Bones/pure.ts",
+                    "packages/dev/core/src/Bones/skeleton.ts",
+                    "packages/dev/core/src/Buffers/buffer.align.pure.ts",
+                    "packages/dev/core/src/Buffers/buffer.align.ts",
+                    "packages/dev/core/src/Buffers/buffer.align.types.ts",
+                    "packages/dev/core/src/Buffers/buffer.nonFloatVertexBuffers.ts",
+                    "packages/dev/core/src/Buffers/buffer.pure.ts",
+                    "packages/dev/core/src/Buffers/buffer.ts",
+                    "packages/dev/core/src/Buffers/buffer.types.ts",
+                    "packages/dev/core/src/Buffers/index.ts",
+                    "packages/dev/core/src/Buffers/pure.ts",
+                    "packages/dev/core/src/Cameras/Inputs/arcRotateCameraVRDeviceOrientationInput.pure.ts",
+                    "packages/dev/core/src/Cameras/Inputs/arcRotateCameraVRDeviceOrientationInput.ts",
+                    "packages/dev/core/src/Cameras/Inputs/arcRotateCameraVRDeviceOrientationInput.types.ts",
+                    "packages/dev/core/src/Cameras/Inputs/freeCameraDeviceOrientationInput.pure.ts",
+                    "packages/dev/core/src/Cameras/Inputs/freeCameraDeviceOrientationInput.ts",
+                    "packages/dev/core/src/Cameras/Inputs/freeCameraDeviceOrientationInput.types.ts",
+                    "packages/dev/core/src/Cameras/Inputs/freeCameraVirtualJoystickInput.pure.ts",
+                    "packages/dev/core/src/Cameras/Inputs/freeCameraVirtualJoystickInput.ts",
+                    "packages/dev/core/src/Cameras/Inputs/freeCameraVirtualJoystickInput.types.ts",
+                    "packages/dev/core/src/Cameras/Inputs/pure.ts",
+                    "packages/dev/core/src/Cameras/RigModes/pure.ts",
+                    "packages/dev/core/src/Cameras/Stereoscopic/anaglyphArcRotateCamera.pure.ts",
+                    "packages/dev/core/src/Cameras/Stereoscopic/anaglyphArcRotateCamera.ts",
+                    "packages/dev/core/src/Cameras/Stereoscopic/anaglyphFreeCamera.pure.ts",
+                    "packages/dev/core/src/Cameras/Stereoscopic/anaglyphFreeCamera.ts",
+                    "packages/dev/core/src/Cameras/Stereoscopic/anaglyphGamepadCamera.pure.ts",
+                    "packages/dev/core/src/Cameras/Stereoscopic/anaglyphGamepadCamera.ts",
+                    "packages/dev/core/src/Cameras/Stereoscopic/anaglyphUniversalCamera.pure.ts",
+                    "packages/dev/core/src/Cameras/Stereoscopic/anaglyphUniversalCamera.ts",
+                    "packages/dev/core/src/Cameras/Stereoscopic/pure.ts",
+                    "packages/dev/core/src/Cameras/Stereoscopic/stereoscopicArcRotateCamera.pure.ts",
+                    "packages/dev/core/src/Cameras/Stereoscopic/stereoscopicArcRotateCamera.ts",
+                    "packages/dev/core/src/Cameras/Stereoscopic/stereoscopicFreeCamera.pure.ts",
+                    "packages/dev/core/src/Cameras/Stereoscopic/stereoscopicFreeCamera.ts",
+                    "packages/dev/core/src/Cameras/Stereoscopic/stereoscopicGamepadCamera.pure.ts",
+                    "packages/dev/core/src/Cameras/Stereoscopic/stereoscopicGamepadCamera.ts",
+                    "packages/dev/core/src/Cameras/Stereoscopic/stereoscopicUniversalCamera.pure.ts",
+                    "packages/dev/core/src/Cameras/Stereoscopic/stereoscopicUniversalCamera.ts",
+                    "packages/dev/core/src/Cameras/VR/pure.ts",
+                    "packages/dev/core/src/Cameras/VR/vrDeviceOrientationArcRotateCamera.pure.ts",
+                    "packages/dev/core/src/Cameras/VR/vrDeviceOrientationArcRotateCamera.ts",
+                    "packages/dev/core/src/Cameras/VR/vrDeviceOrientationFreeCamera.pure.ts",
+                    "packages/dev/core/src/Cameras/VR/vrDeviceOrientationFreeCamera.ts",
+                    "packages/dev/core/src/Cameras/VR/vrDeviceOrientationGamepadCamera.pure.ts"
+                ],
+                "tags": []
+            },
+            {
+                "pr": "18462",
+                "title": "Add distance-only spatial mode to Audio Engine V2",
+                "description": "## Summary\r\n\r\nThis PR adds an Audio Engine V2 spatial panning toggle so spatial sounds can keep distance attenuation without being panned between the left and right channels.\r\n\r\nThe new API is available both at creation time and at runtime:\r\n\r\n- `spatialPanningEnabled: false`\r\n- `sound.spatial.panningEnabled = false`\r\n\r\nWhen panning is disabled, the WebAudio implementation bypasses `PannerNode` for directional panning and applies distance attenuation manually. This allows mono/centered spatial audio behavior while preserving distance-based volume falloff.\r\n\r\n## Details\r\n\r\n- Adds `spatialPanningEnabled` / `panningEnabled` to the Audio V2 spatial APIs.\r\n- Adds a WebAudio no-panning signal path using a gain node for manual attenuation.\r\n- Matches WebAudio distance attenuation behavior for `linear`, `inverse`, and `exponential` distance models.\r\n- Supports runtime toggling between panned and non-panned spatial output.\r\n- Keeps attenuation refreshed when source or listener position changes, including attached-source cases.\r\n- Documents that sound cone attenuation is not applied while panning is disabled, because cone handling is tied to `PannerNode`.\r\n\r\n## Playground\r\n\r\nSaved Playground snippet:\r\n\r\nhttps://playground.babylonjs.com/#ETXRJU\r\n\r\nFor PR testing, load it against the PR snapshot build once available:\r\n\r\nhttps://playground.babylonjs.com/?snapshot=refs/pull/18462/merge#ETXRJU\r\n\r\nThe demo moves a mono tone around the listener while sweeping from near to far. With spatial panning ON, the tone moves between ears and changes volume with distance. With spatial panning OFF, the tone stays centered while still changing volume with distance.\r\n\r\n## Validation\r\n\r\n- `npm run build:dev`\r\n- `npx vitest run --project=unit packages/dev/core/test/unit/Audio`",
+                "author": {
+                    "name": "VicenteCartas",
+                    "url": "https://github.com/VicenteCartas"
+                },
+                "files": [
+                    "packages/dev/core/src/AudioV2/abstractAudio/components/spatialAudioAttacherComponent.ts",
+                    "packages/dev/core/src/AudioV2/abstractAudio/subNodes/spatialAudioSubNode.ts",
+                    "packages/dev/core/src/AudioV2/abstractAudio/subProperties/abstractSpatialAudio.ts",
+                    "packages/dev/core/src/AudioV2/abstractAudio/subProperties/spatialAudio.ts",
+                    "packages/dev/core/src/AudioV2/webAudio/subNodes/spatialWebAudioSubNode.ts",
+                    "packages/dev/core/src/AudioV2/webAudio/subNodes/webAudioBusAndSoundSubGraph.ts",
+                    "packages/dev/core/test/unit/Audio/helpers/mockedAudioObjects.ts",
+                    "packages/dev/core/test/unit/Audio/sound.test.ts"
+                ],
+                "tags": []
+            },
+            {
+                "pr": "18458",
+                "title": "Fix renderCount in visualization tests (end)",
+                "description": "Last batch of changes to remove renderCount > 1 in visualization tests.\r\n\r\nThere are still 29 visualization tests with `renderCount > 1`:\r\n* Tests that rely on frame accumulation (blur, TAA, IBL Shadows, etc.): 22\r\n* No built-in way to advance animation (fluid rendering, procedural, etc.): 6\r\n* Others: 1 (\"FAST snapshot CPU particles\" => the PG start/stop particle systems at some specific frames)\r\n\r\nNote: I removed the “Instances” test because we already have two other tests that use the same scene (“Instances + GBR + motion blur” and “Instances + motion blur”), and also because it doesn't use a PG identifier, but rather the cumbersome “scriptToRun” syntax.",
+                "author": {
+                    "name": "Popov72",
+                    "url": "https://github.com/Popov72"
+                },
+                "files": [
+                    "packages/tools/tests/test/visualization/ReferenceImages/NME-Particles-with-PositionW.png",
+                    "packages/tools/tests/test/visualization/ReferenceImages/gpu-particles-emitters-mesh.png",
+                    "packages/tools/tests/test/visualization/ReferenceImages/halo-particle-system.png",
+                    "packages/tools/tests/test/visualization/ReferenceImages/particle-helper.png",
+                    "packages/tools/tests/test/visualization/ReferenceImages/particle-system-with-custom-nme-shader.png",
+                    "packages/tools/tests/test/visualization/ReferenceImages/prepass-ssao-particles.png",
+                    "packages/tools/tests/test/visualization/ReferenceImages/subemitters.png",
+                    "packages/tools/tests/test/visualization/ReferenceImages/wgsl-in-shadermaterial.png",
+                    "packages/tools/tests/test/visualization/config.json"
+                ],
+                "tags": [
+                    "skip changelog"
+                ]
+            },
+            {
+                "pr": "18456",
+                "title": "Upload Babylon Native visualization-test images as pipeline artifacts",
+                "description": "[Created by Copilot on behalf of @bghgary]\r\n\r\n## Context\r\n\r\nThe `NativeTests` job in `ci-monorepo.yml` downloads BabylonNative nightly test artifacts (pipeline 36), replaces their bundled `babylon*.js` with the freshly built snapshot, and runs `Playground.exe app:///Scripts/validation_native.js` plus `UnitTests.exe`.\r\n\r\nWhen pixel-diff regressions occur (e.g. the recent OpenPBR/glTF surface-tinting regression in #18430), `validation_native.js` writes the rendered PNG to `Results/<reference>.png` and a red-overlay diff to `Errors/<reference>.png` next to `Playground.exe` -- but nothing in the pipeline uploaded those directories. The failure log was the only visible signal, making it impossible to tell whether a regression is a real visual change vs. a threshold blip without re-running the test locally against a matching native binary.\r\n\r\n## Change\r\n\r\nMirror the upload pattern from BabylonNative's own win32 workflow ([`.github/workflows/build-win32.yml`](https://github.com/BabylonJS/BabylonNative/blob/master/.github/workflows/build-win32.yml), `actions/upload-artifact@v6` twice) using the ADO equivalent `PublishPipelineArtifact@1`:\r\n\r\n- **`native-rendered-pictures`** -- `Results/`, uploaded on `not(canceled())`. Matches `saveResult = true` in `validation_native.js`: every test always writes its render, so green runs upload too and give a baseline.\r\n- **`native-error-pictures`** -- `Errors/`, uploaded only on `failed()`. Matches when `validation_native.js` actually writes diff overlays.\r\n\r\n`PublishPipelineArtifact@1` has no `if-no-files-found: ignore` flag, so a one-off `New-Item -Force` step ensures both directories exist before publish (`Errors/` legitimately won't exist on a fully-green run).\r\n\r\n## Verification\r\n\r\nCan be verified end-to-end only after merge: the next native-test failure runs through this job and surfaces the diff PNGs as a downloadable artifact on the build. Until then, the green-run path is exercised by every passing build of this PR itself -- `native-rendered-pictures` should appear on the ADO run for this PR's CI.\r\n",
+                "author": {
+                    "name": "bghgary",
+                    "url": "https://github.com/bghgary"
+                },
+                "files": [
+                    ".azure-pipelines/ci-monorepo.yml"
+                ],
+                "tags": []
+            },
+            {
+                "pr": "18379",
+                "title": "Camera input mapping system with backward-compatible legacy flag support",
+                "description": "> 🤖 *This PR was created by the create-pr skill.*\n\n## Summary\nReplaces the scattered, ad-hoc input handling on `ArcRotateCamera` and `GeospatialCamera` with a declarative two-layer input mapping system, while preserving the behavior of all existing legacy boolean flags.\n\n## Motivation\nCamera input configuration today is spread across ad-hoc boolean flags (`useCtrlForPanning`, `multiTouchPanAndZoom`, `panningMouseButton`, `useAltToZoom`, …) and hardcoded button-to-action logic in each input class. Adding new configurations requires another flag, another conditional, and often cross-input snooping. This doesn't scale.\n\nThe new system replaces that with a declarative `inputMap` resolved by `resolveInteraction()` that produces typed `handlers` (orbit/zoom/pan, etc.). Per-frame deltas are accumulated and applied via `computeCurrentFrameDeltas()` for framerate-independent inertia.\n\n## Playground demos\n\n| Demo | Link |\n|------|------|\n| Legacy inertia 0.9 alpha glide | [#C7KCTE#0](https://playground.babylonjs.com/#C7KCTE#0) |\n| Legacy inertia 0.5 alpha glide | [#OPHBRC#0](https://playground.babylonjs.com/#OPHBRC#0) |\n| Legacy inertia 0 alpha snap | [#HF2DLH#0](https://playground.babylonjs.com/#HF2DLH#0) |\n| Legacy panningInertia glide | [#8S8H0S#0](https://playground.babylonjs.com/#8S8H0S#0) |\n| Legacy inertialRadiusOffset glide | [#98108I#0](https://playground.babylonjs.com/#98108I#0) |\n| Legacy beta limits clamp glide | [#FBLW1J#0](https://playground.babylonjs.com/#FBLW1J#0) |\n| Legacy radius limits clamp glide | [#QWTJH9#0](https://playground.babylonjs.com/#QWTJH9#0) |\n| Legacy combined axis glide | [#SJJRY4#0](https://playground.babylonjs.com/#SJJRY4#0) |\n| **`setInteraction()` — remap ctrl+drag** | [**#A1CDLY#0**](https://playground.babylonjs.com/#A1CDLY#0) |\n\n## What's in this PR\n\n### Core (`packages/dev/core/src/Cameras`)\n- Extends the existing `CameraMovement` base class with input-map resolution, typed handlers, and framerate-independent accumulators / inertia.\n- New `ArcRotateCameraMovement` subclass and refreshed `GeospatialCameraMovement` subclass, each with default input maps.\n- New `cameraInteractions.ts` with shared interaction descriptors and `InputMapper` class.\n- `InputMapper.setInteraction(source, conditions, interaction)` — targeted remapping of individual input entries without rebuilding the full inputMap (e.g. swap ctrl+left-drag from pan to rotate).\n- `InputMapper.getEntry(source, interaction)` — find an entry to tweak properties like sensitivity.\n- `ArcRotateCamera` and `GeospatialCamera` now always route through the movement system; `_checkInputs()` calls `computeCurrentFrameDeltas()` and applies the resulting rotation / zoom / pan deltas. The legacy `useMovementSystem` getter/setter is kept as a deprecated no-op for source compatibility.\n- `Camera.inertia` converted from a plain property to a get/set accessor so `ArcRotateCamera` can override it to sync with the movement system.\n- Legacy back-compat: `_syncLegacyFlagsToInputMap()` maps `_useCtrlForPanning`, `_panningMouseButton`, and `useAltToZoom` onto the inputMap so existing apps that toggle these flags keep behaving the same.\n- All input classes migrated to movement system: pointer, keyboard, mouse wheel, **and gamepad** (`arcRotateCameraGamepadInput.ts`) now feed `movement.rotationAccumulatedPixels` / `panAccumulatedPixels` / `zoomAccumulatedPixels` instead of legacy inertial offsets.\n- `resetInputMap()` on the base class and subclasses to restore default mappings after user customization.\n\n### Tests\n- Unit tests: `cameraMovement.test.ts`, `arcRotateCameraMovement.test.ts`, `geospatialCameraMovement.test.ts`, `arcRotateCameraFramerateIndependence.test.ts`.\n- Playwright interaction tests: `arcRotateCameraInteraction.interaction.test.ts` — 7 tests covering left-drag rotation, vertical drag, right-drag pan, ctrl+left-drag pan, mouse wheel zoom, arrow key rotation, and ctrl+arrow key panning.\n- Visualization tests with reference images covering legacy beta/radius limits and panning/radius/combined inertia and glide (8 tests).\n\n## Backward compatibility\n- Default end-user behavior is unchanged for existing apps: the same camera interactions (orbit, pan, zoom) produce equivalent motion.\n- Existing legacy boolean flags are honored via `_syncLegacyFlagsToInputMap()`, so apps that set e.g. `_useCtrlForPanning = false` or change `_panningMouseButton` still see the expected mapping changes.\n- The `useMovementSystem` property remains as a deprecated no-op getter/setter so any code referencing it still compiles.\n- Gamepad input migrated to movement system — steady-state behavior matches legacy at 60fps, with improved framerate independence at other refresh rates.\n\n## Out of scope / follow-ups\n- `FreeCamera`, `FollowCamera`, `FlyCamera`, VR / touch-joystick input sources — to be handled in subsequent PRs.",
+                "author": {
+                    "name": "georginahalpern",
+                    "url": "https://github.com/georginahalpern"
+                },
+                "files": [
+                    "packages/dev/core/src/Cameras/Inputs/arcRotateCameraGamepadInput.ts",
+                    "packages/dev/core/src/Cameras/Inputs/arcRotateCameraKeyboardMoveInput.ts",
+                    "packages/dev/core/src/Cameras/Inputs/arcRotateCameraMouseWheelInput.ts",
+                    "packages/dev/core/src/Cameras/Inputs/arcRotateCameraPointersInput.ts",
+                    "packages/dev/core/src/Cameras/Inputs/geospatialCameraKeyboardInput.ts",
+                    "packages/dev/core/src/Cameras/Inputs/geospatialCameraMouseWheelInput.ts",
+                    "packages/dev/core/src/Cameras/Inputs/geospatialCameraPointersInput.ts",
+                    "packages/dev/core/src/Cameras/arcRotateCamera.ts",
+                    "packages/dev/core/src/Cameras/arcRotateCameraMovement.ts",
+                    "packages/dev/core/src/Cameras/camera.ts",
+                    "packages/dev/core/src/Cameras/cameraMovement.ts",
+                    "packages/dev/core/src/Cameras/geospatialCamera.ts",
+                    "packages/dev/core/src/Cameras/geospatialCameraMovement.ts",
+                    "packages/dev/core/src/Cameras/index.ts",
+                    "packages/dev/core/src/Cameras/inputMapper.ts",
+                    "packages/dev/core/test/unit/Cameras/arcRotateCameraFramerateIndependence.test.ts",
+                    "packages/dev/core/test/unit/Cameras/arcRotateCameraMovement.test.ts",
+                    "packages/dev/core/test/unit/Cameras/cameraMovement.test.ts",
+                    "packages/dev/core/test/unit/Cameras/geospatialCameraMovement.test.ts",
+                    "packages/tools/tests/test/visualization/ReferenceImages/arc-legacy-beta-limits.png",
+                    "packages/tools/tests/test/visualization/ReferenceImages/arc-legacy-combined-glide.png",
+                    "packages/tools/tests/test/visualization/ReferenceImages/arc-legacy-inertia-comparison.png",
+                    "packages/tools/tests/test/visualization/ReferenceImages/arc-legacy-panning-inertia.png",
+                    "packages/tools/tests/test/visualization/ReferenceImages/arc-legacy-radius-glide.png",
+                    "packages/tools/tests/test/visualization/ReferenceImages/arc-legacy-radius-limits.png",
+                    "packages/tools/tests/test/visualization/config.json"
+                ],
+                "tags": [
+                    "enhancement",
+                    "new feature",
+                    "camera"
+                ]
+            },
+            {
+                "pr": "18457",
+                "title": "glTF loader: simplify material adapter finalizeAsync",
+                "description": "## Context\n\nPR #18430 added a `finalizeAsync(signal: AbortSignal)` method to `IMaterialLoadingAdapter` (alongside a deprecated `finalize?()`) and unconditionally allocated an `AbortController` on every glTF load. The signal is consumed only by `signal.aborted` polling in `OpenPBRMaterialLoadingAdapter` between awaits. It is never propagated into the texture helpers (`LerpTexturesAsync`, `MultiplyTexturesAsync`, `InvertTextureAsync`, etc.), so the underlying GPU passes always run to completion regardless.\n\nBecause JS is single-threaded, an `AbortSignal` that is not handed to a host API that respects it (`fetch`, web streams, `EventTarget.addEventListener(..., { signal })`, etc.) is functionally equivalent to a boolean flag polled at each `await` boundary. That is exactly how it is being used here — at the cost of an extra interface method, an `AbortController` allocation on every load, and a hard runtime dependency on the `AbortController` global.\n\n`IMaterialLoadingAdapter` is an internal loader detail — no need to keep both shapes for backward compatibility.\n\n## Changes\n\n- Collapse the API into a single required `finalizeAsync(loader: GLTFLoader): Promise<void>`\n- Drop `_finalizeController` (`AbortController`) from `GLTFLoader`\n- Drop the `signal: AbortSignal` parameter from `OpenPBRMaterialLoadingAdapter.finalizeAsync` and from its private `copySurfaceToCoatAsync` helper\n- Expose `GLTFLoader._disposed` as `@internal` so adapters can poll it between awaits to bail early on mid-load dispose — same semantics as the original `signal.aborted` checks, but using the loader's own state instead of an AbortSignal\n- Add a no-op `finalizeAsync` to `PBRMaterialLoadingAdapter` (it had no deferred work)\n\nNet: **4 files changed, ~40 insertions(+), ~55 deletions(-)**.\n\n## Behavior\n\nUnchanged. The OpenPBR adapter still short-circuits on each `await` if the loader is disposed mid-flight — the polling state is now `loader._disposed` instead of `signal.aborted`.\n\n## Side-benefit: unblocks Babylon Native\n\nBabylon Native does not initialize the AbortController polyfill in its JS host (the polyfill exists in `JsRuntimeHost` but is never wired into any BN app). After #18430, every glTF load on BN was throwing `ReferenceError: AbortController is not defined` inside the new `.then(...)` callback in `GLTFLoader.loadAsync`. The rejection prevented `_extensionsOnReady()` / `_setState(READY)` from running, so the loader never reached the READY state. This manifested as the `EXT_mesh_gpu_instancing` visualization test rendering the base mesh **without its instances** (205,438 px diff vs reference) in `BabylonNative` CI.\n\n| Variant | AbortController in loader | BN polyfill | Pixel diff vs reference | Result |\n|---|---|---|---|---|\n| Master HEAD (#18430) | yes (broken on BN) | none | 205,438 | ❌ failed |\n| Master + JS `AbortController` polyfill shim | yes (works) | injected via JS | 13,507 | ✅ validated |\n| This PR | **removed** | none | 13,507 | ✅ validated |\n\nReproduced locally using `BabylonNative` nightly build #53343's `Playground.exe` + freshly-built UMD bundles from each variant.\n\nWe can still separately wire up the AbortController polyfill in BN — there are latent uses in `lightingVolume.ts` and `audioEngine.ts` that will hit the same wall when those code paths are exercised — but that's a defense-in-depth issue, not a blocker for this fix.\n\n[Created by Copilot on behalf of @bghgary]",
+                "author": {
+                    "name": "bghgary",
+                    "url": "https://github.com/bghgary"
+                },
+                "files": [
+                    "packages/dev/loaders/src/glTF/2.0/glTFLoader.ts",
+                    "packages/dev/loaders/src/glTF/2.0/materialLoadingAdapter.ts",
+                    "packages/dev/loaders/src/glTF/2.0/openpbrMaterialLoadingAdapter.ts",
+                    "packages/dev/loaders/src/glTF/2.0/pbrMaterialLoadingAdapter.ts"
+                ],
+                "tags": [
+                    "skip changelog"
+                ]
+            }
+        ],
+        "9.9.0": [
+            {
+                "pr": "18492",
+                "title": "Fix adaptToDeviceRatio option state",
+                "description": "> 🤖 *This PR was created by the create-pr skill.*\n\n## Motivation\n\nFixes https://forum.babylonjs.com/t/when-initializing-the-engine-with-adapttodeviceratio-true-the-value-of-engine-adapttodeviceratio-logs-as-false/63512\n\nWhen `adaptToDeviceRatio` was supplied through the `EngineOptions` object, the engine used it for the initial hardware scaling calculation, but `engine.adaptToDeviceRatio` stayed `false` because the public flag was assigned before the option-object value was merged.\n\n## Changes\n\n- Store `this.adaptToDeviceRatio` after merging the positional constructor argument with `options.adaptToDeviceRatio`.\n- Add a unit regression test for `new Engine(null, undefined, { adaptToDeviceRatio: true })`.\n\n## Validation\n\n- `npx vitest run --project=unit \"packages/dev/core/test/unit/Engines/thinEngine.test.ts\"`\n- `npx prettier --check \"packages/dev/core/src/Engines/abstractEngine.pure.ts\" \"packages/dev/core/test/unit/Engines/thinEngine.test.ts\"`\n- `npm run format:check`\n- Targeted visualization tests in WebGL2 and WebGPU for `Node Material 0`, `Texture Repetition - Standard Material`, `Texture Repetition - PBR Material`, and `Texture Repetition - OpenPBR Material`",
+                "author": {
+                    "name": "Popov72",
+                    "url": "https://github.com/Popov72"
+                },
+                "files": [
+                    "packages/dev/core/src/Engines/abstractEngine.pure.ts",
+                    "packages/dev/core/test/unit/Engines/thinEngine.test.ts"
+                ],
+                "tags": [
+                    "bug",
+                    "rendering engine"
+                ]
+            },
+            {
+                "pr": "18490",
+                "title": "Shard tree-shaking side-effects manifest",
+                "description": "> 🤖 *This PR was created by the create-pr skill.*\n\n## Why\n\nThe tree-shaking side-effects manifest was a single central JSON file that acted like a database for side-effect classifications. That made unrelated tree-shaking work prone to merge conflicts, especially because the old committed artifact included global stats plus volatile diagnostic details like source snippets and line numbers.\n\nIt also made generated shader output a drift risk. Local workspaces can contain stale generated shader `.ts` files, while CI runs asset generation during install before `check:treeshaking`. Generated shader text can move `ShaderStore` writes without changing the side-effect classification, so those line-number-only changes should not churn the committed manifest.\n\n## What changed\n\n- Replaced the single committed `scripts/treeshaking/side-effects-manifest.json` with compact package-scoped shards under `scripts/treeshaking/side-effects-manifest/core/`.\n- Added `scripts/treeshaking/sideEffectsManifest.mjs` as the shared reader/writer/normalizer for both the new sharded format and the legacy single-file format.\n- Kept root `npm run update:manifest` compatible: the legacy output path is redirected to the new `core` shard directory.\n- Updated manifest consumers, migration helpers, pure barrel generation, side-effects sync, and the ESLint `no-side-effect-imports-in-pure` rule to read the new shards.\n- Made the tooling Windows-ready by replacing shell-interpolated `node ...` execution with `execFileSync(process.execPath, [...])` and by normalizing displayed paths where needed.\n- Made the manifest shader-drift ready: generated shader files under `Shaders/` and `ShadersWGSL/` still get detected and stale generated shader artifacts are excluded, while generated shader `shader-store-write` diagnostics use stable `line: 0` entries. Hand-authored source diagnostics keep real line numbers.\n- Switched manifest ordering to deterministic code-point comparison instead of locale-dependent sorting.\n- Updated tree-shaking docs and agent instructions so future maintainers know not to reintroduce generated shader line-number drift.\n\n## Validation\n\n- `npm install`\n- `npm run update:manifest`\n- `node scripts/treeshaking/syncSideEffects.mjs --check`\n- `npm run check:treeshaking`\n- `npx prettier --check scripts/treeshaking/auditSideEffects.mjs scripts/treeshaking/README.md scripts/treeshaking/sideEffectsManifest.mjs 'scripts/treeshaking/side-effects-manifest/core/*.json'`\n- `npm run precommit` via commit hook\n- Previously verified before this final commit: `npm run format:check`, `npm run lint:check`, and `npm run test:unit`\n\n## Drift simulation\n\nI simulated the original generated shader failure mode by temporarily inserting blank lines above the `ShaderStore.ShadersStore[name]` write in `packages/dev/core/src/Shaders/gpuTransform.fragment.ts`, then running `npm run update:manifest`. The regenerated manifest shards were unchanged, confirming generated shader line movement no longer causes manifest drift. The temporary generated shader edit was reverted before commit.",
+                "author": {
+                    "name": "RaananW",
+                    "url": "https://github.com/RaananW"
+                },
+                "files": [
+                    ".github/copilot-instructions.md",
+                    ".github/instructions/tree-shaking.instructions.md",
+                    "packages/dev/core/package.json",
+                    "packages/tools/eslintBabylonPlugin/src/index.ts",
+                    "scripts/treeshaking/README.md",
+                    "scripts/treeshaking/auditSideEffects.mjs",
+                    "scripts/treeshaking/checkManifestDrift.mjs",
+                    "scripts/treeshaking/generatePureBarrels.mjs",
+                    "scripts/treeshaking/migration/splitRemainingFiles.mjs",
+                    "scripts/treeshaking/migration/splitSideEffects.mjs",
+                    "scripts/treeshaking/migration/verifyAllPhases.mjs",
+                    "scripts/treeshaking/side-effects-manifest.json",
+                    "scripts/treeshaking/side-effects-manifest/core/Actions.json",
+                    "scripts/treeshaking/side-effects-manifest/core/Animations.json",
+                    "scripts/treeshaking/side-effects-manifest/core/Audio.json",
+                    "scripts/treeshaking/side-effects-manifest/core/Buffers.json",
+                    "scripts/treeshaking/side-effects-manifest/core/Cameras.json",
+                    "scripts/treeshaking/side-effects-manifest/core/Collisions.json",
+                    "scripts/treeshaking/side-effects-manifest/core/Compute.json",
+                    "scripts/treeshaking/side-effects-manifest/core/Culling.json",
+                    "scripts/treeshaking/side-effects-manifest/core/Debug.json",
+                    "scripts/treeshaking/side-effects-manifest/core/DeviceInput.json",
+                    "scripts/treeshaking/side-effects-manifest/core/Engines.json",
+                    "scripts/treeshaking/side-effects-manifest/core/FlowGraph.json",
+                    "scripts/treeshaking/side-effects-manifest/core/FrameGraph.json",
+                    "scripts/treeshaking/side-effects-manifest/core/Gamepads.json",
+                    "scripts/treeshaking/side-effects-manifest/core/Gizmos.json",
+                    "scripts/treeshaking/side-effects-manifest/core/Helpers.json",
+                    "scripts/treeshaking/side-effects-manifest/core/Layers.json",
+                    "scripts/treeshaking/side-effects-manifest/core/LensFlares.json",
+                    "scripts/treeshaking/side-effects-manifest/core/Lights.json",
+                    "scripts/treeshaking/side-effects-manifest/core/Loading.json",
+                    "scripts/treeshaking/side-effects-manifest/core/Materials.json",
+                    "scripts/treeshaking/side-effects-manifest/core/Maths.json",
+                    "scripts/treeshaking/side-effects-manifest/core/Meshes.json",
+                    "scripts/treeshaking/side-effects-manifest/core/Misc.json",
+                    "scripts/treeshaking/side-effects-manifest/core/Offline.json",
+                    "scripts/treeshaking/side-effects-manifest/core/Particles.json",
+                    "scripts/treeshaking/side-effects-manifest/core/Physics.json",
+                    "scripts/treeshaking/side-effects-manifest/core/PostProcesses.json",
+                    "scripts/treeshaking/side-effects-manifest/core/Probes.json",
+                    "scripts/treeshaking/side-effects-manifest/core/Rendering.json",
+                    "scripts/treeshaking/side-effects-manifest/core/Shaders.json",
+                    "scripts/treeshaking/side-effects-manifest/core/ShadersWGSL.json",
+                    "scripts/treeshaking/side-effects-manifest/core/Sprites.json",
+                    "scripts/treeshaking/side-effects-manifest/core/XR.json",
+                    "scripts/treeshaking/side-effects-manifest/core/_root.json",
+                    "scripts/treeshaking/sideEffectsManifest.mjs",
+                    "scripts/treeshaking/splitRegisterClass.mjs",
+                    "scripts/treeshaking/syncSideEffects.mjs",
+                    "scripts/treeshaking/verifyTreeShaking.mjs"
+                ],
+                "tags": [
+                    "build",
+                    "skip changelog"
+                ]
+            },
+            {
+                "pr": "18477",
+                "title": "Drop hardcoded field list in InputMapper._entryCoversAllConditionsOf",
+                "description": "## Summary\nFollow-up to #18461 (now merged). Replaces the hardcoded `[\"button\", \"key\", \"touchCount\"]` array inside `InputMapper._entryCoversAllConditionsOf` with an `Object.keys(conditions)` loop so that any new top-level field added to `InputConditions` is automatically covered without having to remember to update this helper too.\n\n## Why\n@georginahalpern raised this on the original PR: the hardcoded list is brittle and has no compile-time guarantee against drift. If a new top-level condition field is added (e.g. a hypothetical `wheel` delta or similar), this helper would silently skip it and `setInteraction` could mutate broader entries it shouldn't.\n\n## Behavior\nNo behavioral change. The new loop checks the same set of conditions for the existing `InputConditions` fields. Modifiers remain a nested special case (they're inherently a sub-object), but it's now one explicit branch rather than a parallel hardcoded list.\n\n## Validation\n- `npx vitest run packages/dev/core/test/unit/Cameras/cameraMovement.test.ts`: 33/33 pass (including the Kevin stricter-entry test added in #18461)\n- `npx eslint packages/dev/core/src/Cameras/inputMapper.ts`: clean\n- `npx prettier --check packages/dev/core/src/Cameras/inputMapper.ts`: clean\r\n",
+                "author": {
+                    "name": "georginahalpern",
+                    "url": "https://github.com/georginahalpern"
+                },
+                "files": [
+                    "packages/dev/core/src/Cameras/inputMapper.ts"
+                ],
+                "tags": []
+            },
+            {
+                "pr": "18488",
+                "title": "Fix ES6 BrowserStack Local tunnel handling",
+                "description": "## Summary\n- Give ES6 visualization BrowserStack runs a unique `BROWSERSTACK_LOCAL_IDENTIFIER` per CI job attempt.\n- Pass the identifier to both BrowserStack Local startup args and BrowserStack CDP capabilities.\n- Fail fast if BrowserStack Local does not actually start, and retry transient Local disconnects in the BrowserStack wait wrapper.\n- Document the ES6 BrowserStack test type and Local identifier environment variable.\n\n## Motivation\nThe ES6 visualization tests were failing intermittently after BrowserStack Local disconnected mid-run. The existing wait wrapper reserved an Automate session, but ES6 vis also depends on a Local tunnel. Without a unique tunnel identifier, concurrent jobs can collide on the default account tunnel; after that, new BrowserStack reconnects report that `browserstack.local` is true but Local testing is not connected.\n\n## Validation\n- `npx prettier --check playwright.browserstack.config.ts packages/tools/tests/browserstack.config.ts packages/tools/tests/globalSetup.ts .azure-pipelines/VARIABLE-GROUPS.md packages/tools/tests/README.md`\n- `bash -n .azure-pipelines/browserstack-wait.sh`\n- `git --no-pager diff --check`\n- `BROWSERSTACK_USERNAME=dummy BROWSERSTACK_ACCESS_KEY=dummy BSTACK_TEST_TYPE=es6vis BROWSERSTACK_LOCAL_IDENTIFIER=test-local npx playwright test --config ./playwright.browserstack.config.ts --list | tail -n 5`",
+                "author": {
+                    "name": "RaananW",
+                    "url": "https://github.com/RaananW"
+                },
+                "files": [
+                    ".azure-pipelines/VARIABLE-GROUPS.md",
+                    ".azure-pipelines/browserstack-wait.sh",
+                    ".azure-pipelines/ci-monorepo.yml",
+                    "packages/tools/tests/README.md",
+                    "packages/tools/tests/browserstack.config.ts",
+                    "packages/tools/tests/globalSetup.ts",
+                    "playwright.browserstack.config.ts"
+                ],
+                "tags": [
+                    "skip changelog"
+                ]
+            },
+            {
+                "pr": "18486",
+                "title": "Fix node editor URL snippet loading",
+                "description": "> 🤖 *This PR was created by the create-pr skill.*\n\n## Summary\n- Load initial URL hash snippets before showing the Node Geometry, Node Particle, and Node Render Graph editors.\n- Keep later hash changes on the existing custom load observable path.\n- Add graph tools Playwright regression coverage for URL snippet loading in NGE, NPE, and NRGE.\n\n## Motivation\nOpening an editor directly with a snippet hash could show the default graph instead of the snippet graph because the editor was displayed before the initial snippet load completed. In local Vite mode, the load notification could also race with editor subscription setup.\n\n## Validation\n- `npx playwright test --config playwright.config.ts --project=graphTools -g \"NGE loads the graph from the URL snippet|NPE loads the graph from the URL snippet|NRGE loads the graph from the URL snippet\"`\n- `npx playwright test --config playwright.config.ts --project=graphTools -g \"NGE is loaded correctly|NPE is loaded correctly|NRGE is loaded correctly\"`\n- `npx prettier --check packages\\tools\\nodeGeometryEditor\\public\\index.js packages\\tools\\nodeParticleEditor\\public\\index.js packages\\tools\\nodeRenderGraphEditor\\public\\index.js packages\\tools\\tests\\test\\playwright\\interaction.tools.test.ts`\r\n",
+                "author": {
+                    "name": "Popov72",
+                    "url": "https://github.com/Popov72"
+                },
+                "files": [
+                    "packages/tools/nodeGeometryEditor/index.html",
+                    "packages/tools/nodeGeometryEditor/src/bootstrap.js",
+                    "packages/tools/nodeGeometryEditor/vite.config.ts",
+                    "packages/tools/nodeParticleEditor/index.html",
+                    "packages/tools/nodeParticleEditor/src/bootstrap.js",
+                    "packages/tools/nodeParticleEditor/vite.config.ts",
+                    "packages/tools/nodeRenderGraphEditor/index.html",
+                    "packages/tools/nodeRenderGraphEditor/src/bootstrap.js",
+                    "packages/tools/nodeRenderGraphEditor/vite.config.ts",
+                    "packages/tools/snippetLoader/src/index.ts",
+                    "packages/tools/snippetLoader/src/parseDataSnippetResponse.ts",
+                    "packages/tools/snippetLoader/src/snippetLoader.ts",
+                    "packages/tools/tests/test/playwright/interaction.tools.test.ts"
+                ],
+                "tags": [
+                    "bug",
+                    "particles",
+                    "nge",
+                    "nrge"
+                ]
+            },
+            {
+                "pr": "18482",
+                "title": "Add drag and drop for HDR files in viewer",
+                "description": "When playing with the viewer, I found that it would be helpful to have the ability to drag a .HDR file in.\r\n",
+                "author": {
+                    "name": "MiiBond",
+                    "url": "https://github.com/MiiBond"
+                },
+                "files": [
+                    "packages/dev/core/src/Materials/Textures/internalTexture.ts",
+                    "packages/tools/viewer/test/apps/web/index.html"
+                ],
+                "tags": []
+            },
+            {
+                "pr": "18451",
+                "title": "Trigger transmission helper from KHR_materials_diffuse_transmission.",
+                "description": "This PR separates out the transmissionHelper from the KHR_materials_transmission and instantiates it from KHR_materials_diffuse_transmission as well.",
+                "author": {
+                    "name": "MiiBond",
+                    "url": "https://github.com/MiiBond"
+                },
+                "files": [
+                    "packages/dev/loaders/src/glTF/2.0/Extensions/KHR_materials_diffuse_transmission.ts",
+                    "packages/dev/loaders/src/glTF/2.0/Extensions/KHR_materials_transmission.ts",
+                    "packages/dev/loaders/src/glTF/2.0/Extensions/MSFT_minecraftMesh.ts",
+                    "packages/dev/loaders/src/glTF/2.0/Extensions/index.ts",
+                    "packages/dev/loaders/src/glTF/2.0/Extensions/transmissionHelper.ts",
+                    "packages/dev/loaders/src/glTF/2.0/glTFLoader.ts"
+                ],
+                "tags": [
+                    "enhancement",
+                    "glTF"
+                ]
+            },
+            {
+                "pr": "18487",
+                "title": "Fix GPUPicker GLSL integer precision",
+                "description": "> 🤖 *This PR was created by the create-pr skill.*\n\n## Summary\n- Adds an explicit `precision highp int;` declaration to the GLSL GPUPicker fragment shader for WebGL2/native bit-shift ID packing.\n- Covers the generated picking shader with a regression test so the precision declaration is not dropped.\n\n## Context\nForum report: https://forum.babylonjs.com/t/bitshift-in-glsl-picker-fragment-shader-assumes-32-bit-of-mediump-int-on-device/63503\n\nOn some mobile devices, fragment `mediump int` can be too small for the GPUPicker path that packs 24-bit mesh IDs with `>> 16` and `>> 8`. This can leak the blue byte into red and make GPU picking resolve the wrong ID.\n\n## Testing\n- `npx vitest run --project=unit \"packages/dev/core/test/unit/Collisions/babylon.gpuPicker.test.ts\"`\n- `npm run format:check`\n- `npm run lint:check -w @dev/core`\n\nFull repo `npm run lint:check` and `npm run test:unit` were attempted locally but are currently blocked by unrelated existing failures outside this change.",
+                "author": {
+                    "name": "Popov72",
+                    "url": "https://github.com/Popov72"
+                },
+                "files": [
+                    "packages/dev/core/src/Shaders/picking.fragment.fx",
+                    "packages/dev/core/test/unit/Collisions/babylon.gpuPicker.test.ts",
+                    "scripts/treeshaking/side-effects-manifest.json"
+                ],
+                "tags": [
+                    "bug",
+                    "picking"
+                ]
+            },
+            {
+                "pr": "18459",
+                "title": "Add Gaussian Splatting Debug Material + SPZ V4 support",
+                "description": "### Gaussian Splatting Debug Material\r\n\r\nTwo new classes for supporting runtime debug inspection of splat scenes, to help research on Gaussian Splatting:\r\n\r\n- **`GaussianSplattingDebugMaterialPlugin`** — material plugin with zero overhead at rest\r\n  (`GS_DBG_ENABLED` define is absent when all options are default). Supports:\r\n  - World-space AABB clip box — hide splats outside a region\r\n  - Opacity culling — discard splats below/above an opacity threshold\r\n  - Size culling — discard splats by projected screen size (geometric mean of principal radii)\r\n  - Opacity scaling — multiply all splat opacities by a scalar\r\n  - Opacity saturation — render splats as flat disks\r\n  - Per-SH-band toggles — independently enable/disable DC, order 1, 2, 3, and 4\r\n  - Both GLSL and WGSL shader paths supported\r\n- **`GaussianSplattingDebugger`** — thin manager that fans settings out to multiple splat meshes\r\n  at once. Newly added meshes automatically inherit current settings.\r\n  - `setPartOptions(mesh, partIndex, options)` / `clearPartOptions(mesh, partIndex)` — per-part\r\n    overrides for compound (multi-part) splat meshes; each part can have independent clipping,\r\n    culling, opacity, and SH-band settings\r\n  - `GetSplatSizeRange(mesh)` — static helper to query a mesh's splat size min/max (useful for\r\n    configuring size culling thresholds)\r\n  - Per-part data is packed into a single `MAX_PART_COUNT × 5` RGBA float texture\r\n\r\n7 new visualization tests cover each debug mode.\r\n\r\n### SPZ library bump (0.2.0 → 0.2.2)\r\n\r\nThe new SPZ version introduces a V4 file format with a new `NGSP` magic header\r\n(previously all SPZ files were gzip-compressed). The loader now detects both:\r\n\r\n- `1f 8b` → legacy gzip (SPZ V3 and earlier) — handled as before, including the native fallback path\r\n- `4e 47 53 50` (`NGSP`) → SPZ V4 — requires WASM; throws a clear error if no `spzLibraryUrl`\r\n  is configured\r\n\r\nA new visualization test (`gsplat-spz-v4-extensions`) covers the V4 format end-to-end.",
+                "author": {
+                    "name": "raymondyfei",
+                    "url": "https://github.com/raymondyfei"
+                },
+                "files": [
+                    "packages/dev/core/src/Materials/GaussianSplatting/gaussianSplattingDebugMaterialPlugin.pure.ts",
+                    "packages/dev/core/src/Materials/GaussianSplatting/gaussianSplattingDebugMaterialPlugin.ts",
+                    "packages/dev/core/src/Materials/GaussianSplatting/pure.ts",
+                    "packages/dev/core/src/Materials/index.ts",
+                    "packages/dev/core/src/Materials/pure.ts",
+                    "packages/dev/core/src/Meshes/GaussianSplatting/gaussianSplattingDebugger.pure.ts",
+                    "packages/dev/core/src/Meshes/GaussianSplatting/gaussianSplattingDebugger.ts",
+                    "packages/dev/core/src/Meshes/GaussianSplatting/gaussianSplattingMeshBase.pure.ts",
+                    "packages/dev/core/src/Meshes/GaussianSplatting/pure.ts",
+                    "packages/dev/core/src/Meshes/index.ts",
+                    "packages/dev/core/src/Meshes/pure.ts",
+                    "packages/dev/core/src/Shaders/ShadersInclude/gaussianSplatting.fx",
+                    "packages/dev/core/src/Shaders/gaussianSplatting.vertex.fx",
+                    "packages/dev/core/src/ShadersWGSL/ShadersInclude/gaussianSplatting.fx",
+                    "packages/dev/core/src/ShadersWGSL/gaussianSplatting.vertex.fx",
+                    "packages/dev/loaders/src/SPLAT/splatFileLoader.ts",
+                    "packages/public/@babylonjs/core/package.json",
+                    "packages/tools/tests/test/visualization/ReferenceImages/gsplat-debug-clipping-box.png",
+                    "packages/tools/tests/test/visualization/ReferenceImages/gsplat-debug-diffuse-only.png",
+                    "packages/tools/tests/test/visualization/ReferenceImages/gsplat-debug-opacity-culling.png",
+                    "packages/tools/tests/test/visualization/ReferenceImages/gsplat-debug-opacity-saturate.png",
+                    "packages/tools/tests/test/visualization/ReferenceImages/gsplat-debug-opacity-scale.png",
+                    "packages/tools/tests/test/visualization/ReferenceImages/gsplat-debug-part-test.png",
+                    "packages/tools/tests/test/visualization/ReferenceImages/gsplat-debug-sh4-only.png",
+                    "packages/tools/tests/test/visualization/ReferenceImages/gsplat-debug-size-culling.png",
+                    "packages/tools/tests/test/visualization/ReferenceImages/gsplat-spz-v4-extensions.png",
+                    "packages/tools/tests/test/visualization/config.json",
+                    "scripts/treeshaking/side-effects-manifest.json"
+                ],
+                "tags": []
+            },
+            {
+                "pr": "18484",
+                "title": "Fix precommit pure barrel formatting path",
+                "description": "## Summary\n- Move the precommit lint-staged step after tree-shaking artifact generation so generated files are included in the final formatting/lint pass.\n- Add `--no-format` to `generatePureBarrels.mjs` and use it from the git hook to avoid a second formatter path during commits.\n- Replace the generator's normal `npx prettier` call with a direct local Prettier invocation through Node to avoid Windows shell shim differences.\n\n## Validation\n- `npm run check:pure-barrels`\n- `npm run check:side-effects-sync`",
+                "author": {
+                    "name": "RaananW",
+                    "url": "https://github.com/RaananW"
+                },
+                "files": [
+                    ".githooks/pre-commit",
+                    "scripts/treeshaking/generatePureBarrels.mjs"
+                ],
+                "tags": []
+            },
+            {
+                "pr": "18470",
+                "title": "Viewer: Factor out ViewerBase and ViewerElementBase",
+                "description": "This PR factors out a `ViewerBase` and `ViewerElementBase` to create more flexibility in the lower level rendering/engine layer.",
+                "author": {
+                    "name": "ryantrem",
+                    "url": "https://github.com/ryantrem"
+                },
+                "files": [
+                    "packages/tools/viewer/src/index.ts",
+                    "packages/tools/viewer/src/viewer.ts",
+                    "packages/tools/viewer/src/viewerAnnotationElement.ts",
+                    "packages/tools/viewer/src/viewerBase.ts",
+                    "packages/tools/viewer/src/viewerElement.ts",
+                    "packages/tools/viewer/src/viewerElementBase.ts",
+                    "packages/tools/viewer/test/apps/web/index.html"
+                ],
+                "tags": [
+                    "viewer",
+                    "skip changelog"
+                ]
+            },
+            {
+                "pr": "18476",
+                "title": "Normalize tree-shaking manifest paths to POSIX",
+                "description": "## Summary\n- normalize relative paths emitted by the side-effects audit to POSIX separators\n- normalize manifest paths consumed by sideEffects sync so Windows-generated manifests still produce Unix-style package entries\n\n## Verification\n- npm run check:manifest-drift\n- npm run check:side-effects-sync\n\nGenerated JSON/package artifacts are intentionally not included in this PR.",
+                "author": {
+                    "name": "RaananW",
+                    "url": "https://github.com/RaananW"
+                },
+                "files": [
+                    "scripts/treeshaking/auditSideEffects.mjs",
+                    "scripts/treeshaking/syncSideEffects.mjs"
+                ],
+                "tags": []
+            },
+            {
+                "pr": "18474",
+                "title": "Fix node particle editor package output",
+                "description": "## Summary\n\nThis PR fixes several packaging and validation issues found while investigating `@babylonjs/node-particle-editor` consumption from a webpack 5 TypeScript app.\n\n## What changed\n\n- Fixed ES6 package externalization for Babylon sub-namespace imports in `packages/public/rollupUMDHelper.mjs`.\n  - ES6 builds now map Debug imports to real package subpaths such as `@babylonjs/core/Debug/index.js`.\n  - Loader sub-namespace imports map to real `@babylonjs/loaders` subpaths where applicable.\n  - This avoids generated module requests like `@babylonjs/core::BABYLON.Debug`, which only make sense as synthetic UMD-global IDs.\n\n- Fixed `@babylonjs/node-particle-editor` runtime exports.\n  - The public package wrapper now re-exports the legacy entry exports so runtime named exports match the TypeScript declarations, including `NodeParticleEditor`.\n\n- Removed the leaked FontAwesome package metadata request from bundled output.\n  - The bundle helper now rewrites `require(\"@fortawesome/fontawesome-svg-core/package.json\")` to an inline version object based on the installed package version.\n  - This keeps the FontAwesome runtime behavior without requiring consumers to install or resolve `@fortawesome/fontawesome-svg-core/package.json` separately.\n\n- Added regression coverage for the ES6 editor package output.\n  - The ES6 smoke build now verifies the node particle editor runtime entry does not contain forbidden requests for `@babylonjs/core::BABYLON.Debug` or `@fortawesome/fontawesome-svg-core/package.json`.\n  - It also checks that the named `NodeParticleEditor` export is present.\n  - A webpack 5 smoke build now imports `NodeParticleEditor` from `@babylonjs/node-particle-editor` without consumer aliases and checks that the resulting bundle and warnings do not contain the forbidden requests.\n\n- Reduced noisy Rollup warnings from third-party module directives.\n  - Shared Rollup warning handling now suppresses third-party `\"use client\"` / `\"use server\"` module-level directive warnings from `node_modules`, while preserving other warnings.\n\n- Broke the mesh simplification circular dependency.\n  - Shared simplification settings and enum definitions moved into a side-effect-free `meshSimplification.common.ts` module.\n  - `meshSimplification.ts`, `meshSimplificationSceneComponent.pure.ts`, and the matching types file now import from that common module where appropriate.\n  - The side-effects manifest was regenerated for the new file.\n\n- Made circular dependency detection fail CI linting.\n  - `lint:cycles` now uses the same `dpdm` check as CI, with `--exit-code circular:1`.\n  - `lint:check-ci` now runs `lint:cycles`, so circular dependencies fail the lint step instead of only printing diagnostics.\n  - The duplicate direct pipeline step was removed, and the tree-shaking README was updated to describe the new wiring.\n\n## Validation\n\nRan the following checks during the session:\n\n- `npm run build:es6`\n- `npm run build:prod -w @babylonjs/node-editor`\n- `NX_SKIP_NX_CACHE=true npm run build:es6:tools`\n- focused node particle editor webpack smoke validation (`webpack smoke passed`)\n- direct package artifact checks confirming:\n  - no `@babylonjs/core::BABYLON.Debug` request\n  - no `@fortawesome/fontawesome-svg-core/package.json` request\n  - named `NodeParticleEditor` export present\n- direct import-graph check for the mesh simplification scene component cycle\n- focused ESLint on the touched core files\n- `npm run check:treeshaking`\n- `npm run check:side-effects-sync`\n- `npm run compile:source -w @dev/core`\n- `npm run lint:cycles`\n- `npm run lint:check-ci`\n\nThe final `lint:check-ci` run passed with the updated `dpdm` cycle check in the lint chain.",
+                "author": {
+                    "name": "RaananW",
+                    "url": "https://github.com/RaananW"
+                },
+                "files": [
+                    ".azure-pipelines/ci-monorepo.yml",
+                    "eslint.config.mjs",
+                    "package.json",
+                    "packages/dev/core/src/Meshes/meshSimplification.common.ts",
+                    "packages/dev/core/src/Meshes/meshSimplification.ts",
+                    "packages/dev/core/src/Meshes/meshSimplificationSceneComponent.pure.ts",
+                    "packages/dev/core/src/Meshes/meshSimplificationSceneComponent.types.ts",
+                    "packages/public/@babylonjs/node-particle-editor/src/index.ts",
+                    "packages/public/rollupUMDHelper.mjs",
+                    "packages/tools/tests/scripts/buildEs6SmokeTests.mjs",
+                    "packages/tools/tests/src/es6Smoke/editorImportSmoke.ts",
+                    "scripts/treeshaking/README.md",
+                    "scripts/treeshaking/side-effects-manifest.json"
+                ],
+                "tags": []
+            },
+            {
+                "pr": "18473",
+                "title": "Fix the smoke particle visu test",
+                "description": null,
+                "author": {
+                    "name": "Popov72",
+                    "url": "https://github.com/Popov72"
+                },
+                "files": [
+                    "packages/tools/tests/test/visualization/config.json"
+                ],
+                "tags": [
+                    "skip changelog"
+                ]
+            },
+            {
+                "pr": "18461",
+                "title": "Make InputMapper.setInteraction auto-add when matched entry is broader",
+                "description": "## Summary\nFollow-up to #18379. Makes `InputMapper.setInteraction` smart about the catch-all-mutation footgun raised by @AmoebaChant in the docs PR review (BabylonJS/Documentation#1578).\n\n## Problem\nWith #18379 as merged, `setInteraction` always mutated the matched entry's `interaction` in place. If the conditions you supplied were stricter than any existing entry — for example, asking `setInteraction(\"pointer\", { button: 0, modifiers: { ctrl: true } }, \"rotate\")` against the GeospatialCamera default map (which has no ctrl-modified pointer entry) — the call would resolve the catch-all `{ button: 0, interaction: \"pan\" }`, mutate it, and silently break unmodified left-drag too.\n\nThe fix is to detect that the matched entry is *broader than* the conditions and fall through to `addEntry`, inserting a more-specific entry that wins for the requested combo without clobbering the broader one.\n\n## Changes\n- `InputMapper.setInteraction`:\n  - If a matching entry exists and is at least as specific as the conditions, mutate in place (unchanged).\n  - If the matched entry is broader than the conditions, `addEntry` instead.\n  - If nothing matches at all, `addEntry`.\n- New private helpers `_entryIsAtLeastAsSpecificAsConditions` and `_modifiersAtLeastAsSpecific` implement the broader-than detection.\n- Five new unit tests in `cameraMovement.test.ts` covering: mutate-in-place, modifier-broader add, button-broader add, no-match add, and the less-specific-conditions add path.\n\n## Backward compatibility\n- Existing call sites that `setInteraction` against an entry that already exists with matching specificity continue to mutate in place. This is the primary case in the existing arc-rotate playgrounds.\n- Call sites that previously relied on `setInteraction` returning `false` to detect a missed match now always get `true`. The boolean return is preserved for source compatibility, but its semantics change from \"found and updated\" to \"the requested mapping is now in effect\" (true is the only outcome since the call now self-heals).\n\n## Validation\n- `npm run lint:check -w @dev/core`: clean\n- `npx vitest run packages/dev/core/test/unit/Cameras`: 179/179 pass\n- The unit test `add a new specific entry when the matched entry is broader (modifier-broader case)` reproduces exactly the geospatial scenario AmoebaChant flagged.\n\n## Companion docs change\n- BabylonJS/Documentation#1578 has been updated to reflect the new behavior: setInteraction is now the recommended primary API for \"I want input X to do Y\", and the gotcha section has been removed.",
+                "author": {
+                    "name": "georginahalpern",
+                    "url": "https://github.com/georginahalpern"
+                },
+                "files": [
+                    "packages/dev/core/src/Cameras/arcRotateCamera.pure.ts",
+                    "packages/dev/core/src/Cameras/inputMapper.ts",
+                    "packages/dev/core/test/unit/Cameras/arcRotateCameraMovement.test.ts",
+                    "packages/dev/core/test/unit/Cameras/cameraMovement.test.ts"
+                ],
+                "tags": []
+            },
+            {
+                "pr": "18471",
+                "title": "Fix PBRCustomMaterial compiled effect cleanup",
+                "description": "> 🤖 *This PR was created by the create-pr skill.*\n\n## Summary\n- Release the previous `PBRCustomMaterial` custom effect when a new ready custom effect replaces it for the same submesh.\n- Keep the global compiled effect cache behavior intact for other materials and shared effects.\n- Add unit coverage for the custom material effect replacement cleanup path.\n\n## Motivation\n`PBRCustomMaterial` uses unique shader names such as `custompbr_N`. When material defines change and a new effect is compiled, the previous effect can become orphaned in `engine._compiledEffects` because its unique key will not be reused by another material instance.\n\nForum report: https://forum.babylonjs.com/t/pbrcustommaterial-compiledeffects-memory-leak/63468\nRelated prerequisite PR: https://github.com/BabylonJS/Babylon.js/pull/18441\n\n## Validation\n- `npx vitest run --project=unit \"packages/dev/materials/test/unit/custom/pbrCustomMaterial.test.ts\"`\n- `npm run format:check`\r\n",
+                "author": {
+                    "name": "Popov72",
+                    "url": "https://github.com/Popov72"
+                },
+                "files": [
+                    "packages/dev/materials/src/custom/pbrCustomMaterial.ts",
+                    "packages/dev/materials/test/unit/custom/pbrCustomMaterial.test.ts"
+                ],
+                "tags": [
+                    "bug",
+                    "materials"
+                ]
+            },
+            {
+                "pr": "18472",
+                "title": "Fix frozen material light binding for WebGPU",
+                "description": "> 🤖 *This PR was created by the create-pr skill.*\n\n## Summary\n- Rebind light uniform buffers for frozen Standard, PBR, OpenPBR, and Background materials when the engine requires uniform buffers to be rebound every draw.\n- Preserve the existing frozen-material optimization for view, fog, morph target, baked vertex animation, log-depth, and image-processing binding.\n- Add a regression test covering frozen material light binding with `needToAlwaysBindUniformBuffers`.\n\n## Motivation\nFixes a WebGPU FAST snapshot rendering issue reported on the forum where combining `setEnabled`, frozen materials, and animation could log missing `Light0` draw-context buffer errors.\n\nForum thread: https://forum.babylonjs.com/t/error-when-combining-setenabled-fast-snapshot-rendering-frozen-materials-and-animation/63477\n\n## Testing\n- `npx vitest run --project=unit packages/dev/core/test/unit/Materials/babylon.material.test.ts`\n- `http://localhost:1338/?webgpu#QHOKIS` produced no console errors locally\n- Targeted Prettier + ESLint on changed files\n- Targeted WebGL2/WebGPU visualization tests for `Node Material 0`, `Texture Repetition - Standard Material`, `Texture Repetition - PBR Material`, and `Texture Repetition - OpenPBR Material`",
+                "author": {
+                    "name": "Popov72",
+                    "url": "https://github.com/Popov72"
+                },
+                "files": [
+                    "packages/dev/core/src/Materials/Background/backgroundMaterial.pure.ts",
+                    "packages/dev/core/src/Materials/PBR/openpbrMaterial.pure.ts",
+                    "packages/dev/core/src/Materials/PBR/pbrBaseMaterial.pure.ts",
+                    "packages/dev/core/src/Materials/standardMaterial.pure.ts",
+                    "packages/dev/core/test/unit/Materials/babylon.material.test.ts"
+                ],
+                "tags": [
+                    "bug",
+                    "materials",
+                    "WebGPU"
+                ]
+            },
+            {
+                "pr": "18466",
+                "title": "chore: remove deprecated install dependencies",
+                "description": "> 🤖 *This PR was created by the create-pr skill.*\n\n## Summary\n- Update dependency constraints that were producing npm deprecation warnings in CI.\n- Remove the unused optional root `canvas` dependency that pulled in deprecated install tooling.\n- Add a targeted `rollup-plugin-postcss` override so its CSS optimizer chain resolves to a non-deprecated path.\n- Update the memory leak test package to `memlab@2` and adapt the Babylon leak-filter typing to the current upstream callback type.\n- Add missing direct FontAwesome dev dependencies where editor packages import FontAwesome modules directly.\n\n## Validation\n- `npm install --package-lock-only --ignore-scripts`\n- `npm install --ignore-scripts`\n- `npm ci --ignore-scripts --dry-run`\n- `npm run compile -w @tools/memory-leak-tests`\n- `npm run test:unit -w @tools/memory-leak-tests`\n- Compile checks for shared UI, inspector legacy, GUI editor, and Node Geometry Editor packages\n- Device input jsdom unit tests\n\n## Notes\n- The `memlab` upgrade moves Puppeteer from 22.x to 24.x, removing the deprecated Puppeteer install warning. Babylon's memory leak runner still uses the same `run({ scenario, chromiumBinary, skipWarmup, workDir })` surface.\n- Full browser memory-leak scenarios were not run as part of this cleanup.\n",
+                "author": {
+                    "name": "RaananW",
+                    "url": "https://github.com/RaananW"
+                },
+                "files": [
+                    "package-lock.json",
+                    "package.json",
+                    "packages/dev/inspector/package.json",
+                    "packages/dev/sharedUiComponents/package.json",
+                    "packages/tools/guiEditor/package.json",
+                    "packages/tools/nodeGeometryEditor/package.json",
+                    "packages/tools/smartFiltersDebugger/package.json",
+                    "packages/tools/smartFiltersEditor/package.json",
+                    "packages/tools/smartFiltersEditorControl/package.json",
+                    "packages/tools/testsMemoryLeaks/README.md",
+                    "packages/tools/testsMemoryLeaks/package.json",
+                    "packages/tools/testsMemoryLeaks/src/cli.ts",
+                    "packages/tools/testsMemoryLeaks/src/filters.ts",
+                    "packages/tools/testsMemoryLeaks/src/runner.ts",
+                    "packages/tools/testsMemoryLeaks/test/unit/runner.test.ts",
+                    "packages/tools/viewer/package.json"
+                ],
+                "tags": [
+                    "viewer",
+                    "gui editor",
+                    "skip changelog",
+                    "nge"
+                ]
+            },
+            {
+                "pr": "18465",
+                "title": "Clean up node block shader barrel exports",
+                "description": "## Summary\n- Trim node material block index shader exports so Dual, Fragment, and Vertex barrels only export includes their sibling blocks initialize.\n- Add the missing GaussianSplatting shader include exports used by its blocks.\n- Move the GLSL `clusteredLightingFunctions` export to the texture barrel alongside the existing WGSL export.\n- Include the two tree-shaking documentation deletions and regenerated side-effects manifest from the precommit hook.\n- Prevent stale ignored generated shader `.ts` artifacts from being included in the side-effects manifest when their source `.fx`/`.wgsl` file no longer exists.\n\n## Validation\n- `npx eslint packages/dev/core/src/Materials/Node/Blocks/Dual/index.ts packages/dev/core/src/Materials/Node/Blocks/Fragment/index.ts packages/dev/core/src/Materials/Node/Blocks/Vertex/index.ts packages/dev/core/src/Materials/Node/Blocks/GaussianSplatting/index.ts packages/dev/core/src/Materials/Textures/index.ts`\n  - Passed with 0 errors; reported one pre-existing unused eslint-disable warning in `packages/dev/core/src/Materials/Textures/index.ts`.\n- `npx tsc -b packages/dev/core/tsconfig.build.json --pretty false`\n- `npm run check:treeshaking && npm run check:side-effects-sync`\n- `npx eslint scripts/treeshaking/auditSideEffects.mjs`\n  - No lint errors; prints the existing custom plugin `tsconfig.json` lookup message for the `.mjs` path.\n- Custom audits confirmed node block shader exports match sibling `.pure.ts` dynamic imports and full shader GLSL/WGSL barrel pairs are balanced.\n- Temporary ignored stale shader artifact test confirmed `auditSideEffects.mjs` skips generated shader `.ts` files with no matching source shader file.\n",
+                "author": {
+                    "name": "RaananW",
+                    "url": "https://github.com/RaananW"
+                },
+                "files": [
+                    "docs/tree-shaking/03-registering-side-effects.md",
+                    "docs/tree-shaking/04-troubleshooting.md",
+                    "packages/dev/core/src/Materials/Node/Blocks/Dual/index.ts",
+                    "packages/dev/core/src/Materials/Node/Blocks/Fragment/index.ts",
+                    "packages/dev/core/src/Materials/Node/Blocks/GaussianSplatting/index.ts",
+                    "packages/dev/core/src/Materials/Node/Blocks/Vertex/index.ts",
+                    "packages/dev/core/src/Materials/Textures/index.ts",
+                    "packages/dev/core/src/Materials/index.ts",
+                    "scripts/treeshaking/auditSideEffects.mjs",
+                    "scripts/treeshaking/side-effects-manifest.json"
+                ],
+                "tags": []
+            },
+            {
+                "pr": "18464",
+                "title": "Fix Inspector v2 Havok wasm serving",
+                "description": "> 🤖 *This PR was created by GitHub Copilot.*\n\n## Summary\n- Add an Inspector v2 Vite dev-server middleware that serves `HavokPhysics.wasm` with `application/wasm`.\n- Prevent Vite's SPA fallback from returning `index.html` for the generated Havok wasm dependency URL.\n\n## Validation\n- `get_errors` on `packages/dev/inspector-v2/vite.config.ts`: no errors\n- `npx prettier --check packages/dev/inspector-v2/vite.config.ts`\n- `curl http://localhost:9001/node_modules/.vite/deps/HavokPhysics.wasm`: returns `200`, `Content-Type: application/wasm`, and a WebAssembly binary",
+                "author": {
+                    "name": "RaananW",
+                    "url": "https://github.com/RaananW"
+                },
+                "files": [
+                    "packages/dev/inspector-v2/vite.config.ts"
+                ],
+                "tags": []
+            }
+        ],
         "9.7.0": [
             {
                 "pr": "18432",
@@ -433,236 +1117,6 @@
                 "tags": [
                     "bug",
                     "particles"
-                ]
-            }
-        ],
-        "9.8.0": [
-            {
-                "pr": "18441",
-                "title": "Tree-shaking - the pure barrel",
-                "description": "## Tree-Shaking for `@babylonjs/core`\n\nThis PR introduces full tree-shaking support for `@babylonjs/core`. The goal is to allow bundlers (Webpack, Rollup, Vite, esbuild) to eliminate unused code from Babylon.js applications, significantly reducing bundle sizes.\n\n### Problem\n\nEvery source file in `@babylonjs/core` was marked as having side effects (`\"sideEffects\": [\"**/*\"]`), preventing bundlers from dropping unused modules. Over 900 files contained module-level side effects — `RegisterClass()` calls, prototype augmentations, `ShaderStore` writes, `AddNodeConstructor` calls, and static property assignments — that forced the entire package into every bundle.\n\n### Approach: Pure/Side-Effect Split\n\nFiles under `packages/dev/core/src/` are split based on their side-effect profile:\n\n- **Side-effect-free files** stay as a single `foo.ts` — no split needed.\n- **Files with side effects** (RegisterClass, shader store writes, etc.) are split into two files:\n  - **`foo.pure.ts`** — All logic. Imports only from other `.pure.ts` files. No side effects. Contains a `RegisterFoo()` function that encapsulates all side effects.\n  - **`foo.ts`** — Thin wrapper that re-exports from `.pure.ts` and calls `RegisterFoo()`.\n- **Files that also augment other classes** (prototype assignments, `declare module`) get a third file:\n  - **`foo.types.ts`** — `declare module` augmentations for TypeScript.\n\nThis is a **fully backwards-compatible** change. Existing imports from `@babylonjs/core` continue to work identically. Tree-shaking users can import from `.pure` paths to get only the code they use.\n\n### Implementation Phases\n\n1. **Audit & tooling** — Side-effect inventory script, bundle smoke tests, `/*#__PURE__*/` annotations\n2. **Mechanical splits** — `RegisterClass`-only files (406 files), shader store files, prototype augmentation files\n3. **Complex splits** — Files with mixed side effects, static property assignments, factory patterns\n4. **Pure barrels** — Generated `pure.ts` barrel files alongside each `index.ts`\n5. **CI enforcement** — Manifest drift checks, pure barrel generation checks, bundle smoke tests, `sideEffects` field sync\n6. **Bulk block registration helpers** — Consolidate related registrations (e.g., all math blocks, all mesh blocks)\n7. **Native engine fix** — Re-export `Native/Extensions` barrel to ensure `createCubeTexture` is registered on `NativeEngine`\n\n### Key Stats\n\n- ~1,713 files changed\n- ~784 side-effect entries in `package.json` (down from `[\"**/*\"]`)\n- ~1,784 files confirmed pure (no side effects)\n- All 3,070 unit tests pass\n- Bundle smoke tests confirm tree-shaking works (physics-v2 scene: -38.6% vs baseline)\n\n### Scripts Added\n\n- `npm run audit:side-effects` — Scan and report all side effects\n- `npm run update:manifest` — Regenerate the side-effects manifest\n- `npm run generate:pure-barrels` — Generate pure barrel files\n- `npm run generate:side-effect-stubs` — Generate missing side-effect stubs\n- `npm run test:treeshaking` — Bundle smoke tests (Webpack + Rollup)\n- `npm run check:treeshaking` — CI checks (manifest drift, pure barrels, bundle smoke)\n",
-                "author": {
-                    "name": "RaananW",
-                    "url": "https://github.com/RaananW"
-                },
-                "files": [
-                    ".azure-pipelines/ci-monorepo.yml",
-                    ".githooks/pre-commit",
-                    ".github/copilot-instructions.md",
-                    ".github/instructions/index.md",
-                    ".github/instructions/side-effect-imports.instructions.md",
-                    ".github/instructions/tree-shaking.instructions.md",
-                    ".gitignore",
-                    "docs/tree-shaking/03-registering-side-effects.md",
-                    "docs/tree-shaking/04-troubleshooting.md",
-                    "eslint.config.mjs",
-                    "package-lock.json",
-                    "package.json",
-                    "packages/dev/buildTools/src/addJSToCompiledFiles.ts",
-                    "packages/dev/buildTools/src/buildShaders.ts",
-                    "packages/dev/core/package.json",
-                    "packages/dev/core/src/Actions/action.pure.ts",
-                    "packages/dev/core/src/Actions/action.ts",
-                    "packages/dev/core/src/Actions/actionManager.ts",
-                    "packages/dev/core/src/Actions/condition.pure.ts",
-                    "packages/dev/core/src/Actions/condition.ts",
-                    "packages/dev/core/src/Actions/directActions.pure.ts",
-                    "packages/dev/core/src/Actions/directActions.ts",
-                    "packages/dev/core/src/Actions/directAudioActions.pure.ts",
-                    "packages/dev/core/src/Actions/directAudioActions.ts",
-                    "packages/dev/core/src/Actions/interpolateValueAction.pure.ts",
-                    "packages/dev/core/src/Actions/interpolateValueAction.ts",
-                    "packages/dev/core/src/Actions/pure.ts",
-                    "packages/dev/core/src/Animations/animatable.pure.ts",
-                    "packages/dev/core/src/Animations/animatable.ts",
-                    "packages/dev/core/src/Animations/animatable.types.ts",
-                    "packages/dev/core/src/Animations/animation.pure.ts",
-                    "packages/dev/core/src/Animations/animation.ts",
-                    "packages/dev/core/src/Animations/animation.types.ts",
-                    "packages/dev/core/src/Animations/animationGroup.pure.ts",
-                    "packages/dev/core/src/Animations/animationGroup.ts",
-                    "packages/dev/core/src/Animations/animationGroup.types.ts",
-                    "packages/dev/core/src/Animations/pure.ts",
-                    "packages/dev/core/src/Audio/audioEngine.pure.ts",
-                    "packages/dev/core/src/Audio/audioEngine.ts",
-                    "packages/dev/core/src/Audio/audioSceneComponent.pure.ts",
-                    "packages/dev/core/src/Audio/audioSceneComponent.ts",
-                    "packages/dev/core/src/Audio/audioSceneComponent.types.ts",
-                    "packages/dev/core/src/Audio/pure.ts",
-                    "packages/dev/core/src/Audio/sound.pure.ts",
-                    "packages/dev/core/src/Audio/sound.ts",
-                    "packages/dev/core/src/AudioV2/abstractAudio/pure.ts",
-                    "packages/dev/core/src/AudioV2/abstractAudio/subProperties/pure.ts",
-                    "packages/dev/core/src/AudioV2/pure.ts",
-                    "packages/dev/core/src/AudioV2/webAudio/pure.ts",
-                    "packages/dev/core/src/BakedVertexAnimation/pure.ts",
-                    "packages/dev/core/src/Behaviors/Cameras/pure.ts",
-                    "packages/dev/core/src/Behaviors/Meshes/pure.ts",
-                    "packages/dev/core/src/Behaviors/pure.ts",
-                    "packages/dev/core/src/Bones/bone.pure.ts",
-                    "packages/dev/core/src/Bones/bone.ts",
-                    "packages/dev/core/src/Bones/pure.ts",
-                    "packages/dev/core/src/Bones/skeleton.ts",
-                    "packages/dev/core/src/Buffers/buffer.align.pure.ts",
-                    "packages/dev/core/src/Buffers/buffer.align.ts",
-                    "packages/dev/core/src/Buffers/buffer.align.types.ts",
-                    "packages/dev/core/src/Buffers/buffer.nonFloatVertexBuffers.ts",
-                    "packages/dev/core/src/Buffers/buffer.pure.ts",
-                    "packages/dev/core/src/Buffers/buffer.ts",
-                    "packages/dev/core/src/Buffers/buffer.types.ts",
-                    "packages/dev/core/src/Buffers/index.ts",
-                    "packages/dev/core/src/Buffers/pure.ts",
-                    "packages/dev/core/src/Cameras/Inputs/arcRotateCameraVRDeviceOrientationInput.pure.ts",
-                    "packages/dev/core/src/Cameras/Inputs/arcRotateCameraVRDeviceOrientationInput.ts",
-                    "packages/dev/core/src/Cameras/Inputs/arcRotateCameraVRDeviceOrientationInput.types.ts",
-                    "packages/dev/core/src/Cameras/Inputs/freeCameraDeviceOrientationInput.pure.ts",
-                    "packages/dev/core/src/Cameras/Inputs/freeCameraDeviceOrientationInput.ts",
-                    "packages/dev/core/src/Cameras/Inputs/freeCameraDeviceOrientationInput.types.ts",
-                    "packages/dev/core/src/Cameras/Inputs/freeCameraVirtualJoystickInput.pure.ts",
-                    "packages/dev/core/src/Cameras/Inputs/freeCameraVirtualJoystickInput.ts",
-                    "packages/dev/core/src/Cameras/Inputs/freeCameraVirtualJoystickInput.types.ts",
-                    "packages/dev/core/src/Cameras/Inputs/pure.ts",
-                    "packages/dev/core/src/Cameras/RigModes/pure.ts",
-                    "packages/dev/core/src/Cameras/Stereoscopic/anaglyphArcRotateCamera.pure.ts",
-                    "packages/dev/core/src/Cameras/Stereoscopic/anaglyphArcRotateCamera.ts",
-                    "packages/dev/core/src/Cameras/Stereoscopic/anaglyphFreeCamera.pure.ts",
-                    "packages/dev/core/src/Cameras/Stereoscopic/anaglyphFreeCamera.ts",
-                    "packages/dev/core/src/Cameras/Stereoscopic/anaglyphGamepadCamera.pure.ts",
-                    "packages/dev/core/src/Cameras/Stereoscopic/anaglyphGamepadCamera.ts",
-                    "packages/dev/core/src/Cameras/Stereoscopic/anaglyphUniversalCamera.pure.ts",
-                    "packages/dev/core/src/Cameras/Stereoscopic/anaglyphUniversalCamera.ts",
-                    "packages/dev/core/src/Cameras/Stereoscopic/pure.ts",
-                    "packages/dev/core/src/Cameras/Stereoscopic/stereoscopicArcRotateCamera.pure.ts",
-                    "packages/dev/core/src/Cameras/Stereoscopic/stereoscopicArcRotateCamera.ts",
-                    "packages/dev/core/src/Cameras/Stereoscopic/stereoscopicFreeCamera.pure.ts",
-                    "packages/dev/core/src/Cameras/Stereoscopic/stereoscopicFreeCamera.ts",
-                    "packages/dev/core/src/Cameras/Stereoscopic/stereoscopicGamepadCamera.pure.ts",
-                    "packages/dev/core/src/Cameras/Stereoscopic/stereoscopicGamepadCamera.ts",
-                    "packages/dev/core/src/Cameras/Stereoscopic/stereoscopicUniversalCamera.pure.ts",
-                    "packages/dev/core/src/Cameras/Stereoscopic/stereoscopicUniversalCamera.ts",
-                    "packages/dev/core/src/Cameras/VR/pure.ts",
-                    "packages/dev/core/src/Cameras/VR/vrDeviceOrientationArcRotateCamera.pure.ts",
-                    "packages/dev/core/src/Cameras/VR/vrDeviceOrientationArcRotateCamera.ts",
-                    "packages/dev/core/src/Cameras/VR/vrDeviceOrientationFreeCamera.pure.ts",
-                    "packages/dev/core/src/Cameras/VR/vrDeviceOrientationFreeCamera.ts",
-                    "packages/dev/core/src/Cameras/VR/vrDeviceOrientationGamepadCamera.pure.ts"
-                ],
-                "tags": []
-            },
-            {
-                "pr": "18462",
-                "title": "Add distance-only spatial mode to Audio Engine V2",
-                "description": "## Summary\r\n\r\nThis PR adds an Audio Engine V2 spatial panning toggle so spatial sounds can keep distance attenuation without being panned between the left and right channels.\r\n\r\nThe new API is available both at creation time and at runtime:\r\n\r\n- `spatialPanningEnabled: false`\r\n- `sound.spatial.panningEnabled = false`\r\n\r\nWhen panning is disabled, the WebAudio implementation bypasses `PannerNode` for directional panning and applies distance attenuation manually. This allows mono/centered spatial audio behavior while preserving distance-based volume falloff.\r\n\r\n## Details\r\n\r\n- Adds `spatialPanningEnabled` / `panningEnabled` to the Audio V2 spatial APIs.\r\n- Adds a WebAudio no-panning signal path using a gain node for manual attenuation.\r\n- Matches WebAudio distance attenuation behavior for `linear`, `inverse`, and `exponential` distance models.\r\n- Supports runtime toggling between panned and non-panned spatial output.\r\n- Keeps attenuation refreshed when source or listener position changes, including attached-source cases.\r\n- Documents that sound cone attenuation is not applied while panning is disabled, because cone handling is tied to `PannerNode`.\r\n\r\n## Playground\r\n\r\nSaved Playground snippet:\r\n\r\nhttps://playground.babylonjs.com/#ETXRJU\r\n\r\nFor PR testing, load it against the PR snapshot build once available:\r\n\r\nhttps://playground.babylonjs.com/?snapshot=refs/pull/18462/merge#ETXRJU\r\n\r\nThe demo moves a mono tone around the listener while sweeping from near to far. With spatial panning ON, the tone moves between ears and changes volume with distance. With spatial panning OFF, the tone stays centered while still changing volume with distance.\r\n\r\n## Validation\r\n\r\n- `npm run build:dev`\r\n- `npx vitest run --project=unit packages/dev/core/test/unit/Audio`",
-                "author": {
-                    "name": "VicenteCartas",
-                    "url": "https://github.com/VicenteCartas"
-                },
-                "files": [
-                    "packages/dev/core/src/AudioV2/abstractAudio/components/spatialAudioAttacherComponent.ts",
-                    "packages/dev/core/src/AudioV2/abstractAudio/subNodes/spatialAudioSubNode.ts",
-                    "packages/dev/core/src/AudioV2/abstractAudio/subProperties/abstractSpatialAudio.ts",
-                    "packages/dev/core/src/AudioV2/abstractAudio/subProperties/spatialAudio.ts",
-                    "packages/dev/core/src/AudioV2/webAudio/subNodes/spatialWebAudioSubNode.ts",
-                    "packages/dev/core/src/AudioV2/webAudio/subNodes/webAudioBusAndSoundSubGraph.ts",
-                    "packages/dev/core/test/unit/Audio/helpers/mockedAudioObjects.ts",
-                    "packages/dev/core/test/unit/Audio/sound.test.ts"
-                ],
-                "tags": []
-            },
-            {
-                "pr": "18458",
-                "title": "Fix renderCount in visualization tests (end)",
-                "description": "Last batch of changes to remove renderCount > 1 in visualization tests.\r\n\r\nThere are still 29 visualization tests with `renderCount > 1`:\r\n* Tests that rely on frame accumulation (blur, TAA, IBL Shadows, etc.): 22\r\n* No built-in way to advance animation (fluid rendering, procedural, etc.): 6\r\n* Others: 1 (\"FAST snapshot CPU particles\" => the PG start/stop particle systems at some specific frames)\r\n\r\nNote: I removed the “Instances” test because we already have two other tests that use the same scene (“Instances + GBR + motion blur” and “Instances + motion blur”), and also because it doesn't use a PG identifier, but rather the cumbersome “scriptToRun” syntax.",
-                "author": {
-                    "name": "Popov72",
-                    "url": "https://github.com/Popov72"
-                },
-                "files": [
-                    "packages/tools/tests/test/visualization/ReferenceImages/NME-Particles-with-PositionW.png",
-                    "packages/tools/tests/test/visualization/ReferenceImages/gpu-particles-emitters-mesh.png",
-                    "packages/tools/tests/test/visualization/ReferenceImages/halo-particle-system.png",
-                    "packages/tools/tests/test/visualization/ReferenceImages/particle-helper.png",
-                    "packages/tools/tests/test/visualization/ReferenceImages/particle-system-with-custom-nme-shader.png",
-                    "packages/tools/tests/test/visualization/ReferenceImages/prepass-ssao-particles.png",
-                    "packages/tools/tests/test/visualization/ReferenceImages/subemitters.png",
-                    "packages/tools/tests/test/visualization/ReferenceImages/wgsl-in-shadermaterial.png",
-                    "packages/tools/tests/test/visualization/config.json"
-                ],
-                "tags": [
-                    "skip changelog"
-                ]
-            },
-            {
-                "pr": "18456",
-                "title": "Upload Babylon Native visualization-test images as pipeline artifacts",
-                "description": "[Created by Copilot on behalf of @bghgary]\r\n\r\n## Context\r\n\r\nThe `NativeTests` job in `ci-monorepo.yml` downloads BabylonNative nightly test artifacts (pipeline 36), replaces their bundled `babylon*.js` with the freshly built snapshot, and runs `Playground.exe app:///Scripts/validation_native.js` plus `UnitTests.exe`.\r\n\r\nWhen pixel-diff regressions occur (e.g. the recent OpenPBR/glTF surface-tinting regression in #18430), `validation_native.js` writes the rendered PNG to `Results/<reference>.png` and a red-overlay diff to `Errors/<reference>.png` next to `Playground.exe` -- but nothing in the pipeline uploaded those directories. The failure log was the only visible signal, making it impossible to tell whether a regression is a real visual change vs. a threshold blip without re-running the test locally against a matching native binary.\r\n\r\n## Change\r\n\r\nMirror the upload pattern from BabylonNative's own win32 workflow ([`.github/workflows/build-win32.yml`](https://github.com/BabylonJS/BabylonNative/blob/master/.github/workflows/build-win32.yml), `actions/upload-artifact@v6` twice) using the ADO equivalent `PublishPipelineArtifact@1`:\r\n\r\n- **`native-rendered-pictures`** -- `Results/`, uploaded on `not(canceled())`. Matches `saveResult = true` in `validation_native.js`: every test always writes its render, so green runs upload too and give a baseline.\r\n- **`native-error-pictures`** -- `Errors/`, uploaded only on `failed()`. Matches when `validation_native.js` actually writes diff overlays.\r\n\r\n`PublishPipelineArtifact@1` has no `if-no-files-found: ignore` flag, so a one-off `New-Item -Force` step ensures both directories exist before publish (`Errors/` legitimately won't exist on a fully-green run).\r\n\r\n## Verification\r\n\r\nCan be verified end-to-end only after merge: the next native-test failure runs through this job and surfaces the diff PNGs as a downloadable artifact on the build. Until then, the green-run path is exercised by every passing build of this PR itself -- `native-rendered-pictures` should appear on the ADO run for this PR's CI.\r\n",
-                "author": {
-                    "name": "bghgary",
-                    "url": "https://github.com/bghgary"
-                },
-                "files": [
-                    ".azure-pipelines/ci-monorepo.yml"
-                ],
-                "tags": []
-            },
-            {
-                "pr": "18379",
-                "title": "Camera input mapping system with backward-compatible legacy flag support",
-                "description": "> 🤖 *This PR was created by the create-pr skill.*\n\n## Summary\nReplaces the scattered, ad-hoc input handling on `ArcRotateCamera` and `GeospatialCamera` with a declarative two-layer input mapping system, while preserving the behavior of all existing legacy boolean flags.\n\n## Motivation\nCamera input configuration today is spread across ad-hoc boolean flags (`useCtrlForPanning`, `multiTouchPanAndZoom`, `panningMouseButton`, `useAltToZoom`, …) and hardcoded button-to-action logic in each input class. Adding new configurations requires another flag, another conditional, and often cross-input snooping. This doesn't scale.\n\nThe new system replaces that with a declarative `inputMap` resolved by `resolveInteraction()` that produces typed `handlers` (orbit/zoom/pan, etc.). Per-frame deltas are accumulated and applied via `computeCurrentFrameDeltas()` for framerate-independent inertia.\n\n## Playground demos\n\n| Demo | Link |\n|------|------|\n| Legacy inertia 0.9 alpha glide | [#C7KCTE#0](https://playground.babylonjs.com/#C7KCTE#0) |\n| Legacy inertia 0.5 alpha glide | [#OPHBRC#0](https://playground.babylonjs.com/#OPHBRC#0) |\n| Legacy inertia 0 alpha snap | [#HF2DLH#0](https://playground.babylonjs.com/#HF2DLH#0) |\n| Legacy panningInertia glide | [#8S8H0S#0](https://playground.babylonjs.com/#8S8H0S#0) |\n| Legacy inertialRadiusOffset glide | [#98108I#0](https://playground.babylonjs.com/#98108I#0) |\n| Legacy beta limits clamp glide | [#FBLW1J#0](https://playground.babylonjs.com/#FBLW1J#0) |\n| Legacy radius limits clamp glide | [#QWTJH9#0](https://playground.babylonjs.com/#QWTJH9#0) |\n| Legacy combined axis glide | [#SJJRY4#0](https://playground.babylonjs.com/#SJJRY4#0) |\n| **`setInteraction()` — remap ctrl+drag** | [**#A1CDLY#0**](https://playground.babylonjs.com/#A1CDLY#0) |\n\n## What's in this PR\n\n### Core (`packages/dev/core/src/Cameras`)\n- Extends the existing `CameraMovement` base class with input-map resolution, typed handlers, and framerate-independent accumulators / inertia.\n- New `ArcRotateCameraMovement` subclass and refreshed `GeospatialCameraMovement` subclass, each with default input maps.\n- New `cameraInteractions.ts` with shared interaction descriptors and `InputMapper` class.\n- `InputMapper.setInteraction(source, conditions, interaction)` — targeted remapping of individual input entries without rebuilding the full inputMap (e.g. swap ctrl+left-drag from pan to rotate).\n- `InputMapper.getEntry(source, interaction)` — find an entry to tweak properties like sensitivity.\n- `ArcRotateCamera` and `GeospatialCamera` now always route through the movement system; `_checkInputs()` calls `computeCurrentFrameDeltas()` and applies the resulting rotation / zoom / pan deltas. The legacy `useMovementSystem` getter/setter is kept as a deprecated no-op for source compatibility.\n- `Camera.inertia` converted from a plain property to a get/set accessor so `ArcRotateCamera` can override it to sync with the movement system.\n- Legacy back-compat: `_syncLegacyFlagsToInputMap()` maps `_useCtrlForPanning`, `_panningMouseButton`, and `useAltToZoom` onto the inputMap so existing apps that toggle these flags keep behaving the same.\n- All input classes migrated to movement system: pointer, keyboard, mouse wheel, **and gamepad** (`arcRotateCameraGamepadInput.ts`) now feed `movement.rotationAccumulatedPixels` / `panAccumulatedPixels` / `zoomAccumulatedPixels` instead of legacy inertial offsets.\n- `resetInputMap()` on the base class and subclasses to restore default mappings after user customization.\n\n### Tests\n- Unit tests: `cameraMovement.test.ts`, `arcRotateCameraMovement.test.ts`, `geospatialCameraMovement.test.ts`, `arcRotateCameraFramerateIndependence.test.ts`.\n- Playwright interaction tests: `arcRotateCameraInteraction.interaction.test.ts` — 7 tests covering left-drag rotation, vertical drag, right-drag pan, ctrl+left-drag pan, mouse wheel zoom, arrow key rotation, and ctrl+arrow key panning.\n- Visualization tests with reference images covering legacy beta/radius limits and panning/radius/combined inertia and glide (8 tests).\n\n## Backward compatibility\n- Default end-user behavior is unchanged for existing apps: the same camera interactions (orbit, pan, zoom) produce equivalent motion.\n- Existing legacy boolean flags are honored via `_syncLegacyFlagsToInputMap()`, so apps that set e.g. `_useCtrlForPanning = false` or change `_panningMouseButton` still see the expected mapping changes.\n- The `useMovementSystem` property remains as a deprecated no-op getter/setter so any code referencing it still compiles.\n- Gamepad input migrated to movement system — steady-state behavior matches legacy at 60fps, with improved framerate independence at other refresh rates.\n\n## Out of scope / follow-ups\n- `FreeCamera`, `FollowCamera`, `FlyCamera`, VR / touch-joystick input sources — to be handled in subsequent PRs.",
-                "author": {
-                    "name": "georginahalpern",
-                    "url": "https://github.com/georginahalpern"
-                },
-                "files": [
-                    "packages/dev/core/src/Cameras/Inputs/arcRotateCameraGamepadInput.ts",
-                    "packages/dev/core/src/Cameras/Inputs/arcRotateCameraKeyboardMoveInput.ts",
-                    "packages/dev/core/src/Cameras/Inputs/arcRotateCameraMouseWheelInput.ts",
-                    "packages/dev/core/src/Cameras/Inputs/arcRotateCameraPointersInput.ts",
-                    "packages/dev/core/src/Cameras/Inputs/geospatialCameraKeyboardInput.ts",
-                    "packages/dev/core/src/Cameras/Inputs/geospatialCameraMouseWheelInput.ts",
-                    "packages/dev/core/src/Cameras/Inputs/geospatialCameraPointersInput.ts",
-                    "packages/dev/core/src/Cameras/arcRotateCamera.ts",
-                    "packages/dev/core/src/Cameras/arcRotateCameraMovement.ts",
-                    "packages/dev/core/src/Cameras/camera.ts",
-                    "packages/dev/core/src/Cameras/cameraMovement.ts",
-                    "packages/dev/core/src/Cameras/geospatialCamera.ts",
-                    "packages/dev/core/src/Cameras/geospatialCameraMovement.ts",
-                    "packages/dev/core/src/Cameras/index.ts",
-                    "packages/dev/core/src/Cameras/inputMapper.ts",
-                    "packages/dev/core/test/unit/Cameras/arcRotateCameraFramerateIndependence.test.ts",
-                    "packages/dev/core/test/unit/Cameras/arcRotateCameraMovement.test.ts",
-                    "packages/dev/core/test/unit/Cameras/cameraMovement.test.ts",
-                    "packages/dev/core/test/unit/Cameras/geospatialCameraMovement.test.ts",
-                    "packages/tools/tests/test/visualization/ReferenceImages/arc-legacy-beta-limits.png",
-                    "packages/tools/tests/test/visualization/ReferenceImages/arc-legacy-combined-glide.png",
-                    "packages/tools/tests/test/visualization/ReferenceImages/arc-legacy-inertia-comparison.png",
-                    "packages/tools/tests/test/visualization/ReferenceImages/arc-legacy-panning-inertia.png",
-                    "packages/tools/tests/test/visualization/ReferenceImages/arc-legacy-radius-glide.png",
-                    "packages/tools/tests/test/visualization/ReferenceImages/arc-legacy-radius-limits.png",
-                    "packages/tools/tests/test/visualization/config.json"
-                ],
-                "tags": [
-                    "enhancement",
-                    "new feature",
-                    "camera"
-                ]
-            },
-            {
-                "pr": "18457",
-                "title": "glTF loader: simplify material adapter finalizeAsync",
-                "description": "## Context\n\nPR #18430 added a `finalizeAsync(signal: AbortSignal)` method to `IMaterialLoadingAdapter` (alongside a deprecated `finalize?()`) and unconditionally allocated an `AbortController` on every glTF load. The signal is consumed only by `signal.aborted` polling in `OpenPBRMaterialLoadingAdapter` between awaits. It is never propagated into the texture helpers (`LerpTexturesAsync`, `MultiplyTexturesAsync`, `InvertTextureAsync`, etc.), so the underlying GPU passes always run to completion regardless.\n\nBecause JS is single-threaded, an `AbortSignal` that is not handed to a host API that respects it (`fetch`, web streams, `EventTarget.addEventListener(..., { signal })`, etc.) is functionally equivalent to a boolean flag polled at each `await` boundary. That is exactly how it is being used here — at the cost of an extra interface method, an `AbortController` allocation on every load, and a hard runtime dependency on the `AbortController` global.\n\n`IMaterialLoadingAdapter` is an internal loader detail — no need to keep both shapes for backward compatibility.\n\n## Changes\n\n- Collapse the API into a single required `finalizeAsync(loader: GLTFLoader): Promise<void>`\n- Drop `_finalizeController` (`AbortController`) from `GLTFLoader`\n- Drop the `signal: AbortSignal` parameter from `OpenPBRMaterialLoadingAdapter.finalizeAsync` and from its private `copySurfaceToCoatAsync` helper\n- Expose `GLTFLoader._disposed` as `@internal` so adapters can poll it between awaits to bail early on mid-load dispose — same semantics as the original `signal.aborted` checks, but using the loader's own state instead of an AbortSignal\n- Add a no-op `finalizeAsync` to `PBRMaterialLoadingAdapter` (it had no deferred work)\n\nNet: **4 files changed, ~40 insertions(+), ~55 deletions(-)**.\n\n## Behavior\n\nUnchanged. The OpenPBR adapter still short-circuits on each `await` if the loader is disposed mid-flight — the polling state is now `loader._disposed` instead of `signal.aborted`.\n\n## Side-benefit: unblocks Babylon Native\n\nBabylon Native does not initialize the AbortController polyfill in its JS host (the polyfill exists in `JsRuntimeHost` but is never wired into any BN app). After #18430, every glTF load on BN was throwing `ReferenceError: AbortController is not defined` inside the new `.then(...)` callback in `GLTFLoader.loadAsync`. The rejection prevented `_extensionsOnReady()` / `_setState(READY)` from running, so the loader never reached the READY state. This manifested as the `EXT_mesh_gpu_instancing` visualization test rendering the base mesh **without its instances** (205,438 px diff vs reference) in `BabylonNative` CI.\n\n| Variant | AbortController in loader | BN polyfill | Pixel diff vs reference | Result |\n|---|---|---|---|---|\n| Master HEAD (#18430) | yes (broken on BN) | none | 205,438 | ❌ failed |\n| Master + JS `AbortController` polyfill shim | yes (works) | injected via JS | 13,507 | ✅ validated |\n| This PR | **removed** | none | 13,507 | ✅ validated |\n\nReproduced locally using `BabylonNative` nightly build #53343's `Playground.exe` + freshly-built UMD bundles from each variant.\n\nWe can still separately wire up the AbortController polyfill in BN — there are latent uses in `lightingVolume.ts` and `audioEngine.ts` that will hit the same wall when those code paths are exercised — but that's a defense-in-depth issue, not a blocker for this fix.\n\n[Created by Copilot on behalf of @bghgary]",
-                "author": {
-                    "name": "bghgary",
-                    "url": "https://github.com/bghgary"
-                },
-                "files": [
-                    "packages/dev/loaders/src/glTF/2.0/glTFLoader.ts",
-                    "packages/dev/loaders/src/glTF/2.0/materialLoadingAdapter.ts",
-                    "packages/dev/loaders/src/glTF/2.0/openpbrMaterialLoadingAdapter.ts",
-                    "packages/dev/loaders/src/glTF/2.0/pbrMaterialLoadingAdapter.ts"
-                ],
-                "tags": [
-                    "skip changelog"
                 ]
             }
         ],

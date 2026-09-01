@@ -242,7 +242,7 @@ export class DDSTools {
                 if (
                     dxgiFormat === DXGI_FORMAT_BC7_UNORM ||
                     dxgiFormat === DXGI_FORMAT_BC7_UNORM_SRGB ||
-                    DXGI_FORMAT_ASTC_4X4_TYPELESS ||
+                    dxgiFormat === DXGI_FORMAT_ASTC_4X4_TYPELESS ||
                     dxgiFormat === DXGI_FORMAT_ASTC_4X4_UNORM ||
                     dxgiFormat === DXGI_FORMAT_ASTC_4X4_UNORM_SRGB ||
                     dxgiFormat === DXGI_FORMAT_ASTC_5X4_UNORM ||
@@ -276,20 +276,20 @@ export class DDSTools {
                 } else if (
                     dxgiFormat === DXGI_FORMAT_BC6H_UF16 ||
                     dxgiFormat === DXGI_FORMAT_BC6H_SF16 ||
-                    DXGI_FORMAT_ASTC_4X4_TYPELESS ||
-                    DXGI_FORMAT_ASTC_5X4_TYPELESS ||
-                    DXGI_FORMAT_ASTC_5X5_TYPELESS ||
-                    DXGI_FORMAT_ASTC_6X5_TYPELESS ||
-                    DXGI_FORMAT_ASTC_6X6_TYPELESS ||
-                    DXGI_FORMAT_ASTC_8X5_TYPELESS ||
-                    DXGI_FORMAT_ASTC_8X6_TYPELESS ||
-                    DXGI_FORMAT_ASTC_8X8_TYPELESS ||
-                    DXGI_FORMAT_ASTC_10X5_TYPELESS ||
-                    DXGI_FORMAT_ASTC_10X6_TYPELESS ||
-                    DXGI_FORMAT_ASTC_10X8_TYPELESS ||
-                    DXGI_FORMAT_ASTC_10X10_TYPELESS ||
-                    DXGI_FORMAT_ASTC_12X10_TYPELESS ||
-                    DXGI_FORMAT_ASTC_12X12_TYPELESS
+                    dxgiFormat === DXGI_FORMAT_ASTC_4X4_TYPELESS ||
+                    dxgiFormat === DXGI_FORMAT_ASTC_5X4_TYPELESS ||
+                    dxgiFormat === DXGI_FORMAT_ASTC_5X5_TYPELESS ||
+                    dxgiFormat === DXGI_FORMAT_ASTC_6X5_TYPELESS ||
+                    dxgiFormat === DXGI_FORMAT_ASTC_6X6_TYPELESS ||
+                    dxgiFormat === DXGI_FORMAT_ASTC_8X5_TYPELESS ||
+                    dxgiFormat === DXGI_FORMAT_ASTC_8X6_TYPELESS ||
+                    dxgiFormat === DXGI_FORMAT_ASTC_8X8_TYPELESS ||
+                    dxgiFormat === DXGI_FORMAT_ASTC_10X5_TYPELESS ||
+                    dxgiFormat === DXGI_FORMAT_ASTC_10X6_TYPELESS ||
+                    dxgiFormat === DXGI_FORMAT_ASTC_10X8_TYPELESS ||
+                    dxgiFormat === DXGI_FORMAT_ASTC_10X10_TYPELESS ||
+                    dxgiFormat === DXGI_FORMAT_ASTC_12X10_TYPELESS ||
+                    dxgiFormat === DXGI_FORMAT_ASTC_12X12_TYPELESS
                 ) {
                     textureType = Constants.TEXTURETYPE_FLOAT;
                     break;
